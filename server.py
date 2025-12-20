@@ -156,6 +156,9 @@ def eta_from_days(days: int) -> str:
 
 
 def get_unit_price(conn: sqlite3.Connection, item_id: str) -> float:
+    item_row = conn.execute("SELECT unit_price FROM items WHERE id = ?", (item_id,)).fetchone()
+    if item_row and item_row["unit_price"] is not None:
+        return float(item_row["unit_price"])
     row = conn.execute(
         "SELECT unit_price FROM pricelist_lines WHERE item_id = ? ORDER BY pricelist_id LIMIT 1",
         (item_id,),
@@ -203,7 +206,7 @@ def find_substitutions(
 def inventory_list_items(in_stock_only: bool = False, limit: int = 50) -> Dict[str, Any]:
     """List items, optionally only those with available stock."""
     with db_conn() as conn:
-        base_sql = "SELECT id, sku, name, type FROM items"
+        base_sql = "SELECT id, sku, name, type, unit_price FROM items"
         params: List[Any] = []
         if in_stock_only:
             base_sql += " WHERE id IN (SELECT DISTINCT item_id FROM stock WHERE on_hand - reserved > 0)"
@@ -572,7 +575,7 @@ def search_items(words: List[str], limit: int = 10, min_score: int = 1) -> Dict[
         return [tok for tok in re.split(r"[^a-z0-9]+", raw) if tok]
 
     with db_conn() as conn:
-        rows = conn.execute("SELECT id, sku, name, type FROM items").fetchall()
+        rows = conn.execute("SELECT id, sku, name, type, unit_price FROM items").fetchall()
         scored: List[Dict[str, Any]] = []
         for row in rows:
             token_set = set(tokens_for(row))

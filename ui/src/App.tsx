@@ -242,6 +242,7 @@ export default function App() {
                 columns={[
                   { key: 'sku', label: 'SKU' },
                   { key: 'name', label: 'Name' },
+                  { key: 'unit_price', label: 'Unit price', render: (row) => (row.unit_price != null ? `${row.unit_price} €` : '—') },
                   { key: 'type', label: 'Type' },
                   { key: 'available_total', label: 'Available' },
                   {
@@ -259,6 +260,10 @@ export default function App() {
                 <div className="mt-4 space-y-2 text-sm text-slate-700">
                   <div className="font-semibold">Item {view.id}</div>
                   <div className="text-slate-600 text-xs">{items.find((i) => i.sku === view.id)?.name || 'Loading item details…'}</div>
+                  <div className="text-slate-600 text-xs">Unit price: {(() => {
+                    const item = items.find((i) => i.sku === view.id)
+                    return item?.unit_price != null ? `${item.unit_price} €` : '—'
+                  })()}</div>
                   {stock ? (
                     <div className="space-y-2">
                       <div className="flex gap-3 text-slate-600">

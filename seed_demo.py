@@ -25,15 +25,15 @@ def seed():
 
         # Items
         conn.executemany(
-            "INSERT INTO items (id, sku, name, type) VALUES (?, ?, ?, ?)",
+            "INSERT INTO items (id, sku, name, type, unit_price) VALUES (?, ?, ?, ?, ?)",
             [
-                ("ITEM-ELVIS-20", "ELVIS-DUCK-20CM", "Elvis Duck 20cm", "finished_good"),
-                ("ITEM-MARILYN-20", "MARILYN-DUCK-20CM", "Marilyn Duck 20cm", "finished_good"),
-                ("ITEM-CLASSIC-10", "CLASSIC-DUCK-10CM", "Classic Duck 10cm", "finished_good"),
-                ("ITEM-PVC", "PVC-PELLETS", "PVC Pellets", "material"),
-                ("ITEM-BLACK-DYE", "BLACK-DYE", "Black Dye", "material"),
-                ("ITEM-YELLOW-DYE", "YELLOW-DYE", "Yellow Dye", "material"),
-                ("ITEM-BOX-SMALL", "BOX-SMALL", "Small Box", "material"),
+                ("ITEM-ELVIS-20", "ELVIS-DUCK-20CM", "Elvis Duck 20cm", "finished_good", 12.0),
+                ("ITEM-MARILYN-20", "MARILYN-DUCK-20CM", "Marilyn Duck 20cm", "finished_good", 12.0),
+                ("ITEM-CLASSIC-10", "CLASSIC-DUCK-10CM", "Classic Duck 10cm", "finished_good", 10.0),
+                ("ITEM-PVC", "PVC-PELLETS", "PVC Pellets", "material", None),
+                ("ITEM-BLACK-DYE", "BLACK-DYE", "Black Dye", "material", None),
+                ("ITEM-YELLOW-DYE", "YELLOW-DYE", "Yellow Dye", "material", None),
+                ("ITEM-BOX-SMALL", "BOX-SMALL", "Small Box", "material", None),
             ],
         )
 
@@ -153,7 +153,7 @@ def seed():
             [
                 ("PLL-1", "PL-EU-2026", "ITEM-ELVIS-20", 12.0),
                 ("PLL-2", "PL-EU-2026", "ITEM-MARILYN-20", 12.0),
-                ("PLL-3", "PL-EU-2026", "ITEM-CLASSIC-10", 12.0),
+                ("PLL-3", "PL-EU-2026", "ITEM-CLASSIC-10", 10.0),
             ],
         )
 

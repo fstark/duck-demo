@@ -12,6 +12,7 @@ export type Item = {
   name: string
   type: string
   available_total?: number
+  unit_price?: number
 }
 
 export type StockSummary = {

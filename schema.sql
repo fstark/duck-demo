@@ -22,7 +22,8 @@ CREATE TABLE IF NOT EXISTS items (
     id TEXT PRIMARY KEY,
     sku TEXT NOT NULL UNIQUE,
     name TEXT NOT NULL,
-    type TEXT NOT NULL
+    type TEXT NOT NULL,
+    unit_price REAL
 );
 
 CREATE TABLE IF NOT EXISTS stock (
