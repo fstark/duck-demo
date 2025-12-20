@@ -4,12 +4,14 @@ import sqlite3
 import json
 import functools
 import logging
+import re
 from contextlib import contextmanager
 from datetime import datetime, timedelta
 from typing import Any, Dict, Iterator, List, Optional
 
 from mcp.server.fastmcp import FastMCP
 from mcp.server.transport_security import TransportSecuritySettings
+from starlette.responses import JSONResponse, Response
 
 from db import dict_rows, generate_id, get_connection, init_db
 
@@ -20,6 +22,27 @@ logging.basicConfig(
     datefmt="%Y-%m-%dT%H:%M:%S",
 )
 logger = logging.getLogger("duck-demo")
+DEMO_CORS_HEADERS = {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Headers": "*",
+    "Access-Control-Allow-Methods": "*",
+}
+
+
+def _json(data: Any, status_code: int = 200) -> JSONResponse:
+    return JSONResponse(data, status_code=status_code, headers=DEMO_CORS_HEADERS)
+
+
+def _cors_preflight(methods: List[str]) -> Response:
+    headers = dict(DEMO_CORS_HEADERS)
+    headers["Access-Control-Allow-Methods"] = ", ".join(methods)
+    return Response(status_code=204, headers=headers)
+
+
+def _parse_bool(val: Optional[str]) -> bool:
+    if val is None:
+        return False
+    return val.lower() in {"1", "true", "yes", "y", "on"}
 
 
 # Demo constants (lifted from SPECIFICATION.md) — tweak here to adjust behavior.
@@ -228,6 +251,39 @@ def compute_pricing(conn: sqlite3.Connection, sales_order_id: str) -> Dict[str, 
             "shipping": {"amount": shipping, "description": "Free shipping threshold" if shipping == 0 else "Flat shipping"},
             "total": total,
         },
+    }
+
+
+def load_sales_order_detail(conn: sqlite3.Connection, sales_order_id: str) -> Optional[Dict[str, Any]]:
+    order = conn.execute("SELECT * FROM sales_orders WHERE id = ?", (sales_order_id,)).fetchone()
+    if not order:
+        return None
+
+    lines = dict_rows(
+        conn.execute(
+            "SELECT i.sku, sol.qty FROM sales_order_lines sol JOIN items i ON sol.item_id = i.id WHERE sol.sales_order_id = ?",
+            (sales_order_id,),
+        ).fetchall()
+    )
+
+    pricing_row = conn.execute(
+        "SELECT * FROM sales_order_pricing WHERE sales_order_id = ?",
+        (sales_order_id,),
+    ).fetchone()
+    pricing = dict(pricing_row) if pricing_row else compute_pricing(conn, sales_order_id)["pricing"]
+
+    shipments = dict_rows(
+        conn.execute(
+            "SELECT s.* FROM sales_order_shipments sos JOIN shipments s ON s.id = sos.shipment_id WHERE sos.sales_order_id = ? ORDER BY s.planned_departure",
+            (sales_order_id,),
+        ).fetchall()
+    )
+
+    return {
+        "sales_order": dict(order),
+        "lines": lines,
+        "pricing": pricing,
+        "shipments": shipments,
     }
 
 
@@ -804,6 +860,132 @@ def get_production_order_status(production_order_id: str) -> Dict[str, Any]:
             raise ValueError("Production order not found")
         return dict(row)
 
+
+# --- Minimal REST API for demo UI (read-only, no auth) ---
+
+
+@mcp.custom_route("/api/health", methods=["GET", "OPTIONS"])
+async def api_health(request):
+    if request.method == "OPTIONS":
+        return _cors_preflight(["GET"])
+    return _json({"status": "ok"})
+
+
+@mcp.custom_route("/api/customers", methods=["GET", "OPTIONS"])
+async def api_customers(request):
+    if request.method == "OPTIONS":
+        return _cors_preflight(["GET"])
+    qp = request.query_params
+    limit = int(qp.get("limit", 20))
+    result = find_customers(
+        name=qp.get("name"),
+        email=qp.get("email"),
+        company=qp.get("company"),
+        city=qp.get("city"),
+        limit=limit,
+    )
+    return _json(result)
+
+
+@mcp.custom_route("/api/items", methods=["GET", "OPTIONS"])
+async def api_items(request):
+    if request.method == "OPTIONS":
+        return _cors_preflight(["GET"])
+    qp = request.query_params
+    limit = int(qp.get("limit", 50))
+    in_stock_only = _parse_bool(qp.get("in_stock_only"))
+    result = inventory_list_items(in_stock_only=in_stock_only, limit=limit)
+    return _json(result)
+
+
+@mcp.custom_route("/api/items/{sku}/stock", methods=["GET", "OPTIONS"])
+async def api_item_stock(request):
+    if request.method == "OPTIONS":
+        return _cors_preflight(["GET"])
+    sku = request.path_params.get("sku")
+    try:
+        result = get_stock_summary(sku=sku)
+        return _json(result)
+    except Exception as exc:  # pragma: no cover
+        return _json({"error": str(exc)}, status_code=404)
+
+
+@mcp.custom_route("/api/sales-orders", methods=["GET", "OPTIONS"])
+async def api_sales_orders(request):
+    if request.method == "OPTIONS":
+        return _cors_preflight(["GET"])
+    qp = request.query_params
+    limit = int(qp.get("limit", 20))
+    result = search_sales_orders(
+        customer_id=qp.get("customer_id"),
+        limit=limit,
+        sort=qp.get("sort", "most_recent"),
+    )
+    return _json(result)
+
+
+@mcp.custom_route("/api/sales-orders/{order_id}", methods=["GET", "OPTIONS"])
+async def api_sales_order_detail(request):
+    if request.method == "OPTIONS":
+        return _cors_preflight(["GET"])
+    order_id = request.path_params.get("order_id")
+    with db_conn() as conn:
+        detail = load_sales_order_detail(conn, order_id)
+    if not detail:
+        return _json({"error": "Not found"}, status_code=404)
+    return _json(detail)
+
+
+@mcp.custom_route("/api/shipments/{shipment_id}", methods=["GET", "OPTIONS"])
+async def api_shipment(request):
+    if request.method == "OPTIONS":
+        return _cors_preflight(["GET"])
+    shipment_id = request.path_params.get("shipment_id")
+    try:
+        result = get_shipment_status(shipment_id)
+        return _json(result)
+    except Exception as exc:  # pragma: no cover
+        return _json({"error": str(exc)}, status_code=404)
+
+
+@mcp.custom_route("/api/production-orders/{production_id}", methods=["GET", "OPTIONS"])
+async def api_production(request):
+    if request.method == "OPTIONS":
+        return _cors_preflight(["GET"])
+    production_id = request.path_params.get("production_id")
+    try:
+        result = get_production_order_status(production_id)
+        return _json(result)
+    except Exception as exc:  # pragma: no cover
+        return _json({"error": str(exc)}, status_code=404)
+
+
+@mcp.custom_route("/api/quotes", methods=["GET", "OPTIONS"])
+async def api_quotes(request):
+    if request.method == "OPTIONS":
+        return _cors_preflight(["GET"])
+    qp = request.query_params
+    sku = qp.get("sku")
+    qty = qp.get("qty")
+    if not sku or not qty:
+        return _json({"error": "sku and qty are required"}, status_code=400)
+    try:
+        qty_int = int(qty)
+    except ValueError:
+        return _json({"error": "qty must be an integer"}, status_code=400)
+
+    allowed_subs = []
+    subs_param = qp.get("subs")
+    if subs_param:
+        allowed_subs = [s.strip() for s in subs_param.split(",") if s.strip()]
+
+    result = sales_quote_options(
+        sku=sku,
+        qty=qty_int,
+        need_by=qp.get("need_by"),
+        allowed_substitutions=allowed_subs,
+    )
+    return _json(result)
 
 if __name__ == "__main__":
     # Run as HTTP server using the streamable-http transport (host/port come from FastMCP settings).
