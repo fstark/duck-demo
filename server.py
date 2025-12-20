@@ -193,30 +193,110 @@ def reserve_stock(conn: sqlite3.Connection, reference_id: str, reservations: Lis
     return {"status": "reserved", "reservation_id": reservation_id}
 
 
-@mcp.tool(name="crm.find_or_create_customer")
-def find_or_create_customer(name: str, company: Optional[str] = None, email: Optional[str] = None, city: Optional[str] = None) -> Dict[str, Any]:
-    """Find an existing customer by name/company/email or create one."""
+@mcp.tool(name="crm_find_customers")
+def find_customers(
+    name: Optional[str] = None,
+    email: Optional[str] = None,
+    company: Optional[str] = None,
+    city: Optional[str] = None,
+    limit: int = 5,
+) -> Dict[str, Any]:
+    """Find matching customers. Any provided field is used as a case-insensitive contains filter."""
+    filters = []
+    params: List[str] = []
+    if name:
+        filters.append("LOWER(name) LIKE ?")
+        params.append(f"%{name.lower()}%")
+    if email:
+        filters.append("LOWER(email) LIKE ?")
+        params.append(f"%{email.lower()}%")
+    if company:
+        filters.append("LOWER(company) LIKE ?")
+        params.append(f"%{company.lower()}%")
+    if city:
+        filters.append("LOWER(city) LIKE ?")
+        params.append(f"%{city.lower()}%")
+
+    where_clause = f"WHERE {' AND '.join(filters)}" if filters else ""
+    sql = f"SELECT id, name, company, email, city FROM customers {where_clause} ORDER BY id LIMIT ?"
+    params.append(limit)
+
     with db_conn() as conn:
-        cur = conn.execute(
-            "SELECT * FROM customers WHERE name = ? OR email = ? ORDER BY id LIMIT 1",
-            (name, email),
+        rows = dict_rows(conn.execute(sql, params))
+        return {"customers": rows}
+
+
+@mcp.tool(name="crm_create_customer")
+def create_customer(name: str, company: Optional[str] = None, email: Optional[str] = None, city: Optional[str] = None) -> Dict[str, Any]:
+    """Create a new customer explicitly."""
+    with db_conn() as conn:
+        customer_id = generate_id(conn, "CUST", "customers")
+        conn.execute(
+            "INSERT INTO customers (id, name, company, email, city) VALUES (?, ?, ?, ?, ?)",
+            (customer_id, name, company, email, city),
         )
-        row = cur.fetchone()
-        status = "found"
-        if not row:
-            customer_id = generate_id(conn, "CUST", "customers")
-            conn.execute(
-                "INSERT INTO customers (id, name, company, email, city) VALUES (?, ?, ?, ?, ?)",
-                (customer_id, name, company, email, city),
+        conn.commit()
+        row = conn.execute("SELECT * FROM customers WHERE id = ?", (customer_id,)).fetchone()
+        return {"customer_id": customer_id, "customer": dict(row)}
+
+
+@mcp.tool(name="crm_get_customer_details")
+def get_customer_details(customer_id: str, include_orders: bool = True, include_interactions: bool = False) -> Dict[str, Any]:
+    """Get customer data plus recent orders/interactions."""
+    with db_conn() as conn:
+        cust = conn.execute("SELECT * FROM customers WHERE id = ?", (customer_id,)).fetchone()
+        if not cust:
+            raise ValueError("Customer not found")
+
+        result: Dict[str, Any] = {"customer": dict(cust)}
+
+        if include_orders:
+            order_rows = conn.execute(
+                "SELECT * FROM sales_orders WHERE customer_id = ? ORDER BY created_at DESC LIMIT 10",
+                (customer_id,),
+            ).fetchall()
+            orders: List[Dict[str, Any]] = []
+            for order in order_rows:
+                lines = dict_rows(
+                    conn.execute(
+                        "SELECT i.sku, sol.qty FROM sales_order_lines sol JOIN items i ON sol.item_id = i.id WHERE sol.sales_order_id = ?",
+                        (order["id"],),
+                    ).fetchall()
+                )
+                ship = conn.execute(
+                    "SELECT s.id, s.status, s.planned_departure, s.planned_arrival, s.tracking_ref FROM sales_order_shipments sos JOIN shipments s ON s.id = sos.shipment_id WHERE sos.sales_order_id = ? ORDER BY s.planned_departure DESC LIMIT 1",
+                    (order["id"],),
+                ).fetchone()
+                pending = True
+                if ship and ship["status"] and ship["status"].lower() == "delivered":
+                    pending = False
+                elif order["status"] and order["status"].lower() == "draft":
+                    pending = True
+                orders.append(
+                    {
+                        "sales_order_id": order["id"],
+                        "status": order["status"],
+                        "requested_delivery_date": order["requested_delivery_date"],
+                        "pending": pending,
+                        "lines": lines,
+                        "shipment": dict(ship) if ship else None,
+                    }
+                )
+            result["orders"] = orders
+
+        if include_interactions:
+            recent = dict_rows(
+                conn.execute(
+                    "SELECT id, channel, direction, subject, interaction_at FROM interactions WHERE customer_id = ? ORDER BY interaction_at DESC LIMIT 5",
+                    (customer_id,),
+                ).fetchall()
             )
-            conn.commit()
-            row = conn.execute("SELECT * FROM customers WHERE id = ?", (customer_id,)).fetchone()
-            status = "created"
-        display_name = row["name"] if not row["company"] else f"{row['name']} ({row['company']})"
-        return {"customer_id": row["id"], "status": status, "display_name": display_name}
+            result["interactions"] = recent
+
+        return result
 
 
-@mcp.tool(name="crm.log_interaction")
+@mcp.tool(name="crm_log_interaction")
 def log_interaction(
     customer_id: str,
     channel: str,
@@ -237,7 +317,7 @@ def log_interaction(
         return {"interaction_id": interaction_id, "status": "logged"}
 
 
-@mcp.tool(name="catalog.get_item")
+@mcp.tool(name="catalog_get_item")
 def get_item(sku: str) -> Dict[str, Any]:
     """Fetch an item by SKU."""
     with db_conn() as conn:
@@ -247,7 +327,7 @@ def get_item(sku: str) -> Dict[str, Any]:
         return dict(row)
 
 
-@mcp.tool(name="inventory.get_stock_summary")
+@mcp.tool(name="inventory_get_stock_summary")
 def get_stock_summary(item_id: Optional[str] = None, sku: Optional[str] = None) -> Dict[str, Any]:
     """Return on-hand, reserved, and available by location for an item."""
     if not item_id and not sku:
@@ -261,7 +341,7 @@ def get_stock_summary(item_id: Optional[str] = None, sku: Optional[str] = None) 
         return stock_summary(conn, item_id)  # type: ignore[arg-type]
 
 
-@mcp.tool(name="sales.quote_options")
+@mcp.tool(name="sales_quote_options")
 def sales_quote_options(
     sku: str,
     qty: int,
@@ -273,7 +353,7 @@ def sales_quote_options(
         return quote_options(conn, sku, qty, need_by, allowed_substitutions or [])
 
 
-@mcp.tool(name="sales.create_sales_order")
+@mcp.tool(name="sales_create_sales_order")
 def create_sales_order(
     customer_id: str,
     requested_delivery_date: Optional[str] = None,
@@ -316,14 +396,14 @@ def create_sales_order(
         return {"sales_order_id": so_id, "status": "draft", "lines": line_results}
 
 
-@mcp.tool(name="sales.price_sales_order")
+@mcp.tool(name="sales_price_sales_order")
 def price_sales_order(sales_order_id: str, pricelist: Optional[str] = None) -> Dict[str, Any]:
     """Apply simple pricing logic (12 EUR each, 5% discount for 24+, free shipping over €300)."""
     with db_conn() as conn:
         return compute_pricing(conn, sales_order_id)
 
 
-@mcp.tool(name="inventory.reserve_stock")
+@mcp.tool(name="inventory_reserve_stock")
 def reserve_stock_tool(
     reference_id: str,
     reservations: List[Dict[str, Any]],
@@ -334,7 +414,7 @@ def reserve_stock_tool(
         return reserve_stock(conn, reference_id, reservations, reference_type=reason)
 
 
-@mcp.tool(name="logistics.create_shipment")
+@mcp.tool(name="logistics_create_shipment")
 def create_shipment(
     ship_from: Optional[Dict[str, Any]] = None,
     ship_to: Optional[Dict[str, Any]] = None,
@@ -392,7 +472,7 @@ def create_shipment(
         }
 
 
-@mcp.tool(name="sales.link_shipment_to_sales_order")
+@mcp.tool(name="sales_link_shipment_to_sales_order")
 def link_shipment_to_sales_order(sales_order_id: str, shipment_id: str) -> Dict[str, Any]:
     """Link an existing shipment to a sales order."""
     with db_conn() as conn:
@@ -413,7 +493,7 @@ def _render_body(subject: str, context: Optional[Dict[str, Any]]) -> str:
     return "\n".join(lines)
 
 
-@mcp.tool(name="sales.draft_email")
+@mcp.tool(name="sales_draft_email")
 def draft_email(
     to: str,
     subject: str,
@@ -432,7 +512,7 @@ def draft_email(
         return {"draft_id": draft_id, "body": draft_body}
 
 
-@mcp.tool(name="sales.mark_email_sent")
+@mcp.tool(name="sales_mark_email_sent")
 def mark_email_sent(draft_id: str, sent_at: Optional[str] = None) -> Dict[str, Any]:
     """Mark a draft as sent."""
     when = sent_at or datetime.utcnow().isoformat()
@@ -445,7 +525,7 @@ def mark_email_sent(draft_id: str, sent_at: Optional[str] = None) -> Dict[str, A
         return {"status": "sent", "draft_id": draft_id, "sent_at": when}
 
 
-@mcp.tool(name="sales.search_sales_orders")
+@mcp.tool(name="sales_search_sales_orders")
 def search_sales_orders(customer_id: Optional[str] = None, limit: int = 5, sort: str = "most_recent") -> Dict[str, Any]:
     """Return recent sales orders for a customer."""
     order_clause = "ORDER BY created_at DESC" if sort == "most_recent" else "ORDER BY id"
@@ -485,7 +565,7 @@ def search_sales_orders(customer_id: Optional[str] = None, limit: int = 5, sort:
         return {"sales_orders": sales_orders}
 
 
-@mcp.tool(name="logistics.get_shipment_status")
+@mcp.tool(name="logistics_get_shipment_status")
 def get_shipment_status(shipment_id: str) -> Dict[str, Any]:
     """Return the status of a shipment."""
     with db_conn() as conn:
@@ -495,7 +575,7 @@ def get_shipment_status(shipment_id: str) -> Dict[str, Any]:
         return dict(row)
 
 
-@mcp.tool(name="production.get_production_order_status")
+@mcp.tool(name="production_get_production_order_status")
 def get_production_order_status(production_order_id: str) -> Dict[str, Any]:
     """Return status of a production order."""
     with db_conn() as conn:

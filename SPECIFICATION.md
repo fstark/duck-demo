@@ -53,7 +53,7 @@ User pastes the email:
 
 **Sales Agent actions (MCP calls you’ll want):**
 
-1. `find_or_create_customer("John Doe / DuckFan Paris")`
+1. `crm_find_customers(name="John Doe", company="DuckFan Paris")` (then `crm_create_customer(...)` if not found)
 2. `create_interaction(customer, channel="email", content=...)`
 3. `check_item_availability(item="ELVIS-DUCK-20CM", qty=24, date=Jan10)`
 4. `suggest_alternatives()` based on stock + lead time
@@ -140,7 +140,7 @@ Customer **Sarah Martin** has two orders:
 
 **Agent actions**
 
-1. `find_customer("Sarah Martin")`
+1. `crm_find_customers(name="Sarah Martin")`
 2. `search_sales_orders(customer_id, last_n=2)`
 3. For each order:
 
@@ -175,6 +175,12 @@ Even if it’s one server, it helps to present it as distinct tool sets:
 * sales order create/update
 * reservation request
 * shipment creation
+
+Additional CRM helpers
+
+* `crm_find_customers` returns possible matches
+* `crm_create_customer` explicitly creates a customer
+* `crm_get_customer_details` returns profile plus recent/pending orders
 
 ### Inventory context tools
 
@@ -235,21 +241,23 @@ Assumptions (for realism + determinism):
 
 You can rename these, but the transcript assumes these capabilities exist:
 
-* `crm.find_or_create_customer`
-* `crm.log_interaction`
-* `catalog.get_item`
-* `inventory.get_stock_summary`
-* `sales.quote_options`
-* `sales.create_sales_order`
-* `sales.price_sales_order`
-* `inventory.reserve_stock`
-* `logistics.create_shipment`
-* `sales.link_shipment_to_sales_order`
-* `sales.draft_email`
-* `sales.mark_email_sent`
-* `sales.search_sales_orders`
-* `logistics.get_shipment_status`
-* `production.get_production_order_status`
+* `crm_find_customers`
+* `crm_create_customer`
+* `crm_get_customer_details`
+* `crm_log_interaction`
+* `catalog_get_item`
+* `inventory_get_stock_summary`
+* `sales_quote_options`
+* `sales_create_sales_order`
+* `sales_price_sales_order`
+* `inventory_reserve_stock`
+* `logistics_create_shipment`
+* `sales_link_shipment_to_sales_order`
+* `sales_draft_email`
+* `sales_mark_email_sent`
+* `sales_search_sales_orders`
+* `logistics_get_shipment_status`
+* `production_get_production_order_status`
 
 ---
 
@@ -271,25 +279,31 @@ John
 ### A1) Agent queries ERP state
 
 **Agent → MCP tool call 1**
-`crm.find_or_create_customer({ name: "John Doe", company: "DuckFan Paris", email: "john@duckfan-paris.example", city: "Paris" })`
+`crm_find_customers({ name: "John Doe", company: "DuckFan Paris", email: "john@duckfan-paris.example" })`
 
 **MCP → Agent response**
-`{ customer_id: "CUST-0102", status: "created", display_name: "John Doe (DuckFan Paris)" }`
+`{ customers: [] }`
 
-**Agent → MCP tool call 2**
-`crm.log_interaction({ customer_id: "CUST-0102", channel: "email", direction: "inbound", subject: "Need 24 Elvis ducks for Jan 10", body: "<full pasted email>", interaction_at: "2025-12-20T10:14:00+01:00" })`
+**Agent → MCP tool call 2 (create explicitly if not found)**
+`crm_create_customer({ name: "John Doe", company: "DuckFan Paris", email: "john@duckfan-paris.example", city: "Paris" })`
+
+**MCP → Agent response**
+`{ customer_id: "CUST-0102", customer: { ... } }`
+
+**Agent → MCP tool call 3**
+`crm_log_interaction({ customer_id: "CUST-0102", channel: "email", direction: "inbound", subject: "Need 24 Elvis ducks for Jan 10", body: "<full pasted email>", interaction_at: "2025-12-20T10:14:00+01:00" })`
 
 **MCP → Agent response**
 `{ interaction_id: "INT-22051", status: "logged" }`
 
-**Agent → MCP tool call 3**
-`catalog.get_item({ sku: "ELVIS-DUCK-20CM" })`
+**Agent → MCP tool call 4**
+`catalog_get_item({ sku: "ELVIS-DUCK-20CM" })`
 
 **MCP → Agent response**
 `{ item_id: "ITEM-ELVIS-20", sku: "ELVIS-DUCK-20CM", name: "Elvis Duck 20cm", type: "finished_good" }`
 
-**Agent → MCP tool call 4**
-`inventory.get_stock_summary({ item_id: "ITEM-ELVIS-20" })`
+**Agent → MCP tool call 5**
+`inventory_get_stock_summary({ item_id: "ITEM-ELVIS-20" })`
 
 **MCP → Agent response**
 
@@ -307,14 +321,14 @@ John
 
 **Agent (internally decides):** cannot deliver 24 Elvis by Jan 10 from stock.
 
-**Agent → MCP tool call 5**
-`catalog.get_item({ sku: "MARILYN-DUCK-20CM" })`
+**Agent → MCP tool call 6**
+`catalog_get_item({ sku: "MARILYN-DUCK-20CM" })`
 
 **MCP → Agent response**
 `{ item_id: "ITEM-MARILYN-20", sku: "MARILYN-DUCK-20CM", name: "Marilyn Duck 20cm", type: "finished_good" }`
 
-**Agent → MCP tool call 6**
-`inventory.get_stock_summary({ item_id: "ITEM-MARILYN-20" })`
+**Agent → MCP tool call 7**
+`inventory_get_stock_summary({ item_id: "ITEM-MARILYN-20" })`
 
 **MCP → Agent response**
 
@@ -330,8 +344,8 @@ John
 }
 ```
 
-**Agent → MCP tool call 7**
-`sales.quote_options({
+**Agent → MCP tool call 8**
+`sales_quote_options({
   customer_id: "CUST-0102",
   request: { sku: "ELVIS-DUCK-20CM", qty: 24, need_by: "2026-01-10", ship_to_city: "Paris" },
   allowed_substitutions: ["MARILYN-DUCK-20CM"]
@@ -379,8 +393,8 @@ John
 
 ### A1) Agent drafts reply email (human-friendly negotiation)
 
-**Agent → MCP tool call 8**
-`sales.draft_email({
+**Agent → MCP tool call 9**
+`sales_draft_email({
   to: "john@duckfan-paris.example",
   subject: "Re: 24 Elvis ducks delivery by Jan 10",
   context: {
@@ -409,8 +423,8 @@ John
 * Proposed options (substitution vs split shipment)
 * **Draft reply ready to send**
 
-**Agent → MCP tool call 9 (pseudo-send)**
-`sales.mark_email_sent({ draft_id: "DRAFT-901", sent_at: "2025-12-20T10:18:00+01:00" })`
+**Agent → MCP tool call 10 (pseudo-send)**
+`sales_mark_email_sent({ draft_id: "DRAFT-901", sent_at: "2025-12-20T10:18:00+01:00" })`
 
 **MCP → Agent response**
 `{ status: "sent", message_id: "MSG-77102" }`
@@ -434,14 +448,14 @@ John
 
 ### A2) Agent creates SalesOrder, reserves stock, creates Shipment, prices order, confirms
 
-**Agent → MCP tool call 10**
-`crm.log_interaction({ customer_id: "CUST-0102", channel: "email", direction: "inbound", subject: "Accept substitution 12 Elvis + 12 Marilyn", body: "<full pasted email>", interaction_at: "2025-12-20T10:25:00+01:00" })`
+**Agent → MCP tool call 11**
+`crm_log_interaction({ customer_id: "CUST-0102", channel: "email", direction: "inbound", subject: "Accept substitution 12 Elvis + 12 Marilyn", body: "<full pasted email>", interaction_at: "2025-12-20T10:25:00+01:00" })`
 
 **MCP → Agent response**
 `{ interaction_id: "INT-22063", status: "logged" }`
 
-**Agent → MCP tool call 11**
-`sales.create_sales_order({
+**Agent → MCP tool call 12**
+`sales_create_sales_order({
   customer_id: "CUST-0102",
   requested_delivery_date: "2026-01-10",
   ship_to: { line1: "14 Rue Example", postal_code: "75011", city: "Paris", country: "FR" },
@@ -465,8 +479,8 @@ John
 }
 ```
 
-**Agent → MCP tool call 12**
-`inventory.reserve_stock({
+**Agent → MCP tool call 13**
+`inventory_reserve_stock({
   reason: "sales_order",
   reference_id: "SO-1042",
   reservations: [
@@ -478,8 +492,8 @@ John
 **MCP → Agent response**
 `{ status: "reserved", reservation_id: "RSV-5001" }`
 
-**Agent → MCP tool call 13**
-`sales.price_sales_order({ sales_order_id: "SO-1042", pricelist: "Retail EU 2026" })`
+**Agent → MCP tool call 14**
+`sales_price_sales_order({ sales_order_id: "SO-1042", pricelist: "Retail EU 2026" })`
 
 **MCP → Agent response**
 
@@ -501,8 +515,8 @@ John
 }
 ```
 
-**Agent → MCP tool call 14**
-`logistics.create_shipment({
+**Agent → MCP tool call 15**
+`logistics_create_shipment({
   ship_from: { "warehouse": "WH-LYON" },
   ship_to: { "line1": "14 Rue Example", "postal_code": "75011", "city": "Paris", "country": "FR" },
   planned_departure: "2026-01-08",
@@ -516,14 +530,14 @@ John
 **MCP → Agent response**
 `{ shipment_id: "SHIP-900", status: "planned", planned_departure: "2026-01-08", planned_arrival: "2026-01-10" }`
 
-**Agent → MCP tool call 15**
-`sales.link_shipment_to_sales_order({ sales_order_id: "SO-1042", shipment_id: "SHIP-900" })`
+**Agent → MCP tool call 16**
+`sales_link_shipment_to_sales_order({ sales_order_id: "SO-1042", shipment_id: "SHIP-900" })`
 
 **MCP → Agent response**
 `{ status: "linked" }`
 
-**Agent → MCP tool call 16**
-`sales.draft_email({
+**Agent → MCP tool call 17**
+`sales_draft_email({
   to: "john@duckfan-paris.example",
   subject: "Order confirmation SO-1042 — delivery by Jan 10",
   context: {
@@ -544,8 +558,8 @@ John
 }
 ```
 
-**Agent → MCP tool call 17 (pseudo-send)**
-`sales.mark_email_sent({ draft_id: "DRAFT-919", sent_at: "2025-12-20T10:29:00+01:00" })`
+**Agent → MCP tool call 18 (pseudo-send)**
+`sales_mark_email_sent({ draft_id: "DRAFT-919", sent_at: "2025-12-20T10:29:00+01:00" })`
 
 **MCP → Agent response**
 `{ status: "sent", message_id: "MSG-77155" }`
@@ -568,20 +582,20 @@ Sarah
 
 ### B1) Agent finds customer, looks up last orders, returns shipment + production statuses
 
-**Agent → MCP tool call 18**
-`crm.find_or_create_customer({ name: "Sarah Martin", email: "sarah@martin-retail.example" })`
+**Agent → MCP tool call 19**
+`crm_find_customers({ name: "Sarah Martin", email: "sarah@martin-retail.example" })`
 
 **MCP → Agent response**
-`{ customer_id: "CUST-0044", status: "found", display_name: "Sarah Martin" }`
+`{ customers: [ { "id": "CUST-0044", "name": "Sarah Martin", "email": "sarah@martin-retail.example" } ] }`
 
-**Agent → MCP tool call 19**
-`crm.log_interaction({ customer_id: "CUST-0044", channel: "email", direction: "inbound", subject: "Order status?", body: "<full pasted email>", interaction_at: "2025-12-20T11:02:00+01:00" })`
+**Agent → MCP tool call 20**
+`crm_log_interaction({ customer_id: "CUST-0044", channel: "email", direction: "inbound", subject: "Order status?", body: "<full pasted email>", interaction_at: "2025-12-20T11:02:00+01:00" })`
 
 **MCP → Agent response**
 `{ interaction_id: "INT-22090", status: "logged" }`
 
-**Agent → MCP tool call 20**
-`sales.search_sales_orders({ customer_id: "CUST-0044", limit: 2, sort: "most_recent" })`
+**Agent → MCP tool call 21**
+`sales_search_sales_orders({ customer_id: "CUST-0044", limit: 2, sort: "most_recent" })`
 
 **MCP → Agent response**
 
@@ -606,8 +620,8 @@ Sarah
 }
 ```
 
-**Agent → MCP tool call 21**
-`production.get_production_order_status({ production_order_id: "MO-555" })`
+**Agent → MCP tool call 22**
+`production_get_production_order_status({ production_order_id: "MO-555" })`
 
 **MCP → Agent response**
 
@@ -623,8 +637,8 @@ Sarah
 }
 ```
 
-**Agent → MCP tool call 22**
-`logistics.get_shipment_status({ shipment_id: "SHIP-870" })`
+**Agent → MCP tool call 23**
+`logistics_get_shipment_status({ shipment_id: "SHIP-870" })`
 
 **MCP → Agent response**
 
@@ -638,8 +652,8 @@ Sarah
 }
 ```
 
-**Agent → MCP tool call 23**
-`sales.draft_email({
+**Agent → MCP tool call 24**
+`sales_draft_email({
   to: "sarah@martin-retail.example",
   subject: "Re: Order status update",
   context: {
@@ -660,8 +674,8 @@ Sarah
 }
 ```
 
-**Agent → MCP tool call 24 (pseudo-send)**
-`sales.mark_email_sent({ draft_id: "DRAFT-940", sent_at: "2025-12-20T11:06:00+01:00" })`
+**Agent → MCP tool call 25 (pseudo-send)**
+`sales_mark_email_sent({ draft_id: "DRAFT-940", sent_at: "2025-12-20T11:06:00+01:00" })`
 
 **MCP → Agent response**
 `{ status: "sent", message_id: "MSG-77220" }`
@@ -729,7 +743,7 @@ CREATE TABLE customers (
 
 Used by:
 
-* `find_or_create_customer`
+* `crm_find_customers`, `crm_create_customer`, `crm_get_customer_details`
 * sales orders
 * interactions
 * email drafting
@@ -817,7 +831,7 @@ CREATE TABLE stock_reservations (
 
 Used by:
 
-* `inventory.reserve_stock`
+* `inventory_reserve_stock`
 * tying reservations to a sales order
 
 ---
