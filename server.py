@@ -5,12 +5,24 @@ from datetime import datetime
 from typing import Any, Dict, Iterator, List, Optional
 
 from mcp.server.fastmcp import FastMCP
+from mcp.server.transport_security import TransportSecuritySettings
 
 from db import dict_rows, generate_id, get_connection, init_db
 
 
 # HTTP-based MCP server using FastMCP with stateless JSON responses.
-mcp = FastMCP("duck-demo", stateless_http=True, json_response=True)
+# Allow all hosts/origins so ngrok tunnels work (demo-only; tighten for prod).
+mcp = FastMCP(
+    "duck-demo",
+    host="0.0.0.0",
+    stateless_http=True,
+    json_response=True,
+    transport_security=TransportSecuritySettings(
+        enable_dns_rebinding_protection=False,
+        allowed_hosts=["*"],
+        allowed_origins=["*"],
+    ),
+)
 
 # Ensure schema exists at startup.
 init_db()
