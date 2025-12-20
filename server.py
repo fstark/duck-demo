@@ -948,6 +948,15 @@ async def api_shipment(request):
         return _json({"error": str(exc)}, status_code=404)
 
 
+@mcp.custom_route("/api/shipments", methods=["GET", "OPTIONS"])
+async def api_shipments(request):
+    if request.method == "OPTIONS":
+        return _cors_preflight(["GET"])
+    with db_conn() as conn:
+        rows = dict_rows(conn.execute("SELECT * FROM shipments ORDER BY planned_departure DESC").fetchall())
+    return _json({"shipments": rows})
+
+
 @mcp.custom_route("/api/production-orders/{production_id}", methods=["GET", "OPTIONS"])
 async def api_production(request):
     if request.method == "OPTIONS":

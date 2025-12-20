@@ -1,0 +1,22 @@
+@import url('https://rsms.me/inter/inter.css');
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  background: #f5f6fa;
+}
+
+body {
+  margin: 0;
+}
+
+.card {
+  @apply bg-white rounded-xl shadow-sm border border-slate-200;
+}
+
+.section-title {
+  @apply text-sm font-semibold text-slate-500 uppercase tracking-wide;
+}
