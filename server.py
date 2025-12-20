@@ -1,13 +1,37 @@
 import os
+import re
 import sqlite3
+import json
+import functools
+import logging
 from contextlib import contextmanager
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, Dict, Iterator, List, Optional
 
 from mcp.server.fastmcp import FastMCP
 from mcp.server.transport_security import TransportSecuritySettings
 
 from db import dict_rows, generate_id, get_connection, init_db
+
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(message)s",
+    datefmt="%Y-%m-%dT%H:%M:%S",
+)
+logger = logging.getLogger("duck-demo")
+
+
+# Demo constants (lifted from SPECIFICATION.md) — tweak here to adjust behavior.
+PRICING_DEFAULT_UNIT_PRICE = 12.0
+PRICING_VOLUME_QTY_THRESHOLD = 24
+PRICING_VOLUME_DISCOUNT_PCT = 0.05
+PRICING_FREE_SHIPPING_THRESHOLD = 300.0
+PRICING_CURRENCY = "EUR"
+SUBSTITUTION_PRICE_SLACK_PCT = 0.15  # within ±15% of requested SKU
+TRANSIT_DAYS_DEFAULT = 2  # simple default transit lead
+PRODUCTION_LEAD_DAYS_DEFAULT = 30  # demo tweak: long lead makes rush impossible
+PRODUCTION_LEAD_DAYS_BY_TYPE = {"finished_good": 30}
 
 
 # HTTP-based MCP server using FastMCP with stateless JSON responses.
@@ -26,6 +50,34 @@ mcp = FastMCP(
 
 # Ensure schema exists at startup.
 init_db()
+
+
+def log_tool(name: str):
+    """Decorator to log tool calls with parameters and results for CallToolRequest traceability."""
+
+    def decorator(func):
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            try:
+                params_str = json.dumps({"args": args, "kwargs": kwargs}, default=str)
+            except Exception:
+                params_str = f"args={args}, kwargs={kwargs}"
+            logger.info("[CallToolRequest] tool=%s params=%s", name, params_str)
+            try:
+                result = func(*args, **kwargs)
+                try:
+                    result_str = json.dumps(result, default=str)
+                except Exception:
+                    result_str = str(result)
+                logger.info("[CallToolResponse] tool=%s result=%s", name, result_str)
+                return result
+            except Exception as exc:  # pragma: no cover
+                logger.exception("[CallToolError] tool=%s error=%s", name, exc)
+                raise
+
+        return wrapper
+
+    return decorator
 
 
 @contextmanager
@@ -60,36 +112,113 @@ def stock_summary(conn: sqlite3.Connection, item_id: str) -> Dict[str, Any]:
     }
 
 
+def parse_date(value: Optional[str]) -> Optional[datetime]:
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(value)
+    except ValueError:
+        return None
+
+
+def eta_from_days(days: int) -> str:
+    return (datetime.utcnow().date() + timedelta(days=days)).isoformat()
+
+
+def get_unit_price(conn: sqlite3.Connection, item_id: str) -> float:
+    row = conn.execute(
+        "SELECT unit_price FROM pricelist_lines WHERE item_id = ? ORDER BY pricelist_id LIMIT 1",
+        (item_id,),
+    ).fetchone()
+    return float(row["unit_price"]) if row else PRICING_DEFAULT_UNIT_PRICE
+
+
+def find_substitutions(
+    conn: sqlite3.Connection,
+    requested_item: sqlite3.Row,
+    allowed_subs: List[str],
+    price_slack_pct: float = SUBSTITUTION_PRICE_SLACK_PCT,
+) -> List[Dict[str, Any]]:
+    base_price = get_unit_price(conn, requested_item["id"])
+    lower = base_price * (1 - price_slack_pct)
+    upper = base_price * (1 + price_slack_pct)
+
+    candidates = conn.execute(
+        "SELECT id, sku, name, type FROM items WHERE type = ? AND id != ?",
+        (requested_item["type"], requested_item["id"]),
+    ).fetchall()
+
+    filtered: List[Dict[str, Any]] = []
+    for cand in candidates:
+        if allowed_subs and cand["sku"] not in allowed_subs:
+            continue
+        cand_price = get_unit_price(conn, cand["id"])
+        if not (lower <= cand_price <= upper):
+            continue
+        cand_stock = stock_summary(conn, cand["id"])
+        if cand_stock["available_total"] <= 0:
+            continue
+        filtered.append(
+            {
+                "item": dict(cand),
+                "unit_price": cand_price,
+                "stock": cand_stock,
+            }
+        )
+    return filtered
+
+
+@mcp.tool(name="inventory_list_items")
+@log_tool("inventory_list_items")
+def inventory_list_items(in_stock_only: bool = False, limit: int = 50) -> Dict[str, Any]:
+    """List items, optionally only those with available stock."""
+    with db_conn() as conn:
+        base_sql = "SELECT id, sku, name, type FROM items"
+        params: List[Any] = []
+        if in_stock_only:
+            base_sql += " WHERE id IN (SELECT DISTINCT item_id FROM stock WHERE on_hand - reserved > 0)"
+        base_sql += " ORDER BY sku LIMIT ?"
+        params.append(limit)
+        rows = dict_rows(conn.execute(base_sql, params))
+        if in_stock_only:
+            # attach available totals
+            for row in rows:
+                summary = stock_summary(conn, row["id"])
+                row["available_total"] = summary["available_total"]
+        return {"items": rows}
+
+
 def compute_pricing(conn: sqlite3.Connection, sales_order_id: str) -> Dict[str, Any]:
     cur = conn.execute(
-        "SELECT sol.qty, i.sku FROM sales_order_lines sol JOIN items i ON sol.item_id = i.id WHERE sol.sales_order_id = ?",
+        "SELECT sol.qty, sol.item_id, i.sku FROM sales_order_lines sol JOIN items i ON sol.item_id = i.id WHERE sol.sales_order_id = ?",
         (sales_order_id,),
     )
     lines = cur.fetchall()
     if not lines:
         raise ValueError("Sales order has no lines")
-    unit_price = 12.0
     line_totals = []
     total_qty = 0
     subtotal = 0.0
     for row in lines:
         qty = float(row["qty"])
         total_qty += qty
+        unit_price = get_unit_price(conn, row["item_id"])
         line_total = qty * unit_price
         subtotal += line_total
         line_totals.append({"sku": row["sku"], "qty": qty, "unit_price": unit_price, "line_total": line_total})
-    discount = 0.05 * subtotal if total_qty >= 24 else 0.0
-    shipping = 0.0 if total_qty >= 24 or subtotal >= 300 else 20.0
+
+    discount = PRICING_VOLUME_DISCOUNT_PCT * subtotal if total_qty >= PRICING_VOLUME_QTY_THRESHOLD else 0.0
+    shipping = 0.0 if subtotal >= PRICING_FREE_SHIPPING_THRESHOLD else 20.0
     total = subtotal - discount + shipping
     conn.execute(
         "REPLACE INTO sales_order_pricing (sales_order_id, currency, subtotal, discount, shipping, total) VALUES (?, ?, ?, ?, ?, ?)",
-        (sales_order_id, "EUR", subtotal, discount, shipping, total),
+        (sales_order_id, PRICING_CURRENCY, subtotal, discount, shipping, total),
     )
     conn.commit()
     return {
         "sales_order_id": sales_order_id,
         "pricing": {
-            "currency": "EUR",
+            "currency": PRICING_CURRENCY,
             "lines": line_totals,
             "discounts": []
             if discount == 0
@@ -106,64 +235,113 @@ def quote_options(conn: sqlite3.Connection, sku: str, qty: int, need_by: Optiona
     item = load_item(conn, sku)
     if not item:
         raise ValueError("Unknown item")
-    summary = stock_summary(conn, item["id"])
-    available = summary["available_total"]
+
+    need_by_dt = parse_date(need_by)
+    availability = stock_summary(conn, item["id"])
+    available = max(0, availability["available_total"])
+    transit_days = TRANSIT_DAYS_DEFAULT
+    production_lead_days = PRODUCTION_LEAD_DAYS_BY_TYPE.get(item["type"], PRODUCTION_LEAD_DAYS_DEFAULT)
+
     options: List[Dict[str, Any]] = []
-    if sku == "ELVIS-DUCK-20CM" and qty >= 24 and (not need_by or need_by <= "2026-01-10"):
-        sub_item = None
-        if allowed_subs:
-            for s in allowed_subs:
-                row = load_item(conn, s)
-                if row:
-                    sub_item = row
-                    break
-        if sub_item:
-            sub_summary = stock_summary(conn, sub_item["id"])
-            if sub_summary["available_total"] >= 12:
-                options.append(
-                    {
-                        "option_id": "OPT-1",
-                        "summary": "Ship 12 Elvis + 12 Marilyn to arrive by Jan 10",
-                        "lines": [
-                            {"sku": sku, "qty": 12, "source": "stock"},
-                            {"sku": sub_item["sku"], "qty": 12, "source": "stock"},
-                        ],
-                        "can_arrive_by": "2026-01-10",
-                        "notes": "All stock available now.",
-                    }
-                )
-        if available >= 12:
-            options.append(
-                {
-                    "option_id": "OPT-2",
-                    "summary": "Split shipment: 12 Elvis by Jan 10, remaining 12 Elvis by Jan 12",
-                    "lines": [
-                        {"sku": sku, "qty": 12, "source": "stock", "shipment": "S1"},
-                        {"sku": sku, "qty": qty - 12, "source": "production", "shipment": "S2"},
-                    ],
-                    "can_arrive_by": "2026-01-12",
-                    "notes": "Production earliest completion Jan 11; delivery Jan 12.",
-                }
-            )
+
+    def next_id(idx: int) -> str:
+        return f"OPT-{idx}"
+
+    def option_eta(lines: List[Dict[str, Any]]) -> str:
+        stock_eta: Optional[str] = None
+        latest_prod_eta: Optional[str] = None
+        for line in lines:
+            source = line.get("source", "")
+            if "production" in source:
+                lead = int(line.get("lead_days", production_lead_days))
+                eta_val = eta_from_days(lead + transit_days)
+                if latest_prod_eta is None or eta_val > latest_prod_eta:
+                    latest_prod_eta = eta_val
+            elif "stock" in source:
+                stock_eta = eta_from_days(transit_days)
+        candidate = latest_prod_eta or stock_eta or eta_from_days(transit_days)
+        return candidate
+
+    def add_option(idx: int, summary: str, lines: List[Dict[str, Any]], notes: str) -> None:
         options.append(
             {
-                "option_id": "OPT-3",
-                "summary": "Ship all Elvis as one shipment arriving by Jan 12",
-                "lines": [{"sku": sku, "qty": qty, "source": "stock+production"}],
-                "can_arrive_by": "2026-01-12",
-                "notes": "Not possible by Jan 10.",
+                "option_id": next_id(idx),
+                "summary": summary,
+                "lines": lines,
+                "can_arrive_by": option_eta(lines),
+                "notes": notes,
             }
         )
+
+    opt_idx = 1
+
+    # Stock-first options for requested SKU
+    if available >= qty:
+        add_option(
+            opt_idx,
+            f"Ship {qty} x {sku} from stock",
+            [{"sku": sku, "qty": qty, "source": "stock"}],
+            "All units available now; using default transit lead.",
+        )
+        opt_idx += 1
+    elif available > 0:
+        remaining = qty - available
+        add_option(
+            opt_idx,
+            f"Ship {available} from stock, {remaining} from production",
+            [
+                {"sku": sku, "qty": available, "source": "stock"},
+                {"sku": sku, "qty": remaining, "source": "production"},
+            ],
+            "Partial stock now; remainder after production lead.",
+        )
+        opt_idx += 1
     else:
-        options.append(
-            {
-                "option_id": "OPT-STD",
-                "summary": f"Ship {qty} x {sku}",
-                "lines": [{"sku": sku, "qty": qty, "source": "stock" if available >= qty else "stock+production"}],
-                "can_arrive_by": need_by or "asap",
-                "notes": "Based on current stock snapshot.",
-            }
+        add_option(
+            opt_idx,
+            f"Produce and ship {qty} x {sku}",
+            [{"sku": sku, "qty": qty, "source": "production"}],
+            "No stock available; production required.",
         )
+        opt_idx += 1
+
+    # Substitution options based on type and price band.
+    substitutions = find_substitutions(conn, item, allowed_subs)
+    for sub in substitutions:
+        sub_item = sub["item"]
+        sub_avail = max(0, sub["stock"]["available_total"])
+        if sub_avail <= 0:
+            continue
+        # If we can cover the shortage by mixing requested stock with substitute stock, surface that first.
+        shortage = max(0, qty - available)
+        if available > 0 and shortage > 0 and available + sub_avail >= qty:
+            fill_qty = qty - available
+            lines = [
+                {"sku": sku, "qty": available, "source": "stock"},
+                {"sku": sub_item["sku"], "qty": fill_qty, "source": "stock"},
+            ]
+            summary = f"Stock mix: {available} x {sku} + {fill_qty} x {sub_item['sku']}"
+            notes = "Mix requested SKU with substitution from stock to meet requested date."
+            add_option(opt_idx, summary, lines, notes)
+            opt_idx += 1
+
+        if sub_avail >= qty:
+            lines = [{"sku": sub_item["sku"], "qty": qty, "source": "stock"}]
+            summary = f"Substitute {qty} x {sub_item['sku']} (price-similar)"
+            notes = "Within price band and same type; ships from stock."
+        else:
+            remaining = qty - sub_avail
+            sub_prod_lead = PRODUCTION_LEAD_DAYS_BY_TYPE.get(sub_item["type"], PRODUCTION_LEAD_DAYS_DEFAULT)
+            lines = [
+                {"sku": sub_item["sku"], "qty": sub_avail, "source": "stock"},
+                {"sku": sub_item["sku"], "qty": remaining, "source": "production", "lead_days": sub_prod_lead},
+            ]
+            summary = f"Substitute {sub_avail} stock + {remaining} production of {sub_item['sku']}"
+            notes = "Within price band and same type; partial stock, remainder after production."
+
+        add_option(opt_idx, summary, lines, notes)
+        opt_idx += 1
+
     return {"options": options}
 
 
@@ -194,6 +372,7 @@ def reserve_stock(conn: sqlite3.Connection, reference_id: str, reservations: Lis
 
 
 @mcp.tool(name="crm_find_customers")
+@log_tool("crm_find_customers")
 def find_customers(
     name: Optional[str] = None,
     email: Optional[str] = None,
@@ -227,6 +406,7 @@ def find_customers(
 
 
 @mcp.tool(name="crm_create_customer")
+@log_tool("crm_create_customer")
 def create_customer(name: str, company: Optional[str] = None, email: Optional[str] = None, city: Optional[str] = None) -> Dict[str, Any]:
     """Create a new customer explicitly."""
     with db_conn() as conn:
@@ -241,8 +421,9 @@ def create_customer(name: str, company: Optional[str] = None, email: Optional[st
 
 
 @mcp.tool(name="crm_get_customer_details")
-def get_customer_details(customer_id: str, include_orders: bool = True, include_interactions: bool = False) -> Dict[str, Any]:
-    """Get customer data plus recent orders/interactions."""
+@log_tool("crm_get_customer_details")
+def get_customer_details(customer_id: str, include_orders: bool = True) -> Dict[str, Any]:
+    """Get customer data plus recent orders."""
     with db_conn() as conn:
         cust = conn.execute("SELECT * FROM customers WHERE id = ?", (customer_id,)).fetchone()
         if not cust:
@@ -284,40 +465,12 @@ def get_customer_details(customer_id: str, include_orders: bool = True, include_
                 )
             result["orders"] = orders
 
-        if include_interactions:
-            recent = dict_rows(
-                conn.execute(
-                    "SELECT id, channel, direction, subject, interaction_at FROM interactions WHERE customer_id = ? ORDER BY interaction_at DESC LIMIT 5",
-                    (customer_id,),
-                ).fetchall()
-            )
-            result["interactions"] = recent
-
         return result
 
 
-@mcp.tool(name="crm_log_interaction")
-def log_interaction(
-    customer_id: str,
-    channel: str,
-    direction: str,
-    subject: Optional[str] = None,
-    body: Optional[str] = None,
-    interaction_at: Optional[str] = None,
-) -> Dict[str, Any]:
-    """Log an inbound or outbound interaction."""
-    when = interaction_at or datetime.utcnow().isoformat()
-    with db_conn() as conn:
-        interaction_id = generate_id(conn, "INT", "interactions")
-        conn.execute(
-            "INSERT INTO interactions (id, customer_id, channel, direction, subject, body, interaction_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (interaction_id, customer_id, channel, direction, subject, body, when),
-        )
-        conn.commit()
-        return {"interaction_id": interaction_id, "status": "logged"}
-
 
 @mcp.tool(name="catalog_get_item")
+@log_tool("catalog_get_item")
 def get_item(sku: str) -> Dict[str, Any]:
     """Fetch an item by SKU."""
     with db_conn() as conn:
@@ -327,7 +480,34 @@ def get_item(sku: str) -> Dict[str, Any]:
         return dict(row)
 
 
+@mcp.tool(name="catalog_search_items")
+@log_tool("catalog_search_items")
+def search_items(words: List[str], limit: int = 10, min_score: int = 1) -> Dict[str, Any]:
+    """Fuzzy item search via prefix matches on SKU/name tokens, ordered best to worst."""
+    normalized = [w.strip().lower() for w in words if w and w.strip()]
+    if not normalized:
+        raise ValueError("words required")
+
+    def tokens_for(row: sqlite3.Row) -> List[str]:
+        raw = f"{row['sku']} {row['name']}".lower()
+        return [tok for tok in re.split(r"[^a-z0-9]+", raw) if tok]
+
+    with db_conn() as conn:
+        rows = conn.execute("SELECT id, sku, name, type FROM items").fetchall()
+        scored: List[Dict[str, Any]] = []
+        for row in rows:
+            token_set = set(tokens_for(row))
+            matched = [w for w in normalized if any(tok.startswith(w) for tok in token_set)]
+            score = len(matched)
+            if score >= min_score:
+                scored.append({"item": dict(row), "score": score, "matched_words": matched})
+
+        scored.sort(key=lambda entry: (-entry["score"], entry["item"]["sku"]))
+        return {"items": scored[:limit], "query": normalized}
+
+
 @mcp.tool(name="inventory_get_stock_summary")
+@log_tool("inventory_get_stock_summary")
 def get_stock_summary(item_id: Optional[str] = None, sku: Optional[str] = None) -> Dict[str, Any]:
     """Return on-hand, reserved, and available by location for an item."""
     if not item_id and not sku:
@@ -342,6 +522,7 @@ def get_stock_summary(item_id: Optional[str] = None, sku: Optional[str] = None) 
 
 
 @mcp.tool(name="sales_quote_options")
+@log_tool("sales_quote_options")
 def sales_quote_options(
     sku: str,
     qty: int,
@@ -354,6 +535,7 @@ def sales_quote_options(
 
 
 @mcp.tool(name="sales_create_sales_order")
+@log_tool("sales_create_sales_order")
 def create_sales_order(
     customer_id: str,
     requested_delivery_date: Optional[str] = None,
@@ -397,6 +579,7 @@ def create_sales_order(
 
 
 @mcp.tool(name="sales_price_sales_order")
+@log_tool("sales_price_sales_order")
 def price_sales_order(sales_order_id: str, pricelist: Optional[str] = None) -> Dict[str, Any]:
     """Apply simple pricing logic (12 EUR each, 5% discount for 24+, free shipping over €300)."""
     with db_conn() as conn:
@@ -404,6 +587,7 @@ def price_sales_order(sales_order_id: str, pricelist: Optional[str] = None) -> D
 
 
 @mcp.tool(name="inventory_reserve_stock")
+@log_tool("inventory_reserve_stock")
 def reserve_stock_tool(
     reference_id: str,
     reservations: List[Dict[str, Any]],
@@ -415,6 +599,7 @@ def reserve_stock_tool(
 
 
 @mcp.tool(name="logistics_create_shipment")
+@log_tool("logistics_create_shipment")
 def create_shipment(
     ship_from: Optional[Dict[str, Any]] = None,
     ship_to: Optional[Dict[str, Any]] = None,
@@ -473,6 +658,7 @@ def create_shipment(
 
 
 @mcp.tool(name="sales_link_shipment_to_sales_order")
+@log_tool("sales_link_shipment_to_sales_order")
 def link_shipment_to_sales_order(sales_order_id: str, shipment_id: str) -> Dict[str, Any]:
     """Link an existing shipment to a sales order."""
     with db_conn() as conn:
@@ -494,6 +680,7 @@ def _render_body(subject: str, context: Optional[Dict[str, Any]]) -> str:
 
 
 @mcp.tool(name="sales_draft_email")
+@log_tool("sales_draft_email")
 def draft_email(
     to: str,
     subject: str,
@@ -513,6 +700,7 @@ def draft_email(
 
 
 @mcp.tool(name="sales_mark_email_sent")
+@log_tool("sales_mark_email_sent")
 def mark_email_sent(draft_id: str, sent_at: Optional[str] = None) -> Dict[str, Any]:
     """Mark a draft as sent."""
     when = sent_at or datetime.utcnow().isoformat()
@@ -525,7 +713,37 @@ def mark_email_sent(draft_id: str, sent_at: Optional[str] = None) -> Dict[str, A
         return {"status": "sent", "draft_id": draft_id, "sent_at": when}
 
 
+@mcp.tool(name="sales_list_email_drafts")
+@log_tool("sales_list_email_drafts")
+def list_email_drafts(sent_only: bool = False, include_body: bool = False, limit: int = 20) -> Dict[str, Any]:
+    """Fetch email drafts. Defaults to unsent; set sent_only to True to fetch sent drafts."""
+    with db_conn() as conn:
+        if sent_only:
+            rows = conn.execute(
+                "SELECT id, to_address, subject, body, sent_at FROM email_drafts WHERE sent_at IS NOT NULL ORDER BY sent_at DESC LIMIT ?",
+                (limit,),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT id, to_address, subject, body, sent_at FROM email_drafts WHERE sent_at IS NULL ORDER BY id DESC LIMIT ?",
+                (limit,),
+            ).fetchall()
+        drafts = []
+        for row in rows:
+            entry = {
+                "draft_id": row["id"],
+                "to": row["to_address"],
+                "subject": row["subject"],
+                "sent_at": row["sent_at"],
+            }
+            if include_body:
+                entry["body"] = row["body"]
+            drafts.append(entry)
+        return {"drafts": drafts}
+
+
 @mcp.tool(name="sales_search_sales_orders")
+@log_tool("sales_search_sales_orders")
 def search_sales_orders(customer_id: Optional[str] = None, limit: int = 5, sort: str = "most_recent") -> Dict[str, Any]:
     """Return recent sales orders for a customer."""
     order_clause = "ORDER BY created_at DESC" if sort == "most_recent" else "ORDER BY id"
@@ -566,6 +784,7 @@ def search_sales_orders(customer_id: Optional[str] = None, limit: int = 5, sort:
 
 
 @mcp.tool(name="logistics_get_shipment_status")
+@log_tool("logistics_get_shipment_status")
 def get_shipment_status(shipment_id: str) -> Dict[str, Any]:
     """Return the status of a shipment."""
     with db_conn() as conn:
@@ -576,6 +795,7 @@ def get_shipment_status(shipment_id: str) -> Dict[str, Any]:
 
 
 @mcp.tool(name="production_get_production_order_status")
+@log_tool("production_get_production_order_status")
 def get_production_order_status(production_order_id: str) -> Dict[str, Any]:
     """Return status of a production order."""
     with db_conn() as conn:

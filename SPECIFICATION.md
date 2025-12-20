@@ -26,8 +26,8 @@ Below is a demo flow that’s *small*, but feels real: one new order that needs 
 
 ### Production capacity (simplified)
 
-* Can produce **12 Elvis ducks** by **Jan 12**, but not by Jan 10.
-* Producing 12 more Elvis would require some dye and machine time (enough raw material exists, but lead time is real).
+* Production lead for finished goods is **~30 days**. An extra Elvis batch would finish around **Jan 19** and arrive around **Jan 21**, so it cannot help a Jan 10 request.
+* Enough raw material exists; the constraint is time (long lead), not supply.
 
 ### PriceList rules (simple but convincing)
 
@@ -54,21 +54,19 @@ User pastes the email:
 **Sales Agent actions (MCP calls you’ll want):**
 
 1. `crm_find_customers(name="John Doe", company="DuckFan Paris")` (then `crm_create_customer(...)` if not found)
-2. `create_interaction(customer, channel="email", content=...)`
-3. `check_item_availability(item="ELVIS-DUCK-20CM", qty=24, date=Jan10)`
-4. `suggest_alternatives()` based on stock + lead time
-5. `draft_reply_email()` (important: give options)
+2. `check_item_availability(item="ELVIS-DUCK-20CM", qty=24, date=Jan10)`
+3. `suggest_alternatives()` based on stock + lead time
+4. `draft_reply_email()` (important: give options)
 
 ### Step A1 — Expected outcome (what your MCP should return)
 
 * Customer exists/created
-* Interaction logged
-* Availability result: **12 in stock now**, **12 can be produced but earliest Jan 12**
+* Availability result: **12 in stock now**; any additional Elvis would only arrive **around Jan 21** (30-day production lead + transit).
 * Alternatives:
 
-  * Option 1: ship **12 Elvis + 12 Marilyn** by Jan 10
-  * Option 2: ship **12 Elvis** by Jan 10 and **12 Elvis** by Jan 12 (split shipment)
-  * Option 3: ship all 24 Elvis by Jan 12 (single shipment)
+  * Option 1: **Stock mix** — ship **12 Elvis + 12 Marilyn** from stock to arrive by **Jan 10**.
+  * Option 2: **Keep all Elvis** — ship **12 Elvis** by **Jan 10**, with the remaining **12 Elvis** arriving around **Jan 21** (production).
+  * Option 3: **All Elvis later** — single shipment of **24 Elvis** arriving around **Jan 21** (production + transit).
 
 ### Step A1 — Draft reply (sales agent output)
 
@@ -81,11 +79,11 @@ You want the agent to produce a real “sendable” email draft like:
 Example draft (tone: helpful + concrete):
 
 > Hi John,
-> Thanks for your request. For **ELVIS-DUCK-20CM**, we can ship **12 units immediately** for delivery by **Jan 10**.
-> For the remaining 12, we have two good options:
+> Thanks for your request. For **ELVIS-DUCK-20CM**, we have **12 units in stock** and can deliver those to Paris by **Jan 10**.
+> For the remaining 12, you have two options:
 >
-> 1. **Substitute**: ship **12 Elvis + 12 Marilyn (20cm)** together to arrive by **Jan 10**; or
-> 2. **Split shipment**: ship **12 Elvis** to arrive by **Jan 10**, then ship the remaining **12 Elvis** with expected delivery **Jan 12**.
+> 1. **Stock mix now:** ship **12 Elvis + 12 Marilyn (20cm)** together to arrive by **Jan 10**; or
+> 2. **All Elvis later:** ship **12 Elvis** to arrive by **Jan 10**, then ship the remaining **12 Elvis** with expected arrival around **Jan 21** (production lead is ~30 days).
 >    If you tell me which option you prefer (and your delivery address), I’ll send a formal quote right away.
 >    Best regards,
 >    (Your name)
@@ -170,7 +168,6 @@ Even if it’s one server, it helps to present it as distinct tool sets:
 ### Sales context tools
 
 * customer lookup/create
-* interaction logging
 * quote/pricing
 * sales order create/update
 * reservation request
@@ -244,8 +241,9 @@ You can rename these, but the transcript assumes these capabilities exist:
 * `crm_find_customers`
 * `crm_create_customer`
 * `crm_get_customer_details`
-* `crm_log_interaction`
 * `catalog_get_item`
+* `catalog_search_items`
+* `inventory_list_items`
 * `inventory_get_stock_summary`
 * `sales_quote_options`
 * `sales_create_sales_order`
@@ -255,6 +253,7 @@ You can rename these, but the transcript assumes these capabilities exist:
 * `sales_link_shipment_to_sales_order`
 * `sales_draft_email`
 * `sales_mark_email_sent`
+* `sales_list_email_drafts`
 * `sales_search_sales_orders`
 * `logistics_get_shipment_status`
 * `production_get_production_order_status`
@@ -291,18 +290,12 @@ John
 `{ customer_id: "CUST-0102", customer: { ... } }`
 
 **Agent → MCP tool call 3**
-`crm_log_interaction({ customer_id: "CUST-0102", channel: "email", direction: "inbound", subject: "Need 24 Elvis ducks for Jan 10", body: "<full pasted email>", interaction_at: "2025-12-20T10:14:00+01:00" })`
-
-**MCP → Agent response**
-`{ interaction_id: "INT-22051", status: "logged" }`
-
-**Agent → MCP tool call 4**
 `catalog_get_item({ sku: "ELVIS-DUCK-20CM" })`
 
 **MCP → Agent response**
 `{ item_id: "ITEM-ELVIS-20", sku: "ELVIS-DUCK-20CM", name: "Elvis Duck 20cm", type: "finished_good" }`
 
-**Agent → MCP tool call 5**
+**Agent → MCP tool call 4**
 `inventory_get_stock_summary({ item_id: "ITEM-ELVIS-20" })`
 
 **MCP → Agent response**
@@ -321,13 +314,13 @@ John
 
 **Agent (internally decides):** cannot deliver 24 Elvis by Jan 10 from stock.
 
-**Agent → MCP tool call 6**
+**Agent → MCP tool call 5**
 `catalog_get_item({ sku: "MARILYN-DUCK-20CM" })`
 
 **MCP → Agent response**
 `{ item_id: "ITEM-MARILYN-20", sku: "MARILYN-DUCK-20CM", name: "Marilyn Duck 20cm", type: "finished_good" }`
 
-**Agent → MCP tool call 7**
+**Agent → MCP tool call 6**
 `inventory_get_stock_summary({ item_id: "ITEM-MARILYN-20" })`
 
 **MCP → Agent response**
@@ -344,10 +337,11 @@ John
 }
 ```
 
-**Agent → MCP tool call 8**
+**Agent → MCP tool call 7**
 `sales_quote_options({
-  customer_id: "CUST-0102",
-  request: { sku: "ELVIS-DUCK-20CM", qty: 24, need_by: "2026-01-10", ship_to_city: "Paris" },
+  sku: "ELVIS-DUCK-20CM",
+  qty: 24,
+  need_by: "2026-01-10",
   allowed_substitutions: ["MARILYN-DUCK-20CM"]
 })`
 
@@ -358,32 +352,33 @@ John
   "options": [
     {
       "option_id": "OPT-1",
-      "summary": "Ship 12 Elvis + 12 Marilyn to arrive by Jan 10",
+      "summary": "Ship 12 from stock, 12 from production",
+      "lines": [
+        { "sku": "ELVIS-DUCK-20CM", "qty": 12, "source": "stock" },
+        { "sku": "ELVIS-DUCK-20CM", "qty": 12, "source": "production" }
+      ],
+      "can_arrive_by": "2026-01-21",
+      "notes": "Partial stock now; remainder after 30-day production lead."
+    },
+    {
+      "option_id": "OPT-2",
+      "summary": "Stock mix: 12 x ELVIS-DUCK-20CM + 12 x MARILYN-DUCK-20CM",
       "lines": [
         { "sku": "ELVIS-DUCK-20CM", "qty": 12, "source": "stock" },
         { "sku": "MARILYN-DUCK-20CM", "qty": 12, "source": "stock" }
       ],
       "can_arrive_by": "2026-01-10",
-      "notes": "All stock available now."
-    },
-    {
-      "option_id": "OPT-2",
-      "summary": "Split shipment: 12 Elvis arrives by Jan 10, remaining 12 Elvis arrives by Jan 12",
-      "lines": [
-        { "sku": "ELVIS-DUCK-20CM", "qty": 12, "source": "stock", "shipment": "S1" },
-        { "sku": "ELVIS-DUCK-20CM", "qty": 12, "source": "production", "shipment": "S2" }
-      ],
-      "can_arrive_by": "2026-01-12",
-      "notes": "Production earliest completion Jan 11; delivery Jan 12."
+      "notes": "Mix requested SKU with substitution from stock to meet date."
     },
     {
       "option_id": "OPT-3",
-      "summary": "Ship all 24 Elvis as one shipment arriving by Jan 12",
+      "summary": "Substitute 12 stock + 12 production of MARILYN-DUCK-20CM",
       "lines": [
-        { "sku": "ELVIS-DUCK-20CM", "qty": 24, "source": "stock+production" }
+        { "sku": "MARILYN-DUCK-20CM", "qty": 12, "source": "stock" },
+        { "sku": "MARILYN-DUCK-20CM", "qty": 12, "source": "production", "lead_days": 30 }
       ],
-      "can_arrive_by": "2026-01-12",
-      "notes": "Not possible by Jan 10."
+      "can_arrive_by": "2026-01-21",
+      "notes": "Within price band and same type; remainder after production lead."
     }
   ]
 }
@@ -393,17 +388,16 @@ John
 
 ### A1) Agent drafts reply email (human-friendly negotiation)
 
-**Agent → MCP tool call 9**
+**Agent → MCP tool call 8**
 `sales_draft_email({
   to: "john@duckfan-paris.example",
   subject: "Re: 24 Elvis ducks delivery by Jan 10",
   context: {
     customer_id: "CUST-0102",
-    interaction_id: "INT-22051",
     key_points: [
       "We have 12 Elvis in stock now",
-      "We can deliver by Jan 10 if you accept 12 Elvis + 12 Marilyn",
-      "Or we can split shipment / deliver all Elvis by Jan 12"
+      "To meet Jan 10, we can mix 12 Elvis + 12 Marilyn from stock",
+      "If you prefer all Elvis, the remaining 12 would arrive around Jan 21 (production lead)"
     ]
   }
 })`
@@ -413,17 +407,17 @@ John
 ```json
 {
   "draft_id": "DRAFT-901",
-  "body": "Hi John,\n\nThanks for your request. For ELVIS-DUCK-20CM (20cm), we currently have 12 units available in stock and can deliver those to Paris by Jan 10, 2026.\n\nTo cover the remaining 12 units, you have two good options:\n1) Substitute: ship 12 Elvis + 12 Marilyn (20cm) together so everything arrives by Jan 10.\n2) Split shipment: ship 12 Elvis to arrive by Jan 10, then ship the remaining 12 Elvis with expected arrival by Jan 12.\n\nIf you tell me which option you prefer (and confirm the delivery address), I’ll send a formal quote and proceed.\n\nBest regards,\nSales Team\nRubber Duck Works"
+  "body": "Hi John,\n\nThanks for your request. For ELVIS-DUCK-20CM (20cm), we currently have 12 units available in stock and can deliver those to Paris by Jan 10, 2026.\n\nTo cover the remaining 12 units, you have two options:\n1) Stock mix now: ship 12 Elvis + 12 Marilyn (20cm) together so everything arrives by Jan 10.\n2) All Elvis later: ship 12 Elvis to arrive by Jan 10, then ship the remaining 12 Elvis with expected arrival around Jan 21 (production lead is about 30 days).\n\nIf you tell me which option you prefer (and confirm the delivery address), I’ll send a formal quote and proceed.\n\nBest regards,\nSales Team\nRubber Duck Works"
 }
 ```
 
 **Agent → User (what the Sales Agent shows as the output)**
 
 * Availability checked (12 Elvis available now)
-* Proposed options (substitution vs split shipment)
+* Proposed options (stock mix now vs all-Elvis later)
 * **Draft reply ready to send**
 
-**Agent → MCP tool call 10 (pseudo-send)**
+**Agent → MCP tool call 9 (pseudo-send)**
 `sales_mark_email_sent({ draft_id: "DRAFT-901", sent_at: "2025-12-20T10:18:00+01:00" })`
 
 **MCP → Agent response**
@@ -448,13 +442,7 @@ John
 
 ### A2) Agent creates SalesOrder, reserves stock, creates Shipment, prices order, confirms
 
-**Agent → MCP tool call 11**
-`crm_log_interaction({ customer_id: "CUST-0102", channel: "email", direction: "inbound", subject: "Accept substitution 12 Elvis + 12 Marilyn", body: "<full pasted email>", interaction_at: "2025-12-20T10:25:00+01:00" })`
-
-**MCP → Agent response**
-`{ interaction_id: "INT-22063", status: "logged" }`
-
-**Agent → MCP tool call 12**
+**Agent → MCP tool call 10**
 `sales_create_sales_order({
   customer_id: "CUST-0102",
   requested_delivery_date: "2026-01-10",
@@ -479,7 +467,7 @@ John
 }
 ```
 
-**Agent → MCP tool call 13**
+**Agent → MCP tool call 11**
 `inventory_reserve_stock({
   reason: "sales_order",
   reference_id: "SO-1042",
@@ -492,7 +480,7 @@ John
 **MCP → Agent response**
 `{ status: "reserved", reservation_id: "RSV-5001" }`
 
-**Agent → MCP tool call 14**
+**Agent → MCP tool call 12**
 `sales_price_sales_order({ sales_order_id: "SO-1042", pricelist: "Retail EU 2026" })`
 
 **MCP → Agent response**
@@ -515,7 +503,7 @@ John
 }
 ```
 
-**Agent → MCP tool call 15**
+**Agent → MCP tool call 13**
 `logistics_create_shipment({
   ship_from: { "warehouse": "WH-LYON" },
   ship_to: { "line1": "14 Rue Example", "postal_code": "75011", "city": "Paris", "country": "FR" },
@@ -530,13 +518,13 @@ John
 **MCP → Agent response**
 `{ shipment_id: "SHIP-900", status: "planned", planned_departure: "2026-01-08", planned_arrival: "2026-01-10" }`
 
-**Agent → MCP tool call 16**
+**Agent → MCP tool call 14**
 `sales_link_shipment_to_sales_order({ sales_order_id: "SO-1042", shipment_id: "SHIP-900" })`
 
 **MCP → Agent response**
 `{ status: "linked" }`
 
-**Agent → MCP tool call 17**
+**Agent → MCP tool call 15**
 `sales_draft_email({
   to: "john@duckfan-paris.example",
   subject: "Order confirmation SO-1042 — delivery by Jan 10",
@@ -558,7 +546,7 @@ John
 }
 ```
 
-**Agent → MCP tool call 18 (pseudo-send)**
+**Agent → MCP tool call 16 (pseudo-send)**
 `sales_mark_email_sent({ draft_id: "DRAFT-919", sent_at: "2025-12-20T10:29:00+01:00" })`
 
 **MCP → Agent response**
@@ -582,19 +570,13 @@ Sarah
 
 ### B1) Agent finds customer, looks up last orders, returns shipment + production statuses
 
-**Agent → MCP tool call 19**
+**Agent → MCP tool call 17**
 `crm_find_customers({ name: "Sarah Martin", email: "sarah@martin-retail.example" })`
 
 **MCP → Agent response**
 `{ customers: [ { "id": "CUST-0044", "name": "Sarah Martin", "email": "sarah@martin-retail.example" } ] }`
 
-**Agent → MCP tool call 20**
-`crm_log_interaction({ customer_id: "CUST-0044", channel: "email", direction: "inbound", subject: "Order status?", body: "<full pasted email>", interaction_at: "2025-12-20T11:02:00+01:00" })`
-
-**MCP → Agent response**
-`{ interaction_id: "INT-22090", status: "logged" }`
-
-**Agent → MCP tool call 21**
+**Agent → MCP tool call 18**
 `sales_search_sales_orders({ customer_id: "CUST-0044", limit: 2, sort: "most_recent" })`
 
 **MCP → Agent response**
@@ -620,7 +602,7 @@ Sarah
 }
 ```
 
-**Agent → MCP tool call 22**
+**Agent → MCP tool call 19**
 `production_get_production_order_status({ production_order_id: "MO-555" })`
 
 **MCP → Agent response**
@@ -632,12 +614,12 @@ Sarah
   "qty_planned": 50,
   "qty_completed": 20,
   "current_operation": "Paint Elvis Hair",
-  "eta_finish": "2025-12-22",
-  "eta_ship": "2025-12-23"
+  "eta_finish": "2026-01-19",
+  "eta_ship": "2026-01-20"
 }
 ```
 
-**Agent → MCP tool call 23**
+**Agent → MCP tool call 20**
 `logistics_get_shipment_status({ shipment_id: "SHIP-870" })`
 
 **MCP → Agent response**
@@ -652,7 +634,7 @@ Sarah
 }
 ```
 
-**Agent → MCP tool call 24**
+**Agent → MCP tool call 21**
 `sales_draft_email({
   to: "sarah@martin-retail.example",
   subject: "Re: Order status update",
@@ -660,7 +642,7 @@ Sarah
     customer_id: "CUST-0044",
     orders: [
       { "sales_order_id": "SO-1030", "shipment_id": "SHIP-870", "shipment_status": "in_transit", "arrival": "2025-12-22" },
-      { "sales_order_id": "SO-1037", "production_order_id": "MO-555", "prod_status": "painting", "eta_ship": "2025-12-23" }
+      { "sales_order_id": "SO-1037", "production_order_id": "MO-555", "prod_status": "painting", "eta_ship": "2026-01-20" }
     ]
   }
 })`
@@ -670,11 +652,11 @@ Sarah
 ```json
 {
   "draft_id": "DRAFT-940",
-  "body": "Hi Sarah,\n\nHere’s the latest on your two most recent orders:\n\n1) SO-1030 (10 × Classic Duck 10cm): shipped on Dec 19, 2025 and currently in transit (SHIP-870). Expected delivery: Dec 22, 2025. Tracking: CARRIER-XZ-112233.\n\n2) SO-1037 (50 × Elvis Duck 20cm): currently in production (MO-555). The batch is in the painting step and we expect it to ship on Dec 23, 2025.\n\nIf you need partial delivery on SO-1037, tell me and we can ship completed quantities earlier.\n\nBest regards,\nSales Team\nRubber Duck Works"
+  "body": "Hi Sarah,\n\nHere’s the latest on your two most recent orders:\n\n1) SO-1030 (10 × Classic Duck 10cm): shipped on Dec 19, 2025 and currently in transit (SHIP-870). Expected delivery: Dec 22, 2025. Tracking: CARRIER-XZ-112233.\n\n2) SO-1037 (50 × Elvis Duck 20cm): currently in production (MO-555). The batch is in the painting step and we expect it to ship on Jan 20, 2026.\n\nIf you need partial delivery on SO-1037, tell me and we can ship completed quantities earlier.\n\nBest regards,\nSales Team\nRubber Duck Works"
 }
 ```
 
-**Agent → MCP tool call 25 (pseudo-send)**
+**Agent → MCP tool call 22 (pseudo-send)**
 `sales_mark_email_sent({ draft_id: "DRAFT-940", sent_at: "2025-12-20T11:06:00+01:00" })`
 
 **MCP → Agent response**
@@ -745,29 +727,7 @@ Used by:
 
 * `crm_find_customers`, `crm_create_customer`, `crm_get_customer_details`
 * sales orders
-* interactions
 * email drafting
-
----
-
-## interactions
-
-```sql
-CREATE TABLE interactions (
-    id TEXT PRIMARY KEY,
-    customer_id TEXT NOT NULL,
-    channel TEXT NOT NULL,        -- email / phone / meeting
-    direction TEXT NOT NULL,      -- inbound / outbound
-    subject TEXT,
-    body TEXT,
-    interaction_at TEXT
-);
-```
-
-Used by:
-
-* logging pasted emails
-* grounding replies in conversation history
 
 ---
 
@@ -1044,7 +1004,7 @@ All of those would add complexity without improving the demo.
 
 # Mental check: does this schema support the full demo?
 
-✔ Paste customer email → customer + interaction
+✔ Paste customer email → customer
 ✔ Check stock → stock + reservations
 ✔ Propose substitution → items + stock
 ✔ Create sales order → sales_orders + lines

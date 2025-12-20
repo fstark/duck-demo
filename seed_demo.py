@@ -19,6 +19,7 @@ def seed():
             [
                 ("CUST-0044", "Sarah Martin", None, "sarah@martin-retail.example", "Paris"),
                 ("CUST-0001", "Rubber Duck Works", None, "contact@rubberduck.example", "Lyon"),
+                ("CUST-0102", "John Doe", "DuckFan Paris", "john@duckfan-paris.example", "Paris"),
             ],
         )
 
@@ -137,8 +138,8 @@ def seed():
                 50,
                 20,
                 "Paint Elvis Hair",
-                "2025-12-22",
-                "2025-12-23",
+                "2026-01-19",
+                "2026-01-20",
             ),
         )
 
