@@ -5,6 +5,7 @@ import json
 import functools
 import logging
 import re
+from urllib.parse import quote
 from contextlib import contextmanager
 from datetime import datetime, timedelta
 from typing import Any, Dict, Iterator, List, Optional
@@ -55,6 +56,12 @@ SUBSTITUTION_PRICE_SLACK_PCT = 0.15  # within ±15% of requested SKU
 TRANSIT_DAYS_DEFAULT = 2  # simple default transit lead
 PRODUCTION_LEAD_DAYS_DEFAULT = 30  # demo tweak: long lead makes rush impossible
 PRODUCTION_LEAD_DAYS_BY_TYPE = {"finished_good": 30}
+UI_BASE = os.getenv("UI_BASE", "http://127.0.0.1:5173")
+
+
+def ui_href(page: str, identifier: str) -> str:
+    safe_id = quote(str(identifier), safe="")
+    return f"{UI_BASE}#/{page}/{safe_id}"
 
 
 # HTTP-based MCP server using FastMCP with stateless JSON responses.
@@ -208,6 +215,8 @@ def inventory_list_items(in_stock_only: bool = False, limit: int = 50) -> Dict[s
             for row in rows:
                 summary = stock_summary(conn, row["id"])
                 row["available_total"] = summary["available_total"]
+        for row in rows:
+            row["ui_url"] = ui_href("items", row["sku"])
         return {"items": rows}
 
 
@@ -279,8 +288,13 @@ def load_sales_order_detail(conn: sqlite3.Connection, sales_order_id: str) -> Op
         ).fetchall()
     )
 
+    order_dict = dict(order)
+    order_dict["ui_url"] = ui_href("orders", sales_order_id)
+    for shipment in shipments:
+        shipment["ui_url"] = ui_href("shipments", shipment["id"])
+
     return {
-        "sales_order": dict(order),
+        "sales_order": order_dict,
         "lines": lines,
         "pricing": pricing,
         "shipments": shipments,
@@ -458,6 +472,8 @@ def find_customers(
 
     with db_conn() as conn:
         rows = dict_rows(conn.execute(sql, params))
+        for row in rows:
+            row["ui_url"] = ui_href("customers", row["id"])
         return {"customers": rows}
 
 
@@ -473,7 +489,9 @@ def create_customer(name: str, company: Optional[str] = None, email: Optional[st
         )
         conn.commit()
         row = conn.execute("SELECT * FROM customers WHERE id = ?", (customer_id,)).fetchone()
-        return {"customer_id": customer_id, "customer": dict(row)}
+        row_dict = dict(row)
+        row_dict["ui_url"] = ui_href("customers", customer_id)
+        return {"customer_id": customer_id, "customer": row_dict}
 
 
 @mcp.tool(name="crm_get_customer_details")
@@ -486,6 +504,7 @@ def get_customer_details(customer_id: str, include_orders: bool = True) -> Dict[
             raise ValueError("Customer not found")
 
         result: Dict[str, Any] = {"customer": dict(cust)}
+        result["customer"]["ui_url"] = ui_href("customers", customer_id)
 
         if include_orders:
             order_rows = conn.execute(
@@ -504,11 +523,14 @@ def get_customer_details(customer_id: str, include_orders: bool = True) -> Dict[
                     "SELECT s.id, s.status, s.planned_departure, s.planned_arrival, s.tracking_ref FROM sales_order_shipments sos JOIN shipments s ON s.id = sos.shipment_id WHERE sos.sales_order_id = ? ORDER BY s.planned_departure DESC LIMIT 1",
                     (order["id"],),
                 ).fetchone()
+                ship_dict = dict(ship) if ship else None
                 pending = True
-                if ship and ship["status"] and ship["status"].lower() == "delivered":
+                if ship_dict and ship_dict.get("status") and ship_dict["status"].lower() == "delivered":
                     pending = False
                 elif order["status"] and order["status"].lower() == "draft":
                     pending = True
+                if ship_dict:
+                    ship_dict["ui_url"] = ui_href("shipments", ship_dict["id"])
                 orders.append(
                     {
                         "sales_order_id": order["id"],
@@ -516,7 +538,8 @@ def get_customer_details(customer_id: str, include_orders: bool = True) -> Dict[
                         "requested_delivery_date": order["requested_delivery_date"],
                         "pending": pending,
                         "lines": lines,
-                        "shipment": dict(ship) if ship else None,
+                        "shipment": ship_dict,
+                        "ui_url": ui_href("orders", order["id"]),
                     }
                 )
             result["orders"] = orders
@@ -556,7 +579,9 @@ def search_items(words: List[str], limit: int = 10, min_score: int = 1) -> Dict[
             matched = [w for w in normalized if any(tok.startswith(w) for tok in token_set)]
             score = len(matched)
             if score >= min_score:
-                scored.append({"item": dict(row), "score": score, "matched_words": matched})
+                item_dict = dict(row)
+                item_dict["ui_url"] = ui_href("items", item_dict["sku"])
+                scored.append({"item": item_dict, "score": score, "matched_words": matched})
 
         scored.sort(key=lambda entry: (-entry["score"], entry["item"]["sku"]))
         return {"items": scored[:limit], "query": normalized}
@@ -574,7 +599,12 @@ def get_stock_summary(item_id: Optional[str] = None, sku: Optional[str] = None) 
             if not row:
                 raise ValueError("Item not found")
             item_id = row["id"]
-        return stock_summary(conn, item_id)  # type: ignore[arg-type]
+        elif item_id and not sku:
+            sku_row = conn.execute("SELECT sku FROM items WHERE id = ?", (item_id,)).fetchone()
+            sku = sku_row["sku"] if sku_row else str(item_id)
+        summary = stock_summary(conn, item_id)  # type: ignore[arg-type]
+        summary["ui_url"] = ui_href("items", sku or item_id)
+        return summary
 
 
 @mcp.tool(name="sales_quote_options")
@@ -631,7 +661,7 @@ def create_sales_order(
             )
             line_results.append({"line_id": line_id, "sku": line["sku"], "qty": float(line["qty"])} )
         conn.commit()
-        return {"sales_order_id": so_id, "status": "draft", "lines": line_results}
+        return {"sales_order_id": so_id, "status": "draft", "lines": line_results, "ui_url": ui_href("orders", so_id)}
 
 
 @mcp.tool(name="sales_price_sales_order")
@@ -710,6 +740,7 @@ def create_shipment(
             "status": "planned",
             "planned_departure": planned_departure,
             "planned_arrival": planned_arrival,
+            "ui_url": ui_href("shipments", shipment_id),
         }
 
 
@@ -834,6 +865,7 @@ def search_sales_orders(customer_id: Optional[str] = None, limit: int = 5, sort:
                     "summary": summary,
                     "fulfillment_state": fulfillment_state,
                     "lines": lines,
+                    "ui_url": ui_href("orders", row["id"]),
                 }
             )
         return {"sales_orders": sales_orders}
@@ -847,7 +879,9 @@ def get_shipment_status(shipment_id: str) -> Dict[str, Any]:
         row = conn.execute("SELECT * FROM shipments WHERE id = ?", (shipment_id,)).fetchone()
         if not row:
             raise ValueError("Shipment not found")
-        return dict(row)
+        data = dict(row)
+        data["ui_url"] = ui_href("shipments", shipment_id)
+        return data
 
 
 @mcp.tool(name="production_get_production_order_status")
@@ -954,6 +988,8 @@ async def api_shipments(request):
         return _cors_preflight(["GET"])
     with db_conn() as conn:
         rows = dict_rows(conn.execute("SELECT * FROM shipments ORDER BY planned_departure DESC").fetchall())
+        for row in rows:
+            row["ui_url"] = ui_href("shipments", row["id"])
     return _json({"shipments": rows})
 
 
