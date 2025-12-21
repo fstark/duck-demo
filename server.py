@@ -934,9 +934,15 @@ def find_production_orders_by_date_range(
     limit: int = 100
 ) -> List[Dict[str, Any]]:
     """
-    Find production orders that have eta_finish between start_date and end_date (inclusive).
-    Dates should be in YYYY-MM-DD format.
-    Returns a list of production orders with their details including item information.
+    Purpose: Find production orders that have estimated finish dates within a specified date range (inclusive). Useful for tracking planned production activities and volumes.
+    Use Cases:
+        Determine the most produced items within a specific timeframe.
+        Analyze production scheduling and capacity utilization.
+        Identify trends in production focus or priorities.
+    Parameters:
+        Start Date: Beginning of the date range in YYYY-MM-DD format.
+        End Date: End of the date range in YYYY-MM-DD format.
+        Limit: Maximum number of production order records to return.
     """
     with db_conn() as conn:
         query = """

@@ -42,4 +42,4 @@ can you give the dates of the shipment too?
 
 what ducks are going to be produced in january 2026?
 
-what is the most popular duck for february 2026?
+what is the most produced duck in february 2026?
