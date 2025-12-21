@@ -17,11 +17,13 @@ import { ShipmentsListPage } from './pages/ShipmentsListPage'
 import { ShipmentDetailPage } from './pages/ShipmentDetailPage'
 import { ProductionOrdersListPage } from './pages/ProductionOrdersListPage'
 import { ProductionOrderDetailPage } from './pages/ProductionOrderDetailPage'
+import { StockListPage } from './pages/StockListPage'
+import { StockDetailPage } from './pages/StockDetailPage'
 
 type SortDir = 'asc' | 'desc'
 type SortState<T> = { key: keyof T; dir: SortDir }
 
-type ViewPage = 'home' | 'customers' | 'items' | 'orders' | 'shipments' | 'production'
+type ViewPage = 'home' | 'customers' | 'items' | 'stock' | 'orders' | 'shipments' | 'production'
 type ViewState = { page: ViewPage; id?: string }
 
 function SectionHeading({ id, title }: { id: string; title: string }) {
@@ -38,7 +40,7 @@ function parseHash(): ViewState {
   const parts = hash.split('/').filter(Boolean)
   const page = (parts[0] as ViewPage) || 'home'
   const id = parts[1] ? decodeURIComponent(parts.slice(1).join('/')) : undefined
-  const allowed: ViewPage[] = ['home', 'customers', 'items', 'orders', 'shipments', 'production']
+  const allowed: ViewPage[] = ['home', 'customers', 'items', 'stock', 'orders', 'shipments', 'production']
   return { page: allowed.includes(page) ? page : 'home', id }
 }
 
@@ -77,6 +79,7 @@ function nextSort<T>(prev: SortState<T> | null, key: keyof T, defaultDir: SortDi
 function AppContent() {
   const [customersCount, setCustomersCount] = useState(0)
   const [itemsCount, setItemsCount] = useState(0)
+  const [stockCount, setStockCount] = useState(0)
   const [ordersCount, setOrdersCount] = useState(0)
   const [shipmentsCount, setShipmentsCount] = useState(0)
   const [productionCount, setProductionCount] = useState(0)
@@ -93,6 +96,7 @@ function AppContent() {
   useEffect(() => {
     api.customers().then((res) => setCustomersCount(res.customers?.length || 0)).catch(handleApiError)
     api.items(false).then((res) => setItemsCount(res.items?.length || 0)).catch(handleApiError)
+    api.stockList().then((res) => setStockCount(res.stock?.length || 0)).catch(handleApiError)
     api.salesOrders().then((res) => setOrdersCount(res.sales_orders?.length || 0)).catch(handleApiError)
     api.shipments().then((res) => setShipmentsCount(res.shipments?.length || 0)).catch(handleApiError)
     api.productionOrders().then((res) => setProductionCount(res.production_orders?.length || 0)).catch(handleApiError)
@@ -111,6 +115,7 @@ function AppContent() {
           { page: 'home', label: 'Overview' },
           { page: 'customers', label: 'Customers' },
           { page: 'items', label: 'Items' },
+          { page: 'stock', label: 'Stock' },
           { page: 'orders', label: 'Sales Orders' },
           { page: 'shipments', label: 'Shipments' },
           { page: 'production', label: 'Production' },
@@ -166,6 +171,13 @@ function AppContent() {
                   View items
                 </button>
               </Card>
+              <Card title="Stock">
+                <div className="text-2xl font-semibold text-slate-800">{stockCount}</div>
+                <div className="text-sm text-slate-600 mb-2">stock records</div>
+                <button className="text-brand-600 hover:underline text-sm" onClick={() => setHash('stock')} type="button">
+                  View stock
+                </button>
+              </Card>
               <Card title="Sales orders">
                 <div className="text-2xl font-semibold text-slate-800">{ordersCount}</div>
                 <div className="text-sm text-slate-600 mb-2">orders loaded</div>
@@ -196,6 +208,9 @@ function AppContent() {
 
         {view.page === 'items' && !view.id && <ItemsListPage />}
         {view.page === 'items' && view.id && <ItemDetailPage sku={view.id} />}
+
+        {view.page === 'stock' && !view.id && <StockListPage />}
+        {view.page === 'stock' && view.id && <StockDetailPage stockId={view.id} />}
 
         {view.page === 'orders' && !view.id && <SalesOrdersListPage />}
         {view.page === 'orders' && view.id && <SalesOrderDetailPage orderId={view.id} />}

@@ -23,6 +23,19 @@ export type StockSummary = {
   by_location: Array<{ warehouse: string; location: string; on_hand: number; reserved: number; available: number }>
 }
 
+export type Stock = {
+  id: string
+  item_id: string
+  item_sku: string
+  item_name: string
+  item_type: string
+  warehouse: string
+  location: string
+  on_hand: number
+  reserved: number
+  available: number
+}
+
 export type SalesOrder = {
   sales_order_id: string
   customer_id?: string
