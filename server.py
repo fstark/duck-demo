@@ -565,9 +565,17 @@ def get_item(sku: str) -> Dict[str, Any]:
 @mcp.tool(name="catalog_search_items")
 @log_tool("catalog_search_items")
 def search_items(words: List[str], limit: int = 10, min_score: int = 1) -> Dict[str, Any]:
-    """Fuzzy item search via prefix matches on SKU/name tokens, ordered best to worst."""
-    normalized = [w.strip().lower() for w in words if w and w.strip()]
-    if not normalized:
+    """Fuzzy item search via containment on SKU/name tokens, ordered best to worst (demo-friendly)."""
+    normalized_phrases = [w.strip().lower() for w in words if w and w.strip()]
+
+    def phrase_tokens(phrase: str) -> List[str]:
+        return [tok for tok in re.split(r"[^a-z0-9]+", phrase) if tok]
+
+    query_tokens: List[str] = []
+    for phrase in normalized_phrases:
+        query_tokens.extend(phrase_tokens(phrase))
+
+    if not query_tokens:
         raise ValueError("words required")
 
     def tokens_for(row: sqlite3.Row) -> List[str]:
@@ -579,7 +587,9 @@ def search_items(words: List[str], limit: int = 10, min_score: int = 1) -> Dict[
         scored: List[Dict[str, Any]] = []
         for row in rows:
             token_set = set(tokens_for(row))
-            matched = [w for w in normalized if any(tok.startswith(w) for tok in token_set)]
+            matched = [w for w in query_tokens if any(w in tok for tok in token_set)]
+
+            # Simple scoring: count matches; containment only (demo convenience).
             score = len(matched)
             if score >= min_score:
                 item_dict = dict(row)
@@ -587,7 +597,7 @@ def search_items(words: List[str], limit: int = 10, min_score: int = 1) -> Dict[
                 scored.append({"item": item_dict, "score": score, "matched_words": matched})
 
         scored.sort(key=lambda entry: (-entry["score"], entry["item"]["sku"]))
-        return {"items": scored[:limit], "query": normalized}
+        return {"items": scored[:limit], "query": query_tokens}
 
 
 @mcp.tool(name="inventory_get_stock_summary")
@@ -874,6 +884,17 @@ def search_sales_orders(customer_id: Optional[str] = None, limit: int = 5, sort:
         return {"sales_orders": sales_orders}
 
 
+@mcp.tool(name="sales_get_sales_order")
+@log_tool("sales_get_sales_order")
+def get_sales_order(sales_order_id: str) -> Dict[str, Any]:
+    """Return a sales order with lines, pricing, and linked shipments."""
+    with db_conn() as conn:
+        detail = load_sales_order_detail(conn, sales_order_id)
+    if not detail:
+        raise ValueError("Sales order not found")
+    return detail
+
+
 @mcp.tool(name="logistics_get_shipment_status")
 @log_tool("logistics_get_shipment_status")
 def get_shipment_status(shipment_id: str) -> Dict[str, Any]:
@@ -894,8 +915,37 @@ def get_production_order_status(production_order_id: str) -> Dict[str, Any]:
     with db_conn() as conn:
         row = conn.execute("SELECT * FROM production_orders WHERE id = ?", (production_order_id,)).fetchone()
         if not row:
-            raise ValueError("Production order not found")
+            return {"error": "Production order not found", "production_order_id": production_order_id}
         return dict(row)
+
+
+@mcp.tool(name="production_find_orders_by_date_range")
+@log_tool("production_find_orders_by_date_range")
+def find_production_orders_by_date_range(
+    start_date: str,
+    end_date: str,
+    limit: int = 100
+) -> List[Dict[str, Any]]:
+    """
+    Find production orders that have eta_finish between start_date and end_date (inclusive).
+    Dates should be in YYYY-MM-DD format.
+    Returns a list of production orders with their details including item information.
+    """
+    with db_conn() as conn:
+        query = """
+            SELECT 
+                po.*,
+                i.name as item_name,
+                i.sku as item_sku,
+                i.type as item_type
+            FROM production_orders po
+            LEFT JOIN items i ON po.item_id = i.id
+            WHERE po.eta_finish >= ? AND po.eta_finish <= ?
+            ORDER BY po.eta_finish
+            LIMIT ?
+        """
+        rows = conn.execute(query, (start_date, end_date, limit)).fetchall()
+        return [dict(row) for row in rows]
 
 
 # --- Minimal REST API for demo UI (read-only, no auth) ---

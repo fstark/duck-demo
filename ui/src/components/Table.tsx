@@ -1,6 +1,18 @@
-type Column<T> = { key: keyof T; label: string; render?: (row: T) => React.ReactNode }
+type Column<T> = { key: keyof T; label: string; render?: (row: T) => React.ReactNode; sortable?: boolean }
 
-export function Table<T extends { [key: string]: any }>({ rows, columns }: { rows: T[]; columns: Column<T>[] }) {
+export function Table<T extends { [key: string]: any }>({
+  rows,
+  columns,
+  sortKey,
+  sortDir,
+  onSort,
+}: {
+  rows: T[]
+  columns: Column<T>[]
+  sortKey?: keyof T
+  sortDir?: 'asc' | 'desc'
+  onSort?: (key: keyof T) => void
+}) {
   return (
     <div className="overflow-auto">
       <table className="min-w-full text-sm text-slate-800">
@@ -8,7 +20,18 @@ export function Table<T extends { [key: string]: any }>({ rows, columns }: { row
           <tr>
             {columns.map((col) => (
               <th key={String(col.key)} className="px-3 py-2 text-left font-semibold">
-                {col.label}
+                {col.sortable && onSort ? (
+                  <button
+                    className="flex items-center gap-1 hover:text-slate-700"
+                    onClick={() => onSort(col.key)}
+                    type="button"
+                  >
+                    <span>{col.label}</span>
+                    {sortKey === col.key ? <span>{sortDir === 'desc' ? '▼' : '▲'}</span> : null}
+                  </button>
+                ) : (
+                  col.label
+                )}
               </th>
             ))}
           </tr>
