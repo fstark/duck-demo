@@ -920,7 +920,17 @@ def get_shipment_status(shipment_id: str) -> Dict[str, Any]:
 def get_production_order_status(production_order_id: str) -> Dict[str, Any]:
     """Return status of a production order."""
     with db_conn() as conn:
-        row = conn.execute("SELECT * FROM production_orders WHERE id = ?", (production_order_id,)).fetchone()
+        query = """
+            SELECT 
+                po.*,
+                i.name as item_name,
+                i.sku as item_sku,
+                i.type as item_type
+            FROM production_orders po
+            LEFT JOIN items i ON po.item_id = i.id
+            WHERE po.id = ?
+        """
+        row = conn.execute(query, (production_order_id,)).fetchone()
         if not row:
             return {"error": "Production order not found", "production_order_id": production_order_id}
         return dict(row)
