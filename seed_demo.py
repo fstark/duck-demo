@@ -166,7 +166,6 @@ def seed():
             "INSERT INTO production_orders (id, item_id, qty_planned, qty_completed, current_operation, eta_finish, eta_ship) VALUES (?, ?, ?, ?, ?, ?, ?)",
             [
                 ("MO-555", "ITEM-ELVIS-20", 50, 20, "Paint Elvis Hair", "2026-01-19", "2026-01-20"),
-                ("SO-1037", "ITEM-ELVIS-20", 50, 10, "Assemble and inspect", "2025-12-21", "2025-12-22"),
                 ("MO-1000", "ITEM-PIRATE-15", 287, 98, "Curing process", "2026-01-03", "2026-01-04"),
                 ("MO-1001", "ITEM-UNICORN-25", 156, 23, "Paint details", "2026-02-10", "2026-02-11"),
                 ("MO-1002", "ITEM-ROBOT-25", 392, 174, "Mold injection", "2026-01-24", "2026-01-25"),
