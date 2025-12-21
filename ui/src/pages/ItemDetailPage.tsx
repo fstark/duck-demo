@@ -164,38 +164,35 @@ export function ItemDetailPage({ sku }: ItemDetailPageProps) {
                     <div className="text-slate-600">
                         <span className="font-medium">Unit price:</span> {formatPrice(item.unit_price)}
                     </div>
-                    {stock ? (
-                        <div className="mt-4 space-y-2 border-t pt-3">
-                            <div className="font-medium">Stock Summary</div>
-                            <div className="flex gap-3 text-slate-600">
-                                <span>On hand: {stock.on_hand_total}</span>
-                                <span>Reserved: {stock.reserved_total}</span>
-                                <span>Available: {stock.available_total}</span>
-                            </div>
-                            <Table
-                                rows={stock.by_location as any}
-                                columns={[
-                                    { key: 'warehouse', label: 'Wh' },
-                                    { key: 'location', label: 'Loc' },
-                                    { key: 'on_hand', label: 'On hand' },
-                                    { key: 'reserved', label: 'Reserved' },
-                                    { key: 'available', label: 'Available' },
-                                ]}
-                                onRowClick={(row, index) => {
-                                    setListContext({
-                                        listType: 'stock',
-                                        items: stock.by_location.map(s => ({ id: s.id })) as any,
-                                        currentIndex: index,
-                                    })
-                                    setReferrer({ page: 'items', id: sku, label: item.name })
-                                    setHash('stock', row.id)
-                                }}
-                            />
-                        </div>
-                    ) : (
-                        <div className="text-slate-500 mt-4">Loading stock...</div>
-                    )}
                 </div>
+                {stock && stock.by_location.length > 0 && (
+                    <Card title="Stock Summary">
+                        <div className="flex gap-3 text-slate-600 text-sm mb-3">
+                            <span>On hand: {stock.on_hand_total}</span>
+                            <span>Reserved: {stock.reserved_total}</span>
+                            <span>Available: {stock.available_total}</span>
+                        </div>
+                        <Table
+                            rows={stock.by_location as any}
+                            columns={[
+                                { key: 'warehouse', label: 'Wh' },
+                                { key: 'location', label: 'Loc' },
+                                { key: 'on_hand', label: 'On hand' },
+                                { key: 'reserved', label: 'Reserved' },
+                                { key: 'available', label: 'Available' },
+                            ]}
+                            onRowClick={(row, index) => {
+                                setListContext({
+                                    listType: 'stock',
+                                    items: stock.by_location.map(s => ({ id: s.id })) as any,
+                                    currentIndex: index,
+                                })
+                                setReferrer({ page: 'items', id: sku, label: item.name })
+                                setHash('stock', row.id)
+                            }}
+                        />
+                    </Card>
+                )}
             </Card>
         </section>
     )
