@@ -48,7 +48,7 @@ export function Table<T extends { [key: string]: any }>({
             >
               {columns.map((col) => (
                 <td key={String(col.key)} className="px-3 py-2">
-                  {col.render ? col.render(row, idx) : String(row[col.key])}
+                  {col.render ? col.render(row, idx) : (row[col.key] != null && row[col.key] !== '' ? String(row[col.key]) : '—')}
                 </td>
               ))}
             </tr>

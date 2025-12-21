@@ -115,9 +115,24 @@ export function CustomersListPage() {
                             label: 'Name',
                             sortable: true,
                         },
-                        { key: 'company', label: 'Company', sortable: true },
-                        { key: 'email', label: 'Email', sortable: true },
-                        { key: 'city', label: 'City', sortable: true },
+                        { 
+                            key: 'company', 
+                            label: 'Company', 
+                            sortable: true,
+                            render: (row) => row.company || '—'
+                        },
+                        { 
+                            key: 'email', 
+                            label: 'Email', 
+                            sortable: true,
+                            render: (row) => row.email || '—'
+                        },
+                        { 
+                            key: 'city', 
+                            label: 'City', 
+                            sortable: true,
+                            render: (row) => row.city || '—'
+                        },
                     ]}
                 />
             </Card>
