@@ -6,6 +6,22 @@ export type Customer = {
   city?: string
 }
 
+export type CustomerDetail = Customer & {
+  sales_orders?: Array<{
+    sales_order_id: string
+    status: string
+    created_at?: string
+    requested_delivery_date?: string
+  }>
+  shipments?: Array<{
+    id: string
+    status: string
+    planned_departure?: string
+    planned_arrival?: string
+    sales_order_id?: string
+  }>
+}
+
 export type Item = {
   id: string
   sku: string
@@ -62,6 +78,13 @@ export type Shipment = {
   planned_arrival?: string
   tracking_ref?: string
   sales_order_id?: string
+  sales_orders?: Array<{
+    sales_order_id: string
+    customer_id: string
+    customer_name: string
+    customer_company?: string
+    status: string
+  }>
 }
 
 export type ProductionOrder = {

@@ -923,6 +923,23 @@ def get_shipment_status(shipment_id: str) -> Dict[str, Any]:
             raise ValueError("Shipment not found")
         data = dict(row)
         data["ui_url"] = ui_href("shipments", shipment_id)
+        
+        # Get associated sales orders
+        orders_query = """
+            SELECT 
+                so.id as sales_order_id,
+                so.customer_id,
+                c.name as customer_name,
+                c.company as customer_company,
+                so.status
+            FROM sales_order_shipments sos
+            JOIN sales_orders so ON sos.sales_order_id = so.id
+            LEFT JOIN customers c ON so.customer_id = c.id
+            WHERE sos.shipment_id = ?
+        """
+        orders = dict_rows(conn.execute(orders_query, (shipment_id,)).fetchall())
+        data["sales_orders"] = orders
+        
         return data
 
 
@@ -1006,6 +1023,52 @@ async def api_customers(request):
         limit=limit,
     )
     return _json(result)
+
+
+@mcp.custom_route("/api/customers/{customer_id}", methods=["GET", "OPTIONS"])
+async def api_customer_detail(request):
+    if request.method == "OPTIONS":
+        return _cors_preflight(["GET"])
+    customer_id = request.path_params.get("customer_id")
+    with db_conn() as conn:
+        # Get customer
+        customer_row = conn.execute("SELECT * FROM customers WHERE id = ?", (customer_id,)).fetchone()
+        if not customer_row:
+            return _json({"error": "Customer not found"}, status_code=404)
+        
+        customer = dict(customer_row)
+        customer["ui_url"] = ui_href("customers", customer_id)
+        
+        # Get sales orders
+        orders_query = """
+            SELECT id as sales_order_id, status, created_at, requested_delivery_date
+            FROM sales_orders
+            WHERE customer_id = ?
+            ORDER BY created_at DESC
+            LIMIT 50
+        """
+        orders = dict_rows(conn.execute(orders_query, (customer_id,)).fetchall())
+        customer["sales_orders"] = orders
+        
+        # Get shipments (via sales orders)
+        shipments_query = """
+            SELECT DISTINCT
+                s.id,
+                s.status,
+                s.planned_departure,
+                s.planned_arrival,
+                sos.sales_order_id
+            FROM shipments s
+            JOIN sales_order_shipments sos ON s.id = sos.shipment_id
+            JOIN sales_orders so ON sos.sales_order_id = so.id
+            WHERE so.customer_id = ?
+            ORDER BY s.planned_departure DESC
+            LIMIT 50
+        """
+        shipments = dict_rows(conn.execute(shipments_query, (customer_id,)).fetchall())
+        customer["shipments"] = shipments
+        
+        return _json(customer)
 
 
 @mcp.custom_route("/api/items", methods=["GET", "OPTIONS"])

@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react'
 import { Card } from '../components/Card'
-import { Customer } from '../types'
+import { Table } from '../components/Table'
+import { Badge } from '../components/Badge'
+import { CustomerDetail, Customer } from '../types'
 import { api } from '../api'
 import { useNavigation } from '../contexts/NavigationContext'
 
@@ -16,17 +18,16 @@ interface CustomerDetailPageProps {
 }
 
 export function CustomerDetailPage({ customerId }: CustomerDetailPageProps) {
-    const [customer, setCustomer] = useState<Customer | null>(null)
+    const [customer, setCustomer] = useState<CustomerDetail | null>(null)
     const [loading, setLoading] = useState(true)
     const { listContext, setListContext, referrer, setReferrer } = useNavigation()
     const [error, setError] = useState<string | null>(null)
 
     useEffect(() => {
         // Fetch customer details
-        api.customers()
-            .then((res) => {
-                const found = res.customers?.find((c) => c.id === customerId)
-                setCustomer(found || null)
+        api.customerDetail(customerId)
+            .then((customer) => {
+                setCustomer(customer)
                 setLoading(false)
             })
             .catch((err) => {
@@ -160,10 +161,41 @@ export function CustomerDetailPage({ customerId }: CustomerDetailPageProps) {
                     <div className="text-slate-600">
                         <span className="font-medium">City:</span> {customer.city || '—'}
                     </div>
-                    <div className="mt-4 text-xs text-slate-500 border-t pt-3">
-                        More customer details will appear here as we extend the MCP surface.
-                    </div>
                 </div>
+                {customer.sales_orders && customer.sales_orders.length > 0 && (
+                    <Card title="Sales Orders">
+                        <Table
+                            rows={customer.sales_orders as any}
+                            columns={[
+                                { key: 'sales_order_id', label: 'Order' },
+                                { key: 'status', label: 'Status', render: (row) => <Badge>{row.status}</Badge> },
+                                { key: 'created_at', label: 'Created' },
+                                { key: 'requested_delivery_date', label: 'Delivery Date' },
+                            ]}
+                            onRowClick={(row) => {
+                                setReferrer({ page: 'customers', id: customerId, label: customer.name })
+                                setHash('orders', row.sales_order_id)
+                            }}
+                        />
+                    </Card>
+                )}
+                {customer.shipments && customer.shipments.length > 0 && (
+                    <Card title="Shipments">
+                        <Table
+                            rows={customer.shipments as any}
+                            columns={[
+                                { key: 'id', label: 'Shipment' },
+                                { key: 'status', label: 'Status', render: (row) => <Badge>{row.status}</Badge> },
+                                { key: 'planned_departure', label: 'Departure' },
+                                { key: 'planned_arrival', label: 'Arrival' },
+                            ]}
+                            onRowClick={(row) => {
+                                setReferrer({ page: 'customers', id: customerId, label: customer.name })
+                                setHash('shipments', row.id)
+                            }}
+                        />
+                    </Card>
+                )}
             </Card>
         </section>
     )

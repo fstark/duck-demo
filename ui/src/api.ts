@@ -21,6 +21,7 @@ async function fetchJson<T>(path: string): Promise<T> {
 export const api = {
   customers: (q?: { name?: string }) =>
     fetchJson<{ customers: Customer[] }>(`/customers${q?.name ? `?name=${encodeURIComponent(q.name)}` : ''}`),
+  customerDetail: (id: string) => fetchJson<import('./types').CustomerDetail>(`/customers/${encodeURIComponent(id)}`),
   items: (inStockOnly = false) =>
     fetchJson<{ items: Item[] }>(`/items${inStockOnly ? '?in_stock_only=1' : ''}`),
   stock: (sku: string) => fetchJson<StockSummary>(`/items/${encodeURIComponent(sku)}/stock`),

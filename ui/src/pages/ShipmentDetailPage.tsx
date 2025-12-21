@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Card } from '../components/Card'
+import { Table } from '../components/Table'
 import { Badge } from '../components/Badge'
 import { Shipment } from '../types'
 import { api } from '../api'
@@ -20,7 +21,7 @@ export function ShipmentDetailPage({ shipmentId }: ShipmentDetailPageProps) {
     const [shipment, setShipment] = useState<Shipment | null>(null)
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
-    const { listContext, setListContext, referrer, clearListContext } = useNavigation()
+    const { listContext, setListContext, referrer, setReferrer, clearListContext } = useNavigation()
 
     useEffect(() => {
         api.shipment(shipmentId)
@@ -162,6 +163,23 @@ export function ShipmentDetailPage({ shipmentId }: ShipmentDetailPageProps) {
                         </div>
                     )}
                 </div>
+                {shipment.sales_orders && shipment.sales_orders.length > 0 && (
+                    <Card title="Sales Orders">
+                        <Table
+                            rows={shipment.sales_orders as any}
+                            columns={[
+                                { key: 'sales_order_id', label: 'Order' },
+                                { key: 'customer_name', label: 'Customer' },
+                                { key: 'customer_company', label: 'Company' },
+                                { key: 'status', label: 'Status', render: (row) => <Badge>{row.status}</Badge> },
+                            ]}
+                            onRowClick={(row) => {
+                                setReferrer({ page: 'shipments', id: shipmentId, label: `Shipment ${shipment.id}` })
+                                setHash('orders', row.sales_order_id)
+                            }}
+                        />
+                    </Card>
+                )}
             </Card>
         </section>
     )
