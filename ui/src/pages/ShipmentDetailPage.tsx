@@ -20,7 +20,7 @@ export function ShipmentDetailPage({ shipmentId }: ShipmentDetailPageProps) {
     const [shipment, setShipment] = useState<Shipment | null>(null)
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
-    const { listContext, setListContext } = useNavigation()
+    const { listContext, setListContext, referrer, clearListContext } = useNavigation()
 
     useEffect(() => {
         api.shipment(shipmentId)
@@ -79,10 +79,17 @@ export function ShipmentDetailPage({ shipmentId }: ShipmentDetailPageProps) {
                     <div className="text-sm text-red-600">{error || 'Shipment not found'}</div>
                     <button
                         className="mt-3 text-brand-600 hover:underline text-sm"
-                        onClick={() => setHash('shipments')}
+                        onClick={() => {
+                            if (referrer) {
+                                clearListContext()
+                                setHash(referrer.page, referrer.id)
+                            } else {
+                                setHash('shipments')
+                            }
+                        }}
                         type="button"
                     >
-                        ← Back to Shipments
+                        ← {referrer ? `Back to ${referrer.label}` : 'Back to Shipments'}
                     </button>
                 </Card>
             </section>
@@ -96,10 +103,17 @@ export function ShipmentDetailPage({ shipmentId }: ShipmentDetailPageProps) {
                 <div className="flex items-center justify-between mb-4">
                     <button
                         className="text-brand-600 hover:underline text-sm"
-                        onClick={() => setHash('shipments')}
+                        onClick={() => {
+                            if (referrer) {
+                                clearListContext()
+                                setHash(referrer.page, referrer.id)
+                            } else {
+                                setHash('shipments')
+                            }
+                        }}
                         type="button"
                     >
-                        ← Back to Shipments
+                        ← {referrer ? `Back to ${referrer.label}` : 'Back to Shipments'}
                     </button>
                     {listContext && (
                         <div className="flex items-center gap-2">

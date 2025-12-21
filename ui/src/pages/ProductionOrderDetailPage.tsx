@@ -28,7 +28,7 @@ export function ProductionOrderDetailPage({ productionOrderId }: ProductionOrder
     const [productionOrder, setProductionOrder] = useState<ProductionOrder | null>(null)
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
-    const { listContext, setListContext } = useNavigation()
+    const { listContext, setListContext, referrer, clearListContext } = useNavigation()
 
     useEffect(() => {
         api
@@ -98,11 +98,18 @@ export function ProductionOrderDetailPage({ productionOrderId }: ProductionOrder
             <div className="flex items-center justify-between mb-4">
                 <SectionHeading id="production" title="Production Order" />
                 <button
-                    onClick={() => setHash('production')}
+                    onClick={() => {
+                        if (referrer) {
+                            clearListContext()
+                            setHash(referrer.page, referrer.id)
+                        } else {
+                            setHash('production')
+                        }
+                    }}
                     className="text-sm text-brand-600 hover:underline"
                     type="button"
                 >
-                    ← Back to list
+                    ← {referrer ? `Back to ${referrer.label}` : 'Back to Production Orders'}
                 </button>
             </div>
             <Card>

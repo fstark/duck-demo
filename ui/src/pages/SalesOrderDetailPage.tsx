@@ -22,7 +22,7 @@ export function SalesOrderDetailPage({ orderId }: SalesOrderDetailPageProps) {
     const [order, setOrder] = useState<SalesOrderDetail | null>(null)
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
-    const { listContext, setListContext, setReferrer } = useNavigation()
+    const { listContext, setListContext, setReferrer, referrer, clearListContext } = useNavigation()
 
     useEffect(() => {
         api.salesOrder(orderId)
@@ -81,10 +81,17 @@ export function SalesOrderDetailPage({ orderId }: SalesOrderDetailPageProps) {
                     <div className="text-sm text-red-600">{error || 'Order not found'}</div>
                     <button
                         className="mt-3 text-brand-600 hover:underline text-sm"
-                        onClick={() => setHash('orders')}
+                        onClick={() => {
+                            if (referrer) {
+                                clearListContext()
+                                setHash(referrer.page, referrer.id)
+                            } else {
+                                setHash('orders')
+                            }
+                        }}
                         type="button"
                     >
-                        ← Back to Sales Orders
+                        ← {referrer ? `Back to ${referrer.label}` : 'Back to Sales Orders'}
                     </button>
                 </Card>
             </section>
@@ -98,10 +105,17 @@ export function SalesOrderDetailPage({ orderId }: SalesOrderDetailPageProps) {
                 <div className="flex items-center justify-between mb-4">
                     <button
                         className="text-brand-600 hover:underline text-sm"
-                        onClick={() => setHash('orders')}
+                        onClick={() => {
+                            if (referrer) {
+                                clearListContext()
+                                setHash(referrer.page, referrer.id)
+                            } else {
+                                setHash('orders')
+                            }
+                        }}
                         type="button"
                     >
-                        ← Back to Sales Orders
+                        ← {referrer ? `Back to ${referrer.label}` : 'Back to Sales Orders'}
                     </button>
                     {listContext && (
                         <div className="flex items-center gap-2">
@@ -154,7 +168,29 @@ export function SalesOrderDetailPage({ orderId }: SalesOrderDetailPageProps) {
                     </Card>
                     <div className="grid grid-cols-2 gap-3">
                         <Card title="Lines">
-                            <Table rows={order.lines as any} columns={[{ key: 'sku', label: 'SKU' }, { key: 'qty', label: 'Qty' }]} />
+                            <Table 
+                                rows={order.lines as any} 
+                                columns={[
+                                    { 
+                                        key: 'sku', 
+                                        label: 'SKU',
+                                        render: (row) => (
+                                            <button
+                                                className="text-brand-600 hover:underline text-left"
+                                                onClick={(e) => {
+                                                    e.stopPropagation()
+                                                    setReferrer({ page: 'orders', id: orderId, label: `Order ${order.sales_order.id}` })
+                                                    setHash('items', row.sku)
+                                                }}
+                                                type="button"
+                                            >
+                                                {row.sku}
+                                            </button>
+                                        )
+                                    }, 
+                                    { key: 'qty', label: 'Qty' }
+                                ]} 
+                            />
                         </Card>
                         <Card title="Pricing">
                             <div>{formatPrice(order.pricing.total, order.pricing.currency)}</div>
