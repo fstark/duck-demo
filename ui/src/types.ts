@@ -48,6 +48,19 @@ export type Shipment = {
   sales_order_id?: string
 }
 
+export type ProductionOrder = {
+  id: string
+  item_id: string
+  item_name?: string
+  item_sku?: string
+  item_type?: string
+  qty_planned: number
+  qty_completed: number
+  current_operation?: string
+  eta_finish?: string
+  eta_ship?: string
+}
+
 export type QuoteOption = {
   option_id: string
   summary: string

@@ -271,6 +271,12 @@ def load_sales_order_detail(conn: sqlite3.Connection, sales_order_id: str) -> Op
     if not order:
         return None
 
+    # Fetch customer information
+    customer = conn.execute("SELECT * FROM customers WHERE id = ?", (order["customer_id"],)).fetchone()
+    customer_dict = dict(customer) if customer else None
+    if customer_dict:
+        customer_dict["ui_url"] = ui_href("customers", customer_dict["id"])
+
     lines = dict_rows(
         conn.execute(
             "SELECT i.sku, sol.qty FROM sales_order_lines sol JOIN items i ON sol.item_id = i.id WHERE sol.sales_order_id = ?",
@@ -298,6 +304,7 @@ def load_sales_order_detail(conn: sqlite3.Connection, sales_order_id: str) -> Op
 
     return {
         "sales_order": order_dict,
+        "customer": customer_dict,
         "lines": lines,
         "pricing": pricing,
         "shipments": shipments,
@@ -1044,6 +1051,30 @@ async def api_shipments(request):
         for row in rows:
             row["ui_url"] = ui_href("shipments", row["id"])
     return _json({"shipments": rows})
+
+
+@mcp.custom_route("/api/production-orders", methods=["GET", "OPTIONS"])
+async def api_production_orders(request):
+    if request.method == "OPTIONS":
+        return _cors_preflight(["GET"])
+    qp = request.query_params
+    limit = int(qp.get("limit", 100))
+    with db_conn() as conn:
+        query = """
+            SELECT 
+                po.*,
+                i.name as item_name,
+                i.sku as item_sku,
+                i.type as item_type
+            FROM production_orders po
+            LEFT JOIN items i ON po.item_id = i.id
+            ORDER BY po.eta_finish DESC
+            LIMIT ?
+        """
+        rows = dict_rows(conn.execute(query, (limit,)).fetchall())
+        for row in rows:
+            row["ui_url"] = ui_href("production", row["id"])
+    return _json({"production_orders": rows})
 
 
 @mcp.custom_route("/api/production-orders/{production_id}", methods=["GET", "OPTIONS"])

@@ -5,12 +5,12 @@ import { Card } from './components/Card'
 import { Table } from './components/Table'
 import { Badge } from './components/Badge'
 import { api } from './api'
-import { Customer, Item, SalesOrder, SalesOrderDetail, StockSummary, Shipment, QuoteOption } from './types'
+import { Customer, Item, SalesOrder, SalesOrderDetail, StockSummary, Shipment, QuoteOption, ProductionOrder } from './types'
 
 type SortDir = 'asc' | 'desc'
 type SortState<T> = { key: keyof T; dir: SortDir }
 
-type ViewPage = 'home' | 'customers' | 'items' | 'orders' | 'shipments' | 'quotes'
+type ViewPage = 'home' | 'customers' | 'items' | 'orders' | 'shipments' | 'quotes' | 'production'
 type ViewState = { page: ViewPage; id?: string }
 
 function SectionHeading({ id, title }: { id: string; title: string }) {
@@ -27,7 +27,7 @@ function parseHash(): ViewState {
   const parts = hash.split('/').filter(Boolean)
   const page = (parts[0] as ViewPage) || 'home'
   const id = parts[1] ? decodeURIComponent(parts.slice(1).join('/')) : undefined
-  const allowed: ViewPage[] = ['home', 'customers', 'items', 'orders', 'shipments', 'quotes']
+  const allowed: ViewPage[] = ['home', 'customers', 'items', 'orders', 'shipments', 'quotes', 'production']
   return { page: allowed.includes(page) ? page : 'home', id }
 }
 
@@ -72,6 +72,8 @@ export default function App() {
   const [shipments, setShipments] = useState<Shipment[]>([])
   const [selectedShipment, setSelectedShipment] = useState<Shipment | null>(null)
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null)
+  const [productionOrders, setProductionOrders] = useState<ProductionOrder[]>([])
+  const [selectedProductionOrder, setSelectedProductionOrder] = useState<ProductionOrder | null>(null)
   const [quoteOptions, setQuoteOptions] = useState<QuoteOption[] | null>(null)
   const [quoteSku, setQuoteSku] = useState('ELVIS-DUCK-20CM')
   const [quoteQty, setQuoteQty] = useState(24)
@@ -81,6 +83,7 @@ export default function App() {
   const [itemSort, setItemSort] = useState<SortState<Item> | null>({ key: 'type', dir: 'asc' })
   const [orderSort, setOrderSort] = useState<SortState<SalesOrder> | null>(null)
   const [shipmentSort, setShipmentSort] = useState<SortState<Shipment> | null>(null)
+  const [productionSort, setProductionSort] = useState<SortState<ProductionOrder> | null>(null)
 
   const handleApiError = (err: unknown) => {
     console.error(err)
@@ -89,9 +92,10 @@ export default function App() {
 
   useEffect(() => {
     api.customers().then((res) => setCustomers(res.customers || [])).catch(handleApiError)
-    api.items(true).then((res) => setItems(res.items || [])).catch(handleApiError)
+    api.items(false).then((res) => setItems(res.items || [])).catch(handleApiError)
     api.salesOrders().then((res) => setOrders(res.sales_orders || [])).catch(handleApiError)
     api.shipments().then((res) => setShipments(res.shipments || [])).catch(handleApiError)
+    api.productionOrders().then((res) => setProductionOrders(res.production_orders || [])).catch(handleApiError)
   }, [])
 
   useEffect(() => {
@@ -110,6 +114,10 @@ export default function App() {
 
   const loadShipment = (id: string) => {
     api.shipment(id).then((res) => setSelectedShipment(res as Shipment)).catch(handleApiError)
+  }
+
+  const loadProductionOrder = (id: string) => {
+    api.productionOrder(id).then((res) => setSelectedProductionOrder(res as ProductionOrder)).catch(handleApiError)
   }
 
   const loadQuotes = () => {
@@ -143,6 +151,13 @@ export default function App() {
         setSelectedCustomer(null)
       }
     }
+    if (view.page === 'production') {
+      if (view.id) {
+        loadProductionOrder(view.id)
+      } else {
+        setSelectedProductionOrder(null)
+      }
+    }
     if (view.page !== 'items') {
       setStock(null)
     }
@@ -152,6 +167,7 @@ export default function App() {
   const sortedItems = sortRows(items, itemSort)
   const sortedOrders = sortRows(orders, orderSort)
   const sortedShipments = sortRows(shipments, shipmentSort)
+  const sortedProductionOrders = sortRows(productionOrders, productionSort)
 
   const Nav = () => (
     <div className="flex gap-3 text-sm text-slate-700">
@@ -162,6 +178,7 @@ export default function App() {
           { page: 'items', label: 'Items' },
           { page: 'orders', label: 'Sales Orders' },
           { page: 'shipments', label: 'Shipments' },
+          { page: 'production', label: 'Production' },
           { page: 'quotes', label: 'Quotes' },
         ] as Array<{ page: ViewPage; label: string }>
       ).map((link) => (
@@ -205,9 +222,9 @@ export default function App() {
                   View customers
                 </button>
               </Card>
-              <Card title="Items in stock">
+              <Card title="Items">
                 <div className="text-2xl font-semibold text-slate-800">{items.length}</div>
-                <div className="text-sm text-slate-600 mb-2">tracked SKUs</div>
+                <div className="text-sm text-slate-600 mb-2">total items</div>
                 <button className="text-brand-600 hover:underline text-sm" onClick={() => setHash('items')} type="button">
                   View items
                 </button>
@@ -224,6 +241,13 @@ export default function App() {
                 <div className="text-sm text-slate-600 mb-2">shipments loaded</div>
                 <button className="text-brand-600 hover:underline text-sm" onClick={() => setHash('shipments')} type="button">
                   View shipments
+                </button>
+              </Card>
+              <Card title="Production Orders">
+                <div className="text-2xl font-semibold text-slate-800">{productionOrders.length}</div>
+                <div className="text-sm text-slate-600 mb-2">production orders</div>
+                <button className="text-brand-600 hover:underline text-sm" onClick={() => setHash('production')} type="button">
+                  View production
                 </button>
               </Card>
               <Card title="Quotes">
@@ -286,7 +310,7 @@ export default function App() {
 
         {view.page === 'items' && (
           <section>
-            <SectionHeading id="items" title="Items (in stock)" />
+            <SectionHeading id="items" title="Items" />
             <Card>
               <Table
                 rows={sortedItems}
@@ -459,6 +483,59 @@ export default function App() {
                   <div>Depart: {selectedShipment.planned_departure}</div>
                   <div>Arrive: {selectedShipment.planned_arrival}</div>
                   {selectedShipment.tracking_ref ? <div>Tracking: {selectedShipment.tracking_ref}</div> : null}
+                </div>
+              ) : null}
+            </Card>
+          </section>
+        )}
+
+        {view.page === 'production' && (
+          <section>
+            <SectionHeading id="production" title="Production Orders" />
+            <Card>
+              <Table
+                rows={sortedProductionOrders}
+                sortKey={productionSort?.key}
+                sortDir={productionSort?.dir}
+                onSort={(key) => setProductionSort((prev) => nextSort(prev, key, key === 'eta_finish' ? 'desc' : 'asc'))}
+                columns={[
+                  {
+                    key: 'id',
+                    label: 'Order',
+                    sortable: true,
+                    render: (row) => (
+                      <button className="text-brand-600 hover:underline" onClick={() => setHash('production', row.id)} type="button">
+                        {row.id}
+                      </button>
+                    ),
+                  },
+                  {
+                    key: 'item_sku',
+                    label: 'Item',
+                    sortable: true,
+                    render: (row) => (
+                      <div>
+                        <div>{row.item_sku}</div>
+                        <div className="text-xs text-slate-500">{row.item_name}</div>
+                      </div>
+                    ),
+                  },
+                  { key: 'qty_planned', label: 'Planned', sortable: true },
+                  { key: 'qty_completed', label: 'Completed', sortable: true },
+                  { key: 'current_operation', label: 'Operation', sortable: true },
+                  { key: 'eta_finish', label: 'ETA Finish', sortable: true },
+                  { key: 'eta_ship', label: 'ETA Ship', sortable: true },
+                ]}
+              />
+              {view.id && !selectedProductionOrder ? <div className="mt-3 text-sm text-slate-500">Loading production order…</div> : null}
+              {selectedProductionOrder ? (
+                <div className="mt-3 text-sm text-slate-800 space-y-1">
+                  <div className="font-semibold">Production Order {selectedProductionOrder.id}</div>
+                  <div>Item: {selectedProductionOrder.item_sku} - {selectedProductionOrder.item_name}</div>
+                  <div>Planned: {selectedProductionOrder.qty_planned} | Completed: {selectedProductionOrder.qty_completed}</div>
+                  <div>Current Operation: {selectedProductionOrder.current_operation || '—'}</div>
+                  <div>ETA Finish: {selectedProductionOrder.eta_finish || '—'}</div>
+                  <div>ETA Ship: {selectedProductionOrder.eta_ship || '—'}</div>
                 </div>
               ) : null}
             </Card>

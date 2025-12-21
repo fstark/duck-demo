@@ -1,4 +1,4 @@
-import { Customer, Item, SalesOrder, SalesOrderDetail, Shipment, StockSummary, QuoteOption } from './types'
+import { Customer, Item, SalesOrder, SalesOrderDetail, Shipment, StockSummary, QuoteOption, ProductionOrder } from './types'
 
 const API_BASE = import.meta.env.VITE_API_BASE || '/api'
 
@@ -28,5 +28,7 @@ export const api = {
   salesOrder: (id: string) => fetchJson<SalesOrderDetail>(`/sales-orders/${encodeURIComponent(id)}`),
   shipment: (id: string) => fetchJson<Shipment>(`/shipments/${encodeURIComponent(id)}`),
   shipments: () => fetchJson<{ shipments: Shipment[] }>(`/shipments`),
+  productionOrders: () => fetchJson<{ production_orders: ProductionOrder[] }>(`/production-orders?limit=100`),
+  productionOrder: (id: string) => fetchJson<ProductionOrder>(`/production-orders/${encodeURIComponent(id)}`),
   quote: (sku: string, qty: number) => fetchJson<{ options: QuoteOption[] }>(`/quotes?sku=${encodeURIComponent(sku)}&qty=${qty}`),
 }
