@@ -127,7 +127,7 @@ def load_item(conn: sqlite3.Connection, sku: str) -> Optional[sqlite3.Row]:
 def stock_summary(conn: sqlite3.Connection, item_id: str) -> Dict[str, Any]:
     rows = dict_rows(
         conn.execute(
-            "SELECT warehouse, location, on_hand, reserved FROM stock WHERE item_id = ?",
+            "SELECT id, warehouse, location, on_hand, reserved FROM stock WHERE item_id = ?",
             (item_id,),
         )
     )

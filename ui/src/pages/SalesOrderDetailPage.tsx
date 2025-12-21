@@ -168,11 +168,11 @@ export function SalesOrderDetailPage({ orderId }: SalesOrderDetailPageProps) {
                     </Card>
                     <div className="grid grid-cols-2 gap-3">
                         <Card title="Lines">
-                            <Table 
-                                rows={order.lines as any} 
+                            <Table
+                                rows={order.lines as any}
                                 columns={[
-                                    { 
-                                        key: 'sku', 
+                                    {
+                                        key: 'sku',
                                         label: 'SKU',
                                         render: (row) => (
                                             <button
@@ -187,9 +187,9 @@ export function SalesOrderDetailPage({ orderId }: SalesOrderDetailPageProps) {
                                                 {row.sku}
                                             </button>
                                         )
-                                    }, 
+                                    },
                                     { key: 'qty', label: 'Qty' }
-                                ]} 
+                                ]}
                             />
                         </Card>
                         <Card title="Pricing">
@@ -206,6 +206,10 @@ export function SalesOrderDetailPage({ orderId }: SalesOrderDetailPageProps) {
                                     { key: 'planned_departure', label: 'Departure' },
                                     { key: 'planned_arrival', label: 'Arrival' },
                                 ]}
+                                onRowClick={(row) => {
+                                    setReferrer({ page: 'orders', id: orderId, label: `Order ${order.sales_order.id}` })
+                                    setHash('shipments', row.id)
+                                }}
                             />
                         ) : (
                             <div className="text-slate-500">No shipments linked.</div>

@@ -20,7 +20,7 @@ export type StockSummary = {
   on_hand_total: number
   reserved_total: number
   available_total: number
-  by_location: Array<{ warehouse: string; location: string; on_hand: number; reserved: number; available: number }>
+  by_location: Array<{ id: string; warehouse: string; location: string; on_hand: number; reserved: number; available: number }>
 }
 
 export type Stock = {

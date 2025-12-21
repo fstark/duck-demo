@@ -119,8 +119,8 @@ export function ShipmentDetailPage({ shipmentId }: ShipmentDetailPageProps) {
                         <div className="flex items-center gap-2">
                             <button
                                 className={`px-3 py-1 text-sm rounded ${hasPrevious
-                                        ? 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                                        : 'bg-slate-50 text-slate-300 cursor-not-allowed'
+                                    ? 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                                    : 'bg-slate-50 text-slate-300 cursor-not-allowed'
                                     }`}
                                 onClick={handlePrevious}
                                 disabled={!hasPrevious}
@@ -133,8 +133,8 @@ export function ShipmentDetailPage({ shipmentId }: ShipmentDetailPageProps) {
                             </span>
                             <button
                                 className={`px-3 py-1 text-sm rounded ${hasNext
-                                        ? 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                                        : 'bg-slate-50 text-slate-300 cursor-not-allowed'
+                                    ? 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                                    : 'bg-slate-50 text-slate-300 cursor-not-allowed'
                                     }`}
                                 onClick={handleNext}
                                 disabled={!hasNext}

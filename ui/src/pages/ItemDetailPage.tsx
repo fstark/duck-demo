@@ -23,7 +23,7 @@ export function ItemDetailPage({ sku }: ItemDetailPageProps) {
     const [stock, setStock] = useState<StockSummary | null>(null)
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
-    const { listContext, setListContext, referrer, clearListContext } = useNavigation()
+    const { listContext, setListContext, referrer, setReferrer, clearListContext } = useNavigation()
 
     useEffect(() => {
         Promise.all([
@@ -181,6 +181,10 @@ export function ItemDetailPage({ sku }: ItemDetailPageProps) {
                                     { key: 'reserved', label: 'Reserved' },
                                     { key: 'available', label: 'Available' },
                                 ]}
+                                onRowClick={(row) => {
+                                    setReferrer({ page: 'items', id: sku, label: item.name })
+                                    setHash('stock', row.id)
+                                }}
                             />
                         </div>
                     ) : (
