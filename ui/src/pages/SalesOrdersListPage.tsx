@@ -46,7 +46,7 @@ export function SalesOrdersListPage() {
     const [orderSort, setOrderSort] = useState<SortState | null>(null)
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
-    const { setListContext } = useNavigation()
+    const { setListContext, setReferrer } = useNavigation()
 
     useEffect(() => {
         api.salesOrders()
@@ -117,7 +117,19 @@ export function SalesOrdersListPage() {
                             sortable: true,
                             render: (row) => (
                                 <div>
-                                    <div>{row.customer_name || '—'}</div>
+                                    <button
+                                        className="text-brand-600 hover:underline text-left"
+                                        onClick={(e) => {
+                                            e.stopPropagation()
+                                            if (row.customer_id) {
+                                                setReferrer({ page: 'orders', label: 'Sales Orders' })
+                                                setHash('customers', row.customer_id)
+                                            }
+                                        }}
+                                        type="button"
+                                    >
+                                        {row.customer_name || '—'}
+                                    </button>
                                     {row.customer_company && <div className="text-xs text-slate-500">{row.customer_company}</div>}
                                 </div>
                             ),

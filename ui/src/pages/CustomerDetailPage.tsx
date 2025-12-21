@@ -18,7 +18,7 @@ interface CustomerDetailPageProps {
 export function CustomerDetailPage({ customerId }: CustomerDetailPageProps) {
     const [customer, setCustomer] = useState<Customer | null>(null)
     const [loading, setLoading] = useState(true)
-    const { listContext, setListContext } = useNavigation()
+    const { listContext, setListContext, referrer, setReferrer } = useNavigation()
     const [error, setError] = useState<string | null>(null)
 
     useEffect(() => {
@@ -55,10 +55,17 @@ export function CustomerDetailPage({ customerId }: CustomerDetailPageProps) {
                     <div className="text-sm text-red-600">{error || 'Customer not found'}</div>
                     <button
                         className="mt-3 text-brand-600 hover:underline text-sm"
-                        onClick={() => setHash('customers')}
+                        onClick={() => {
+                            if (referrer) {
+                                setReferrer(null)
+                                setHash(referrer.page, referrer.id)
+                            } else {
+                                setHash('customers')
+                            }
+                        }}
                         type="button"
                     >
-                        ← Back to Customers
+                        ← Back to {referrer?.label || 'Customers'}
                     </button>
                 </Card>
             </section>
@@ -97,17 +104,24 @@ export function CustomerDetailPage({ customerId }: CustomerDetailPageProps) {
                 <div className="flex items-center justify-between mb-4">
                     <button
                         className="text-brand-600 hover:underline text-sm"
-                        onClick={() => setHash('customers')}
+                        onClick={() => {
+                            if (referrer) {
+                                setReferrer(null)
+                                setHash(referrer.page, referrer.id)
+                            } else {
+                                setHash('customers')
+                            }
+                        }}
                         type="button"
                     >
-                        ← Back to Customers
+                        ← Back to {referrer?.label || 'Customers'}
                     </button>
                     {listContext && (
                         <div className="flex items-center gap-2">
                             <button
                                 className={`px-3 py-1 text-sm rounded ${hasPrevious
-                                        ? 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                                        : 'bg-slate-50 text-slate-300 cursor-not-allowed'
+                                    ? 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                                    : 'bg-slate-50 text-slate-300 cursor-not-allowed'
                                     }`}
                                 onClick={handlePrevious}
                                 disabled={!hasPrevious}
@@ -120,8 +134,8 @@ export function CustomerDetailPage({ customerId }: CustomerDetailPageProps) {
                             </span>
                             <button
                                 className={`px-3 py-1 text-sm rounded ${hasNext
-                                        ? 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                                        : 'bg-slate-50 text-slate-300 cursor-not-allowed'
+                                    ? 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                                    : 'bg-slate-50 text-slate-300 cursor-not-allowed'
                                     }`}
                                 onClick={handleNext}
                                 disabled={!hasNext}

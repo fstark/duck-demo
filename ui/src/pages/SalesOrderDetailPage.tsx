@@ -22,7 +22,7 @@ export function SalesOrderDetailPage({ orderId }: SalesOrderDetailPageProps) {
     const [order, setOrder] = useState<SalesOrderDetail | null>(null)
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
-    const { listContext, setListContext } = useNavigation()
+    const { listContext, setListContext, setReferrer } = useNavigation()
 
     useEffect(() => {
         api.salesOrder(orderId)
@@ -107,8 +107,8 @@ export function SalesOrderDetailPage({ orderId }: SalesOrderDetailPageProps) {
                         <div className="flex items-center gap-2">
                             <button
                                 className={`px-3 py-1 text-sm rounded ${hasPrevious
-                                        ? 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                                        : 'bg-slate-50 text-slate-300 cursor-not-allowed'
+                                    ? 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                                    : 'bg-slate-50 text-slate-300 cursor-not-allowed'
                                     }`}
                                 onClick={handlePrevious}
                                 disabled={!hasPrevious}
@@ -121,8 +121,8 @@ export function SalesOrderDetailPage({ orderId }: SalesOrderDetailPageProps) {
                             </span>
                             <button
                                 className={`px-3 py-1 text-sm rounded ${hasNext
-                                        ? 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                                        : 'bg-slate-50 text-slate-300 cursor-not-allowed'
+                                    ? 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                                    : 'bg-slate-50 text-slate-300 cursor-not-allowed'
                                     }`}
                                 onClick={handleNext}
                                 disabled={!hasNext}
@@ -137,7 +137,16 @@ export function SalesOrderDetailPage({ orderId }: SalesOrderDetailPageProps) {
                     <div className="font-semibold text-lg">Order {order.sales_order.id}</div>
                     <Card title="Customer">
                         <div className="space-y-1">
-                            <div className="font-medium">{order.customer.name}</div>
+                            <button
+                                className="font-medium text-brand-600 hover:underline text-left"
+                                onClick={() => {
+                                    setReferrer({ page: 'orders', id: orderId, label: `Order ${order.sales_order.id}` })
+                                    setHash('customers', order.customer.id)
+                                }}
+                                type="button"
+                            >
+                                {order.customer.name}
+                            </button>
                             {order.customer.company && <div className="text-slate-600 text-sm">{order.customer.company}</div>}
                             {order.customer.email && <div className="text-slate-600 text-sm">{order.customer.email}</div>}
                             {order.customer.city && <div className="text-slate-600 text-sm">{order.customer.city}</div>}

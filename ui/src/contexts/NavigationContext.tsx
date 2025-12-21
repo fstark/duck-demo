@@ -7,21 +7,33 @@ export interface NavigationListContext<T = any> {
     filters?: Record<string, any> // Optional filters applied to this list
 }
 
+export interface NavigationReferrer {
+    page: string // e.g., 'orders', 'shipments'
+    id?: string // The ID of the referring item
+    label?: string // Display label for the back link
+}
+
 interface NavigationContextType {
     listContext: NavigationListContext | null
     setListContext: (context: NavigationListContext | null) => void
     clearListContext: () => void
+    referrer: NavigationReferrer | null
+    setReferrer: (referrer: NavigationReferrer | null) => void
 }
 
 const NavigationContext = createContext<NavigationContextType | undefined>(undefined)
 
 export function NavigationProvider({ children }: { children: ReactNode }) {
     const [listContext, setListContext] = useState<NavigationListContext | null>(null)
+    const [referrer, setReferrer] = useState<NavigationReferrer | null>(null)
 
-    const clearListContext = () => setListContext(null)
+    const clearListContext = () => {
+        setListContext(null)
+        setReferrer(null)
+    }
 
     return (
-        <NavigationContext.Provider value={{ listContext, setListContext, clearListContext }}>
+        <NavigationContext.Provider value={{ listContext, setListContext, clearListContext, referrer, setReferrer }}>
             {children}
         </NavigationContext.Provider>
     )
