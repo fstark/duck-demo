@@ -28,7 +28,7 @@ export function ProductionOrderDetailPage({ productionOrderId }: ProductionOrder
     const [productionOrder, setProductionOrder] = useState<ProductionOrder | null>(null)
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
-    const { listContext, setListContext, referrer, clearListContext } = useNavigation()
+    const { listContext, setListContext, referrer, setReferrer, clearListContext } = useNavigation()
 
     useEffect(() => {
         api
@@ -141,7 +141,20 @@ export function ProductionOrderDetailPage({ productionOrderId }: ProductionOrder
                     <div className="space-y-2 text-sm text-slate-700">
                         <div className="grid grid-cols-2 gap-2">
                             <div className="font-medium">Item SKU:</div>
-                            <div>{productionOrder.item_sku || '—'}</div>
+                            <div>
+                                {productionOrder.item_sku ? (
+                                    <button
+                                        className="text-brand-600 hover:underline text-left"
+                                        onClick={() => {
+                                            setReferrer({ page: 'production', id: productionOrderId, label: `Production Order ${productionOrder.id}` })
+                                            setHash('items', productionOrder.item_sku)
+                                        }}
+                                        type="button"
+                                    >
+                                        {productionOrder.item_sku}
+                                    </button>
+                                ) : '—'}
+                            </div>
 
                             <div className="font-medium">Item Name:</div>
                             <div>{productionOrder.item_name || '—'}</div>
