@@ -1,4 +1,4 @@
-type Column<T> = { key: keyof T; label: string; render?: (row: T) => React.ReactNode; sortable?: boolean }
+type Column<T> = { key: keyof T; label: string; render?: (row: T, index: number) => React.ReactNode; sortable?: boolean }
 
 export function Table<T extends { [key: string]: any }>({
   rows,
@@ -6,12 +6,14 @@ export function Table<T extends { [key: string]: any }>({
   sortKey,
   sortDir,
   onSort,
+  onRowClick,
 }: {
   rows: T[]
   columns: Column<T>[]
   sortKey?: keyof T
   sortDir?: 'asc' | 'desc'
   onSort?: (key: keyof T) => void
+  onRowClick?: (row: T, index: number) => void
 }) {
   return (
     <div className="overflow-auto">
@@ -38,10 +40,15 @@ export function Table<T extends { [key: string]: any }>({
         </thead>
         <tbody>
           {rows.map((row, idx) => (
-            <tr key={idx} className="border-b border-slate-100">
+            <tr
+              key={idx}
+              className={`border-b border-slate-100 ${onRowClick ? 'cursor-pointer hover:bg-slate-50' : ''
+                }`}
+              onClick={onRowClick ? () => onRowClick(row, idx) : undefined}
+            >
               {columns.map((col) => (
                 <td key={String(col.key)} className="px-3 py-2">
-                  {col.render ? col.render(row) : String(row[col.key])}
+                  {col.render ? col.render(row, idx) : String(row[col.key])}
                 </td>
               ))}
             </tr>

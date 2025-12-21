@@ -5,12 +5,15 @@ import { Card } from './components/Card'
 import { Table } from './components/Table'
 import { Badge } from './components/Badge'
 import { api } from './api'
-import { Customer, Item, SalesOrder, SalesOrderDetail, StockSummary, Shipment, QuoteOption, ProductionOrder } from './types'
+import { Customer, Item, SalesOrder, SalesOrderDetail, StockSummary, Shipment, ProductionOrder } from './types'
+import { NavigationProvider, useNavigation } from './contexts/NavigationContext'
+import { CustomersListPage } from './pages/CustomersListPage'
+import { CustomerDetailPage } from './pages/CustomerDetailPage'
 
 type SortDir = 'asc' | 'desc'
 type SortState<T> = { key: keyof T; dir: SortDir }
 
-type ViewPage = 'home' | 'customers' | 'items' | 'orders' | 'shipments' | 'quotes' | 'production'
+type ViewPage = 'home' | 'customers' | 'items' | 'orders' | 'shipments' | 'production'
 type ViewState = { page: ViewPage; id?: string }
 
 function SectionHeading({ id, title }: { id: string; title: string }) {
@@ -27,7 +30,7 @@ function parseHash(): ViewState {
   const parts = hash.split('/').filter(Boolean)
   const page = (parts[0] as ViewPage) || 'home'
   const id = parts[1] ? decodeURIComponent(parts.slice(1).join('/')) : undefined
-  const allowed: ViewPage[] = ['home', 'customers', 'items', 'orders', 'shipments', 'quotes', 'production']
+  const allowed: ViewPage[] = ['home', 'customers', 'items', 'orders', 'shipments', 'production']
   return { page: allowed.includes(page) ? page : 'home', id }
 }
 
@@ -63,27 +66,24 @@ function nextSort<T>(prev: SortState<T> | null, key: keyof T, defaultDir: SortDi
   return { key, dir: defaultDir }
 }
 
-export default function App() {
-  const [customers, setCustomers] = useState<Customer[]>([])
+function AppContent() {
+  const [customersCount, setCustomersCount] = useState(0)
   const [items, setItems] = useState<Item[]>([])
   const [orders, setOrders] = useState<SalesOrder[]>([])
   const [selectedOrder, setSelectedOrder] = useState<SalesOrderDetail | null>(null)
   const [stock, setStock] = useState<StockSummary | null>(null)
   const [shipments, setShipments] = useState<Shipment[]>([])
   const [selectedShipment, setSelectedShipment] = useState<Shipment | null>(null)
-  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null)
   const [productionOrders, setProductionOrders] = useState<ProductionOrder[]>([])
   const [selectedProductionOrder, setSelectedProductionOrder] = useState<ProductionOrder | null>(null)
-  const [quoteOptions, setQuoteOptions] = useState<QuoteOption[] | null>(null)
-  const [quoteSku, setQuoteSku] = useState('ELVIS-DUCK-20CM')
-  const [quoteQty, setQuoteQty] = useState(24)
   const [view, setView] = useState<ViewState>(() => parseHash())
   const [apiError, setApiError] = useState<string | null>(null)
-  const [customerSort, setCustomerSort] = useState<SortState<Customer> | null>(null)
   const [itemSort, setItemSort] = useState<SortState<Item> | null>({ key: 'type', dir: 'asc' })
   const [orderSort, setOrderSort] = useState<SortState<SalesOrder> | null>(null)
   const [shipmentSort, setShipmentSort] = useState<SortState<Shipment> | null>(null)
   const [productionSort, setProductionSort] = useState<SortState<ProductionOrder> | null>(null)
+
+  const { clearListContext } = useNavigation()
 
   const handleApiError = (err: unknown) => {
     console.error(err)
@@ -91,7 +91,7 @@ export default function App() {
   }
 
   useEffect(() => {
-    api.customers().then((res) => setCustomers(res.customers || [])).catch(handleApiError)
+    api.customers().then((res) => setCustomersCount(res.customers?.length || 0)).catch(handleApiError)
     api.items(false).then((res) => setItems(res.items || [])).catch(handleApiError)
     api.salesOrders().then((res) => setOrders(res.sales_orders || [])).catch(handleApiError)
     api.shipments().then((res) => setShipments(res.shipments || [])).catch(handleApiError)
@@ -120,10 +120,6 @@ export default function App() {
     api.productionOrder(id).then((res) => setSelectedProductionOrder(res as ProductionOrder)).catch(handleApiError)
   }
 
-  const loadQuotes = () => {
-    api.quote(quoteSku, quoteQty).then((res) => setQuoteOptions(res.options || [])).catch(handleApiError)
-  }
-
   useEffect(() => {
     if (view.page === 'orders') {
       if (view.id) {
@@ -144,13 +140,6 @@ export default function App() {
         loadStock(view.id)
       }
     }
-    if (view.page === 'customers') {
-      if (view.id) {
-        setSelectedCustomer(customers.find((c) => c.id === view.id) || null)
-      } else {
-        setSelectedCustomer(null)
-      }
-    }
     if (view.page === 'production') {
       if (view.id) {
         loadProductionOrder(view.id)
@@ -161,9 +150,8 @@ export default function App() {
     if (view.page !== 'items') {
       setStock(null)
     }
-  }, [view, customers])
+  }, [view])
 
-  const sortedCustomers = sortRows(customers, customerSort)
   const sortedItems = sortRows(items, itemSort)
   const sortedOrders = sortRows(orders, orderSort)
   const sortedShipments = sortRows(shipments, shipmentSort)
@@ -179,13 +167,15 @@ export default function App() {
           { page: 'orders', label: 'Sales Orders' },
           { page: 'shipments', label: 'Shipments' },
           { page: 'production', label: 'Production' },
-          { page: 'quotes', label: 'Quotes' },
         ] as Array<{ page: ViewPage; label: string }>
       ).map((link) => (
         <button
           key={link.page}
           className={`px-3 py-1 rounded ${view.page === link.page ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}
-          onClick={() => setHash(link.page)}
+          onClick={() => {
+            clearListContext()
+            setHash(link.page)
+          }}
           type="button"
         >
           {link.label}
@@ -216,7 +206,7 @@ export default function App() {
             <SectionHeading id="overview" title="Overview" />
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mt-2">
               <Card title="Customers">
-                <div className="text-2xl font-semibold text-slate-800">{customers.length}</div>
+                <div className="text-2xl font-semibold text-slate-800">{customersCount}</div>
                 <div className="text-sm text-slate-600 mb-2">total customers</div>
                 <button className="text-brand-600 hover:underline text-sm" onClick={() => setHash('customers')} type="button">
                   View customers
@@ -250,63 +240,12 @@ export default function App() {
                   View production
                 </button>
               </Card>
-              <Card title="Quotes">
-                <div className="text-sm text-slate-600 mb-2">Compute scenarios quickly.</div>
-                <button className="text-brand-600 hover:underline text-sm" onClick={() => setHash('quotes')} type="button">
-                  Get a quote
-                </button>
-              </Card>
             </div>
           </section>
         )}
 
-        {view.page === 'customers' && (
-          <section>
-            <SectionHeading id="customers" title="Customers" />
-            <Card>
-              <Table
-                rows={sortedCustomers}
-                sortKey={customerSort?.key}
-                sortDir={customerSort?.dir}
-                onSort={(key) => setCustomerSort((prev) => nextSort(prev, key))}
-                columns={[
-                  {
-                    key: 'id',
-                    label: 'ID',
-                    sortable: true,
-                    render: (row) => (
-                      <button className="text-brand-600 hover:underline" onClick={() => setHash('customers', row.id)} type="button">
-                        {row.id}
-                      </button>
-                    ),
-                  },
-                  {
-                    key: 'name',
-                    label: 'Name',
-                    sortable: true,
-                    render: (row) => (
-                      <button className="text-brand-600 hover:underline" onClick={() => setHash('customers', row.id)} type="button">
-                        {row.name}
-                      </button>
-                    ),
-                  },
-                  { key: 'company', label: 'Company', sortable: true },
-                  { key: 'email', label: 'Email', sortable: true },
-                  { key: 'city', label: 'City', sortable: true },
-                ]}
-              />
-              {view.id ? (
-                <div className="mt-4 space-y-2 text-sm text-slate-700">
-                  <div className="font-semibold">Customer {selectedCustomer?.name || view.id}</div>
-                  <div className="text-slate-600">Company: {selectedCustomer?.company || '—'}</div>
-                  <div className="text-slate-600">Email: {selectedCustomer?.email || '—'}</div>
-                  <div className="text-slate-600">City: {selectedCustomer?.city || '—'}</div>
-                  <div className="text-xs text-slate-500">More customer details will appear here as we extend the MCP surface.</div>
-                </div>
-              ) : null}
-            </Card>
-          </section>
-        )}
+        {view.page === 'customers' && !view.id && <CustomersListPage />}
+        {view.page === 'customers' && view.id && <CustomerDetailPage customerId={view.id} />}
 
         {view.page === 'items' && (
           <section>
@@ -542,50 +481,15 @@ export default function App() {
           </section>
         )}
 
-        {view.page === 'quotes' && (
-          <section>
-            <SectionHeading id="quotes" title="Quotes" />
-            <Card>
-              <div className="flex gap-3 items-end text-sm">
-                <div>
-                  <label className="block text-xs text-slate-500">SKU</label>
-                  <input
-                    className="border border-slate-200 rounded px-2 py-1"
-                    value={quoteSku}
-                    onChange={(e) => setQuoteSku(e.target.value)}
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs text-slate-500">Qty</label>
-                  <input
-                    type="number"
-                    className="border border-slate-200 rounded px-2 py-1 w-24"
-                    value={quoteQty}
-                    onChange={(e) => setQuoteQty(parseInt(e.target.value, 10) || 0)}
-                  />
-                </div>
-                <button className="bg-brand-600 text-white px-3 py-2 rounded shadow" onClick={loadQuotes} type="button">
-                  Get options
-                </button>
-              </div>
-              {quoteOptions ? (
-                <div className="mt-3 space-y-2">
-                  {quoteOptions.map((opt) => (
-                    <div key={opt.option_id} className="border border-slate-200 rounded p-3 bg-slate-50">
-                      <div className="font-semibold">{opt.summary}</div>
-                      <div className="text-xs text-slate-600">ETA: {opt.can_arrive_by}</div>
-                      <div className="text-xs text-slate-600">Lines: {opt.lines.map((l) => `${l.qty} x ${l.sku} (${l.source})`).join(', ')}</div>
-                      {opt.notes ? <div className="text-xs text-slate-500">{opt.notes}</div> : null}
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="text-xs text-slate-500 mt-2">Enter SKU and qty to see options.</div>
-              )}
-            </Card>
-          </section>
-        )}
       </div>
     </Layout>
+  )
+}
+
+export default function App() {
+  return (
+    <NavigationProvider>
+      <AppContent />
+    </NavigationProvider>
   )
 }
