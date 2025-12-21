@@ -25,6 +25,9 @@ export type StockSummary = {
 
 export type SalesOrder = {
   sales_order_id: string
+  customer_id?: string
+  customer_name?: string
+  customer_company?: string
   created_at?: string
   summary: string
   fulfillment_state?: string

@@ -5,6 +5,7 @@ import { Badge } from '../components/Badge'
 import { Item } from '../types'
 import { api } from '../api'
 import { useNavigation } from '../contexts/NavigationContext'
+import { formatPrice } from '../utils/currency'
 
 type SortDir = 'asc' | 'desc'
 type SortState = { key: keyof Item; dir: SortDir }
@@ -120,7 +121,7 @@ export function ItemsListPage() {
                             key: 'unit_price',
                             label: 'Unit price',
                             sortable: true,
-                            render: (row) => (row.unit_price != null ? `${row.unit_price} €` : '—'),
+                            render: (row) => formatPrice(row.unit_price),
                         },
                         {
                             key: 'type',

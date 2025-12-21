@@ -111,6 +111,17 @@ export function SalesOrdersListPage() {
                             label: 'Order',
                             sortable: true,
                         },
+                        {
+                            key: 'customer_name',
+                            label: 'Customer',
+                            sortable: true,
+                            render: (row) => (
+                                <div>
+                                    <div>{row.customer_name || '—'}</div>
+                                    {row.customer_company && <div className="text-xs text-slate-500">{row.customer_company}</div>}
+                                </div>
+                            ),
+                        },
                         { key: 'summary', label: 'Summary' },
                         {
                             key: 'fulfillment_state',

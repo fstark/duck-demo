@@ -878,9 +878,21 @@ def search_sales_orders(customer_id: Optional[str] = None, limit: int = 5, sort:
             ).fetchone()
             if ship_row and ship_row["status"]:
                 fulfillment_state = ship_row["status"]
+            
+            # Get customer info
+            customer_row = conn.execute(
+                "SELECT name, company FROM customers WHERE id = ?",
+                (row["customer_id"],),
+            ).fetchone()
+            customer_name = customer_row["name"] if customer_row else None
+            customer_company = customer_row["company"] if customer_row else None
+            
             sales_orders.append(
                 {
                     "sales_order_id": row["id"],
+                    "customer_id": row["customer_id"],
+                    "customer_name": customer_name,
+                    "customer_company": customer_company,
                     "created_at": row["created_at"],
                     "summary": summary,
                     "fulfillment_state": fulfillment_state,

@@ -5,6 +5,7 @@ import { Badge } from '../components/Badge'
 import { SalesOrder, SalesOrderDetail } from '../types'
 import { api } from '../api'
 import { useNavigation } from '../contexts/NavigationContext'
+import { formatPrice } from '../utils/currency'
 
 function setHash(page: string, id?: string) {
     const path = id ? `#/${page}/${encodeURIComponent(id)}` : `#/${page}`
@@ -134,13 +135,20 @@ export function SalesOrderDetailPage({ orderId }: SalesOrderDetailPageProps) {
                 </div>
                 <div className="space-y-3 text-sm text-slate-800">
                     <div className="font-semibold text-lg">Order {order.sales_order.id}</div>
+                    <Card title="Customer">
+                        <div className="space-y-1">
+                            <div className="font-medium">{order.customer.name}</div>
+                            {order.customer.company && <div className="text-slate-600 text-sm">{order.customer.company}</div>}
+                            {order.customer.email && <div className="text-slate-600 text-sm">{order.customer.email}</div>}
+                            {order.customer.city && <div className="text-slate-600 text-sm">{order.customer.city}</div>}
+                        </div>
+                    </Card>
                     <div className="grid grid-cols-2 gap-3">
                         <Card title="Lines">
                             <Table rows={order.lines as any} columns={[{ key: 'sku', label: 'SKU' }, { key: 'qty', label: 'Qty' }]} />
                         </Card>
                         <Card title="Pricing">
-                            <div>Total: {order.pricing.total}</div>
-                            <div className="text-slate-600 text-xs">Currency: {order.pricing.currency}</div>
+                            <div>{formatPrice(order.pricing.total, order.pricing.currency)}</div>
                         </Card>
                     </div>
                     <Card title="Shipments">

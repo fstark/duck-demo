@@ -5,6 +5,7 @@ import { Badge } from '../components/Badge'
 import { Item, StockSummary } from '../types'
 import { api } from '../api'
 import { useNavigation } from '../contexts/NavigationContext'
+import { formatPrice } from '../utils/currency'
 
 function setHash(page: string, id?: string) {
     const path = id ? `#/${page}/${encodeURIComponent(id)}` : `#/${page}`
@@ -147,7 +148,7 @@ export function ItemDetailPage({ sku }: ItemDetailPageProps) {
                         <span className="font-medium">Type:</span> {item.type ? <Badge>{item.type}</Badge> : '—'}
                     </div>
                     <div className="text-slate-600">
-                        <span className="font-medium">Unit price:</span> {item.unit_price != null ? `${item.unit_price} €` : '—'}
+                        <span className="font-medium">Unit price:</span> {formatPrice(item.unit_price)}
                     </div>
                     {stock ? (
                         <div className="mt-4 space-y-2 border-t pt-3">
