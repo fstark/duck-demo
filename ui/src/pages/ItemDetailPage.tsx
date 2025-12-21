@@ -181,7 +181,12 @@ export function ItemDetailPage({ sku }: ItemDetailPageProps) {
                                     { key: 'reserved', label: 'Reserved' },
                                     { key: 'available', label: 'Available' },
                                 ]}
-                                onRowClick={(row) => {
+                                onRowClick={(row, index) => {
+                                    setListContext({
+                                        listType: 'stock',
+                                        items: stock.by_location.map(s => ({ id: s.id })) as any,
+                                        currentIndex: index,
+                                    })
                                     setReferrer({ page: 'items', id: sku, label: item.name })
                                     setHash('stock', row.id)
                                 }}

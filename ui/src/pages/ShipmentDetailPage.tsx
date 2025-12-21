@@ -173,7 +173,12 @@ export function ShipmentDetailPage({ shipmentId }: ShipmentDetailPageProps) {
                                 { key: 'customer_company', label: 'Company' },
                                 { key: 'status', label: 'Status', render: (row) => <Badge>{row.status}</Badge> },
                             ]}
-                            onRowClick={(row) => {
+                            onRowClick={(row, index) => {
+                                setListContext({
+                                    listType: 'orders',
+                                    items: shipment.sales_orders!.map(o => ({ sales_order_id: o.sales_order_id })) as any,
+                                    currentIndex: index,
+                                })
                                 setReferrer({ page: 'shipments', id: shipmentId, label: `Shipment ${shipment.id}` })
                                 setHash('orders', row.sales_order_id)
                             }}

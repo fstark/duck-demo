@@ -190,6 +190,15 @@ export function SalesOrderDetailPage({ orderId }: SalesOrderDetailPageProps) {
                                     },
                                     { key: 'qty', label: 'Qty' }
                                 ]}
+                                onRowClick={(row, index) => {
+                                    setListContext({
+                                        listType: 'items',
+                                        items: order.lines.map(l => ({ sku: l.sku })) as any,
+                                        currentIndex: index,
+                                    })
+                                    setReferrer({ page: 'orders', id: orderId, label: `Order ${order.sales_order.id}` })
+                                    setHash('items', row.sku)
+                                }}
                             />
                         </Card>
                         <Card title="Pricing">
@@ -206,7 +215,12 @@ export function SalesOrderDetailPage({ orderId }: SalesOrderDetailPageProps) {
                                     { key: 'planned_departure', label: 'Departure' },
                                     { key: 'planned_arrival', label: 'Arrival' },
                                 ]}
-                                onRowClick={(row) => {
+                                onRowClick={(row, index) => {
+                                    setListContext({
+                                        listType: 'shipments',
+                                        items: order.shipments!.map(s => ({ id: s.id })) as any,
+                                        currentIndex: index,
+                                    })
                                     setReferrer({ page: 'orders', id: orderId, label: `Order ${order.sales_order.id}` })
                                     setHash('shipments', row.id)
                                 }}

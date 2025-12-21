@@ -172,7 +172,12 @@ export function CustomerDetailPage({ customerId }: CustomerDetailPageProps) {
                                 { key: 'created_at', label: 'Created' },
                                 { key: 'requested_delivery_date', label: 'Delivery Date' },
                             ]}
-                            onRowClick={(row) => {
+                            onRowClick={(row, index) => {
+                                setListContext({
+                                    listType: 'orders',
+                                    items: customer.sales_orders!.map(o => ({ sales_order_id: o.sales_order_id })) as any,
+                                    currentIndex: index,
+                                })
                                 setReferrer({ page: 'customers', id: customerId, label: customer.name })
                                 setHash('orders', row.sales_order_id)
                             }}
@@ -189,7 +194,12 @@ export function CustomerDetailPage({ customerId }: CustomerDetailPageProps) {
                                 { key: 'planned_departure', label: 'Departure' },
                                 { key: 'planned_arrival', label: 'Arrival' },
                             ]}
-                            onRowClick={(row) => {
+                            onRowClick={(row, index) => {
+                                setListContext({
+                                    listType: 'shipments',
+                                    items: customer.shipments!.map(s => ({ id: s.id })) as any,
+                                    currentIndex: index,
+                                })
                                 setReferrer({ page: 'customers', id: customerId, label: customer.name })
                                 setHash('shipments', row.id)
                             }}
