@@ -9,6 +9,8 @@ import { Customer, Item, SalesOrder, SalesOrderDetail, StockSummary, Shipment, P
 import { NavigationProvider, useNavigation } from './contexts/NavigationContext'
 import { CustomersListPage } from './pages/CustomersListPage'
 import { CustomerDetailPage } from './pages/CustomerDetailPage'
+import { ItemsListPage } from './pages/ItemsListPage'
+import { ItemDetailPage } from './pages/ItemDetailPage'
 
 type SortDir = 'asc' | 'desc'
 type SortState<T> = { key: keyof T; dir: SortDir }
@@ -68,17 +70,15 @@ function nextSort<T>(prev: SortState<T> | null, key: keyof T, defaultDir: SortDi
 
 function AppContent() {
   const [customersCount, setCustomersCount] = useState(0)
-  const [items, setItems] = useState<Item[]>([])
+  const [itemsCount, setItemsCount] = useState(0)
   const [orders, setOrders] = useState<SalesOrder[]>([])
   const [selectedOrder, setSelectedOrder] = useState<SalesOrderDetail | null>(null)
-  const [stock, setStock] = useState<StockSummary | null>(null)
   const [shipments, setShipments] = useState<Shipment[]>([])
   const [selectedShipment, setSelectedShipment] = useState<Shipment | null>(null)
   const [productionOrders, setProductionOrders] = useState<ProductionOrder[]>([])
   const [selectedProductionOrder, setSelectedProductionOrder] = useState<ProductionOrder | null>(null)
   const [view, setView] = useState<ViewState>(() => parseHash())
   const [apiError, setApiError] = useState<string | null>(null)
-  const [itemSort, setItemSort] = useState<SortState<Item> | null>({ key: 'type', dir: 'asc' })
   const [orderSort, setOrderSort] = useState<SortState<SalesOrder> | null>(null)
   const [shipmentSort, setShipmentSort] = useState<SortState<Shipment> | null>(null)
   const [productionSort, setProductionSort] = useState<SortState<ProductionOrder> | null>(null)
@@ -92,7 +92,7 @@ function AppContent() {
 
   useEffect(() => {
     api.customers().then((res) => setCustomersCount(res.customers?.length || 0)).catch(handleApiError)
-    api.items(false).then((res) => setItems(res.items || [])).catch(handleApiError)
+    api.items(false).then((res) => setItemsCount(res.items?.length || 0)).catch(handleApiError)
     api.salesOrders().then((res) => setOrders(res.sales_orders || [])).catch(handleApiError)
     api.shipments().then((res) => setShipments(res.shipments || [])).catch(handleApiError)
     api.productionOrders().then((res) => setProductionOrders(res.production_orders || [])).catch(handleApiError)
@@ -106,10 +106,6 @@ function AppContent() {
 
   const loadOrder = (id: string) => {
     api.salesOrder(id).then((res) => setSelectedOrder(res as SalesOrderDetail)).catch(handleApiError)
-  }
-
-  const loadStock = (sku: string) => {
-    api.stock(sku).then((res) => setStock(res as StockSummary)).catch(handleApiError)
   }
 
   const loadShipment = (id: string) => {
@@ -135,11 +131,6 @@ function AppContent() {
         setSelectedShipment(null)
       }
     }
-    if (view.page === 'items') {
-      if (view.id) {
-        loadStock(view.id)
-      }
-    }
     if (view.page === 'production') {
       if (view.id) {
         loadProductionOrder(view.id)
@@ -147,12 +138,8 @@ function AppContent() {
         setSelectedProductionOrder(null)
       }
     }
-    if (view.page !== 'items') {
-      setStock(null)
-    }
   }, [view])
 
-  const sortedItems = sortRows(items, itemSort)
   const sortedOrders = sortRows(orders, orderSort)
   const sortedShipments = sortRows(shipments, shipmentSort)
   const sortedProductionOrders = sortRows(productionOrders, productionSort)
@@ -213,7 +200,7 @@ function AppContent() {
                 </button>
               </Card>
               <Card title="Items">
-                <div className="text-2xl font-semibold text-slate-800">{items.length}</div>
+                <div className="text-2xl font-semibold text-slate-800">{itemsCount}</div>
                 <div className="text-sm text-slate-600 mb-2">total items</div>
                 <button className="text-brand-600 hover:underline text-sm" onClick={() => setHash('items')} type="button">
                   View items
@@ -247,83 +234,8 @@ function AppContent() {
         {view.page === 'customers' && !view.id && <CustomersListPage />}
         {view.page === 'customers' && view.id && <CustomerDetailPage customerId={view.id} />}
 
-        {view.page === 'items' && (
-          <section>
-            <SectionHeading id="items" title="Items" />
-            <Card>
-              <Table
-                rows={sortedItems}
-                sortKey={itemSort?.key}
-                sortDir={itemSort?.dir}
-                onSort={(key) => setItemSort((prev) => nextSort(prev, key))}
-                columns={[
-                  {
-                    key: 'sku',
-                    label: 'SKU',
-                    sortable: true,
-                    render: (row) => (
-                      <button className="text-brand-600 hover:underline" onClick={() => setHash('items', row.sku)} type="button">
-                        {row.sku}
-                      </button>
-                    ),
-                  },
-                  {
-                    key: 'name',
-                    label: 'Name',
-                    sortable: true,
-                    render: (row) => (
-                      <button className="text-brand-600 hover:underline" onClick={() => setHash('items', row.sku)} type="button">
-                        {row.name}
-                      </button>
-                    ),
-                  },
-                  {
-                    key: 'unit_price',
-                    label: 'Unit price',
-                    sortable: true,
-                    render: (row) => (row.unit_price != null ? `${row.unit_price} €` : '—'),
-                  },
-                  { key: 'type', label: 'Type', sortable: true },
-                  { key: 'available_total', label: 'Available', sortable: true },
-                ]}
-              />
-              {view.id ? (
-                <div className="mt-4 space-y-2 text-sm text-slate-700">
-                  <div className="font-semibold">Item {view.id}</div>
-                  <div className="text-slate-600 text-xs">{items.find((i) => i.sku === view.id)?.name || 'Loading item details…'}</div>
-                  <div className="text-slate-600 text-xs">
-                    Unit price:{' '}
-                    {(() => {
-                      const item = items.find((i) => i.sku === view.id)
-                      return item?.unit_price != null ? `${item.unit_price} €` : '—'
-                    })()}
-                  </div>
-                  {stock ? (
-                    <div className="space-y-2">
-                      <div className="flex gap-3 text-slate-600">
-                        <span>On hand: {stock.on_hand_total}</span>
-                        <span>Reserved: {stock.reserved_total}</span>
-                        <span>Available: {stock.available_total}</span>
-                      </div>
-                      <Table
-                        rows={stock.by_location as any}
-                        columns={[
-                          { key: 'warehouse', label: 'Wh' },
-                          { key: 'location', label: 'Loc' },
-                          { key: 'on_hand', label: 'On hand' },
-                          { key: 'reserved', label: 'Reserved' },
-                          { key: 'available', label: 'Available' },
-                        ]}
-                      />
-                    </div>
-                  ) : (
-                    <div className="text-slate-500">Loading stock…</div>
-                  )}
-                </div>
-              ) : null}
-            </Card>
-          </section>
-        )}
+        {view.page === 'items' && !view.id && <ItemsListPage />}
+        {view.page === 'items' && view.id && <ItemDetailPage sku={view.id} />}
 
         {view.page === 'orders' && (
           <section>
