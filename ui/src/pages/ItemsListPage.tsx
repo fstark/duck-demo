@@ -129,7 +129,12 @@ export function ItemsListPage() {
                             sortable: true,
                             render: (row) => <Badge>{row.type}</Badge>,
                         },
-                        { key: 'available_total', label: 'Available', sortable: true },
+                        {
+                            key: 'available_total',
+                            label: 'Available',
+                            sortable: true,
+                            render: (row) => (row.available_total === 0 ? '—' : row.available_total),
+                        },
                     ]}
                 />
             </Card>

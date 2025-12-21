@@ -213,11 +213,10 @@ def inventory_list_items(in_stock_only: bool = False, limit: int = 50) -> Dict[s
         base_sql += " ORDER BY sku LIMIT ?"
         params.append(limit)
         rows = dict_rows(conn.execute(base_sql, params))
-        if in_stock_only:
-            # attach available totals
-            for row in rows:
-                summary = stock_summary(conn, row["id"])
-                row["available_total"] = summary["available_total"]
+        # Always attach available totals for all items
+        for row in rows:
+            summary = stock_summary(conn, row["id"])
+            row["available_total"] = summary["available_total"]
         for row in rows:
             row["ui_url"] = ui_href("items", row["sku"])
         return {"items": rows}
