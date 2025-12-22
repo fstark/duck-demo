@@ -455,6 +455,101 @@ def reserve_stock(conn: sqlite3.Connection, reference_id: str, reservations: Lis
     return {"status": "reserved", "reservation_id": reservation_id}
 
 
+@mcp.tool(name="get_statistics")
+@log_tool("get_statistics")
+def get_statistics(
+    entity: str,
+    metric: str = "count",
+    group_by: Optional[str] = None,
+    field: Optional[str] = None,
+    status: Optional[str] = None,
+    item_type: Optional[str] = None,
+    warehouse: Optional[str] = None,
+    city: Optional[str] = None,
+    limit: int = 100,
+) -> Dict[str, Any]:
+    """
+    Get flexible statistics for any entity with optional grouping and filtering.
+    
+    Args:
+        entity: The entity to query (customers, sales_orders, items, stock, production_orders, shipments)
+        metric: The metric to calculate (count, sum, avg, min, max)
+        group_by: Optional field to group by (status, type, city, warehouse, etc.)
+        field: Field name for sum/avg/min/max operations (qty, on_hand, reserved, unit_price, etc.)
+        status: Filter by status (for sales_orders, production_orders, shipments)
+        item_type: Filter by item type (for items)
+        warehouse: Filter by warehouse (for stock)
+        city: Filter by city (for customers)
+        limit: Maximum results for grouped queries
+    
+    Examples:
+        - Total customers: entity="customers", metric="count"
+        - Sales orders by status: entity="sales_orders", metric="count", group_by="status"
+        - Total stock by warehouse: entity="stock", metric="sum", field="on_hand", group_by="warehouse"
+        - Items by type: entity="items", metric="count", group_by="type"
+    """
+    
+    # Map entities to tables and valid fields
+    entity_config = {
+        "customers": {"table": "customers", "valid_fields": ["id"], "valid_groups": ["city", "company"]},
+        "sales_orders": {"table": "sales_orders", "valid_fields": ["id"], "valid_groups": ["status", "customer_id"]},
+        "items": {"table": "items", "valid_fields": ["unit_price"], "valid_groups": ["type"]},
+        "stock": {"table": "stock", "valid_fields": ["on_hand", "reserved"], "valid_groups": ["warehouse", "location", "item_id"]},
+        "production_orders": {"table": "production_orders", "valid_fields": ["qty"], "valid_groups": ["status", "item_id"]},
+        "shipments": {"table": "shipments", "valid_fields": ["id"], "valid_groups": ["status"]},
+    }
+    
+    if entity not in entity_config:
+        return {"error": f"Invalid entity: {entity}. Valid options: {', '.join(entity_config.keys())}"}
+    
+    table = entity_config[entity]["table"]
+    
+    # Build the query
+    if metric == "count":
+        select_clause = "COUNT(*) as value"
+    elif metric in ["sum", "avg", "min", "max"]:
+        if not field:
+            return {"error": f"Field is required for {metric} operation"}
+        if field not in entity_config[entity]["valid_fields"]:
+            return {"error": f"Invalid field '{field}' for entity '{entity}'. Valid: {entity_config[entity]['valid_fields']}"}
+        select_clause = f"{metric.upper()}({field}) as value"
+    else:
+        return {"error": f"Invalid metric: {metric}. Valid options: count, sum, avg, min, max"}
+    
+    # Build filters
+    filters = []
+    params: List[Any] = []
+    
+    if status:
+        filters.append("status = ?")
+        params.append(status)
+    if item_type:
+        filters.append("type = ?")
+        params.append(item_type)
+    if warehouse:
+        filters.append("warehouse = ?")
+        params.append(warehouse)
+    if city:
+        filters.append("city = ?")
+        params.append(city)
+    
+    where_clause = f"WHERE {' AND '.join(filters)}" if filters else ""
+    
+    with db_conn() as conn:
+        if group_by:
+            if group_by not in entity_config[entity]["valid_groups"]:
+                return {"error": f"Invalid group_by '{group_by}' for entity '{entity}'. Valid: {entity_config[entity]['valid_groups']}"}
+            
+            sql = f"SELECT {group_by}, {select_clause} FROM {table} {where_clause} GROUP BY {group_by} ORDER BY value DESC LIMIT ?"
+            params.append(limit)
+            rows = dict_rows(conn.execute(sql, params))
+            return {"entity": entity, "metric": metric, "group_by": group_by, "results": rows}
+        else:
+            sql = f"SELECT {select_clause} FROM {table} {where_clause}"
+            result = conn.execute(sql, params).fetchone()
+            return {"entity": entity, "metric": metric, "value": result["value"] if result["value"] is not None else 0}
+
+
 @mcp.tool(name="crm_find_customers")
 @log_tool("crm_find_customers")
 def find_customers(
@@ -956,6 +1051,57 @@ def get_shipment_status(shipment_id: str) -> Dict[str, Any]:
         return data
 
 
+@mcp.tool(name="production_get_statistics")
+@log_tool("production_get_statistics")
+def get_production_statistics() -> Dict[str, Any]:
+    """Get production statistics including total production orders and breakdown by status."""
+    with db_conn() as conn:
+        # Total production orders
+        total_production = conn.execute("SELECT COUNT(*) as count FROM production_orders").fetchone()["count"]
+        
+        # Production orders by status
+        status_rows = dict_rows(
+            conn.execute(
+                "SELECT status, COUNT(*) as count FROM production_orders GROUP BY status ORDER BY count DESC"
+            )
+        )
+        
+        # Total quantity being produced
+        total_qty = conn.execute("SELECT SUM(qty) as total FROM production_orders").fetchone()["total"] or 0
+        
+        # Top items being produced
+        top_items = dict_rows(
+            conn.execute(
+                """SELECT i.sku, i.name, SUM(po.qty) as total_qty, COUNT(*) as order_count
+                FROM production_orders po
+                JOIN items i ON po.item_id = i.id
+                GROUP BY i.id, i.sku, i.name
+                ORDER BY total_qty DESC
+                LIMIT 10"""
+            )
+        )
+        
+        # Upcoming production (next 60 days)
+        upcoming = dict_rows(
+            conn.execute(
+                """SELECT i.sku, i.name, po.qty, po.eta_finish, po.status
+                FROM production_orders po
+                JOIN items i ON po.item_id = i.id
+                WHERE po.eta_finish >= date('now') AND po.eta_finish <= date('now', '+60 days')
+                ORDER BY po.eta_finish
+                LIMIT 20"""
+            )
+        )
+        
+        return {
+            "total_production_orders": total_production,
+            "production_orders_by_status": status_rows,
+            "total_quantity_in_production": total_qty,
+            "top_items_in_production": top_items,
+            "upcoming_production": upcoming,
+        }
+
+
 @mcp.tool(name="production_get_production_order_status")
 @log_tool("production_get_production_order_status")
 def get_production_order_status(production_order_id: str) -> Dict[str, Any]:
@@ -985,8 +1131,8 @@ def find_production_orders_by_date_range(
     limit: int = 100
 ) -> List[Dict[str, Any]]:
     """
-    Purpose: Find production orders that have estimated finish dates within a specified date range (inclusive). Useful for tracking planned production activities and volumes.
-    Use Cases:
+        Retrieve all production orders scheduled to finish within a specific date range.
+        Useful for:
         Determine the most produced items within a specific timeframe.
         Analyze production scheduling and capacity utilization.
         Identify trends in production focus or priorities.
