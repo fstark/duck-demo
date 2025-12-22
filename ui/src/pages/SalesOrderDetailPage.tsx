@@ -6,6 +6,7 @@ import { SalesOrder, SalesOrderDetail } from '../types'
 import { api } from '../api'
 import { useNavigation } from '../contexts/NavigationContext'
 import { formatPrice } from '../utils/currency'
+import { Quantity } from '../utils/quantity.tsx'
 
 function setHash(page: string, id?: string) {
     const path = id ? `#/${page}/${encodeURIComponent(id)}` : `#/${page}`
@@ -188,7 +189,7 @@ export function SalesOrderDetailPage({ orderId }: SalesOrderDetailPageProps) {
                                             </button>
                                         )
                                     },
-                                    { key: 'qty', label: 'Qty' }
+                                    { key: 'qty', label: 'Qty', render: (row) => <Quantity value={row.qty} /> }
                                 ]}
                                 onRowClick={(row, index) => {
                                     setListContext({
@@ -202,7 +203,7 @@ export function SalesOrderDetailPage({ orderId }: SalesOrderDetailPageProps) {
                             />
                         </Card>
                         <Card title="Pricing">
-                            <div>{formatPrice(order.pricing.total, order.pricing.currency)}</div>
+                            <div className="text-right">{formatPrice(order.pricing.total, order.pricing.currency)}</div>
                         </Card>
                     </div>
                     <Card title="Shipments">

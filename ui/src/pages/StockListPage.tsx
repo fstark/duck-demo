@@ -5,6 +5,7 @@ import { Badge } from '../components/Badge'
 import { Stock } from '../types'
 import { api } from '../api'
 import { useNavigation } from '../contexts/NavigationContext'
+import { Quantity } from '../utils/quantity.tsx'
 
 type SortDir = 'asc' | 'desc'
 type SortState = { key: keyof Stock; dir: SortDir }
@@ -128,19 +129,19 @@ export function StockListPage() {
                             key: 'on_hand',
                             label: 'On Hand',
                             sortable: true,
-                            render: (row) => (row.on_hand === 0 ? '—' : row.on_hand),
+                            render: (row) => <Quantity value={row.on_hand} />,
                         },
                         {
                             key: 'reserved',
                             label: 'Reserved',
                             sortable: true,
-                            render: (row) => (row.reserved === 0 ? '—' : row.reserved),
+                            render: (row) => <Quantity value={row.reserved} />,
                         },
                         {
                             key: 'available',
                             label: 'Available',
                             sortable: true,
-                            render: (row) => (row.available === 0 ? '—' : row.available),
+                            render: (row) => <Quantity value={row.available} />,
                         },
                     ]}
                 />

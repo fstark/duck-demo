@@ -4,6 +4,7 @@ import { Badge } from '../components/Badge'
 import { Stock } from '../types'
 import { api } from '../api'
 import { useNavigation } from '../contexts/NavigationContext'
+import { formatQuantity } from '../utils/quantity.tsx'
 
 function setHash(page: string, id?: string) {
     const path = id ? `#/${page}/${encodeURIComponent(id)}` : `#/${page}`
@@ -177,15 +178,15 @@ export function StockDetailPage({ stockId }: StockDetailPageProps) {
                     <Card title="Quantities">
                         <div className="grid grid-cols-3 gap-4 text-center">
                             <div>
-                                <div className="text-2xl font-semibold text-slate-800">{stock.on_hand}</div>
+                                <div className="text-2xl font-semibold text-red-600 font-mono">{formatQuantity(stock.on_hand)}</div>
                                 <div className="text-xs text-slate-600">On Hand</div>
                             </div>
                             <div>
-                                <div className="text-2xl font-semibold text-slate-800">{stock.reserved}</div>
+                                <div className="text-2xl font-semibold text-red-600 font-mono">{formatQuantity(stock.reserved)}</div>
                                 <div className="text-xs text-slate-600">Reserved</div>
                             </div>
                             <div>
-                                <div className="text-2xl font-semibold text-brand-600">{stock.available}</div>
+                                <div className="text-2xl font-semibold text-red-600 font-mono">{formatQuantity(stock.available)}</div>
                                 <div className="text-xs text-slate-600">Available</div>
                             </div>
                         </div>

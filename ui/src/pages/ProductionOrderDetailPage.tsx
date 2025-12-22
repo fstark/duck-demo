@@ -4,6 +4,7 @@ import { Badge } from '../components/Badge'
 import { ProductionOrder } from '../types'
 import { api } from '../api'
 import { useNavigation } from '../contexts/NavigationContext'
+import { Quantity } from '../utils/quantity.tsx'
 
 function setHash(page: string, id?: string) {
     const path = id ? `#/${page}/${encodeURIComponent(id)}` : `#/${page}`
@@ -163,10 +164,10 @@ export function ProductionOrderDetailPage({ productionOrderId }: ProductionOrder
                             <div>{productionOrder.item_type ? <Badge>{productionOrder.item_type}</Badge> : '—'}</div>
 
                             <div className="font-medium">Planned Quantity:</div>
-                            <div>{productionOrder.qty_planned}</div>
+                            <div><Quantity value={productionOrder.qty_planned} /></div>
 
                             <div className="font-medium">Completed Quantity:</div>
-                            <div>{productionOrder.qty_completed}</div>
+                            <div><Quantity value={productionOrder.qty_completed} /></div>
 
                             <div className="font-medium">Current Operation:</div>
                             <div>{productionOrder.current_operation || '—'}</div>

@@ -6,6 +6,7 @@ import { Item, StockSummary } from '../types'
 import { api } from '../api'
 import { useNavigation } from '../contexts/NavigationContext'
 import { formatPrice } from '../utils/currency'
+import { formatQuantity, Quantity } from '../utils/quantity.tsx'
 
 function setHash(page: string, id?: string) {
     const path = id ? `#/${page}/${encodeURIComponent(id)}` : `#/${page}`
@@ -168,18 +169,18 @@ export function ItemDetailPage({ sku }: ItemDetailPageProps) {
                 {stock && stock.by_location.length > 0 && (
                     <Card title="Stock Summary">
                         <div className="flex gap-3 text-slate-600 text-sm mb-3">
-                            <span>On hand: {stock.on_hand_total}</span>
-                            <span>Reserved: {stock.reserved_total}</span>
-                            <span>Available: {stock.available_total}</span>
+                            <span>On hand: <Quantity value={stock.on_hand_total} /></span>
+                            <span>Reserved: <Quantity value={stock.reserved_total} /></span>
+                            <span>Available: <Quantity value={stock.available_total} /></span>
                         </div>
                         <Table
                             rows={stock.by_location as any}
                             columns={[
                                 { key: 'warehouse', label: 'Wh' },
                                 { key: 'location', label: 'Loc' },
-                                { key: 'on_hand', label: 'On hand' },
-                                { key: 'reserved', label: 'Reserved' },
-                                { key: 'available', label: 'Available' },
+                                { key: 'on_hand', label: 'On hand', render: (row) => <Quantity value={row.on_hand} /> },
+                                { key: 'reserved', label: 'Reserved', render: (row) => <Quantity value={row.reserved} /> },
+                                { key: 'available', label: 'Available', render: (row) => <Quantity value={row.available} /> },
                             ]}
                             onRowClick={(row, index) => {
                                 setListContext({

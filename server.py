@@ -131,6 +131,9 @@ def stock_summary(conn: sqlite3.Connection, item_id: str) -> Dict[str, Any]:
             (item_id,),
         )
     )
+    # Calculate available for each location
+    for row in rows:
+        row["available"] = row["on_hand"] - row["reserved"]
     on_hand = sum(r["on_hand"] for r in rows)
     reserved = sum(r["reserved"] for r in rows)
     return {
@@ -213,9 +216,11 @@ def inventory_list_items(in_stock_only: bool = False, limit: int = 50) -> Dict[s
         base_sql += " ORDER BY sku LIMIT ?"
         params.append(limit)
         rows = dict_rows(conn.execute(base_sql, params))
-        # Always attach available totals for all items
+        # Always attach stock totals for all items
         for row in rows:
             summary = stock_summary(conn, row["id"])
+            row["on_hand_total"] = summary["on_hand_total"]
+            row["reserved_total"] = summary["reserved_total"]
             row["available_total"] = summary["available_total"]
         for row in rows:
             row["ui_url"] = ui_href("items", row["sku"])
@@ -886,6 +891,12 @@ def search_sales_orders(customer_id: Optional[str] = None, limit: int = 5, sort:
             customer_name = customer_row["name"] if customer_row else None
             customer_company = customer_row["company"] if customer_row else None
             
+            # Get pricing info
+            pricing_row = conn.execute(
+                "SELECT currency, total FROM sales_order_pricing WHERE sales_order_id = ?",
+                (row["id"],),
+            ).fetchone()
+            
             sales_orders.append(
                 {
                     "sales_order_id": row["id"],
@@ -896,6 +907,8 @@ def search_sales_orders(customer_id: Optional[str] = None, limit: int = 5, sort:
                     "summary": summary,
                     "fulfillment_state": fulfillment_state,
                     "lines": lines,
+                    "total": pricing_row["total"] if pricing_row else None,
+                    "currency": pricing_row["currency"] if pricing_row else None,
                     "ui_url": ui_href("orders", row["id"]),
                 }
             )

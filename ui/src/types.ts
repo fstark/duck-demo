@@ -27,6 +27,8 @@ export type Item = {
   sku: string
   name: string
   type: string
+  on_hand_total?: number
+  reserved_total?: number
   available_total?: number
   unit_price?: number
 }
@@ -62,6 +64,8 @@ export type SalesOrder = {
   fulfillment_state?: string
   lines?: Array<{ sku: string; qty: number }>
   status?: string
+  total?: number
+  currency?: string
 }
 
 export type SalesOrderDetail = {

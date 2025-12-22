@@ -7,6 +7,8 @@ import { Badge } from './components/Badge'
 import { api } from './api'
 import { Customer, Item, SalesOrder, SalesOrderDetail, StockSummary, Shipment, ProductionOrder } from './types'
 import { NavigationProvider, useNavigation } from './contexts/NavigationContext'
+import { Quantity } from './utils/quantity.tsx'
+import { formatPrice } from './utils/currency'
 import { CustomersListPage } from './pages/CustomersListPage'
 import { CustomerDetailPage } from './pages/CustomerDetailPage'
 import { ItemsListPage } from './pages/ItemsListPage'
@@ -81,8 +83,10 @@ function AppContent() {
   const [itemsCount, setItemsCount] = useState(0)
   const [stockCount, setStockCount] = useState(0)
   const [ordersCount, setOrdersCount] = useState(0)
+  const [totalSalesAmount, setTotalSalesAmount] = useState(0)
   const [shipmentsCount, setShipmentsCount] = useState(0)
   const [productionCount, setProductionCount] = useState(0)
+  const [totalProductionQty, setTotalProductionQty] = useState(0)
   const [view, setView] = useState<ViewState>(() => parseHash())
   const [apiError, setApiError] = useState<string | null>(null)
 
@@ -97,9 +101,17 @@ function AppContent() {
     api.customers().then((res) => setCustomersCount(res.customers?.length || 0)).catch(handleApiError)
     api.items(false).then((res) => setItemsCount(res.items?.length || 0)).catch(handleApiError)
     api.stockList().then((res) => setStockCount(res.stock?.length || 0)).catch(handleApiError)
-    api.salesOrders().then((res) => setOrdersCount(res.sales_orders?.length || 0)).catch(handleApiError)
+    api.salesOrders().then((res) => {
+      setOrdersCount(res.sales_orders?.length || 0)
+      const total = res.sales_orders?.reduce((sum, order) => sum + (order.total || 0), 0) || 0
+      setTotalSalesAmount(total)
+    }).catch(handleApiError)
     api.shipments().then((res) => setShipmentsCount(res.shipments?.length || 0)).catch(handleApiError)
-    api.productionOrders().then((res) => setProductionCount(res.production_orders?.length || 0)).catch(handleApiError)
+    api.productionOrders().then((res) => {
+      setProductionCount(res.production_orders?.length || 0)
+      const totalQty = res.production_orders?.reduce((sum, order) => sum + (order.qty_planned || 0), 0) || 0
+      setTotalProductionQty(totalQty)
+    }).catch(handleApiError)
   }, [])
 
   useEffect(() => {
@@ -158,43 +170,43 @@ function AppContent() {
             <SectionHeading id="overview" title="Overview" />
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mt-2">
               <Card title="Customers">
-                <div className="text-2xl font-semibold text-slate-800">{customersCount}</div>
+                <div className="text-2xl font-semibold"><Quantity value={customersCount} className="text-left block" /></div>
                 <div className="text-sm text-slate-600 mb-2">total customers</div>
                 <button className="text-brand-600 hover:underline text-sm" onClick={() => setHash('customers')} type="button">
                   View customers
                 </button>
               </Card>
               <Card title="Items">
-                <div className="text-2xl font-semibold text-slate-800">{itemsCount}</div>
+                <div className="text-2xl font-semibold"><Quantity value={itemsCount} className="text-left block" /></div>
                 <div className="text-sm text-slate-600 mb-2">total items</div>
                 <button className="text-brand-600 hover:underline text-sm" onClick={() => setHash('items')} type="button">
                   View items
                 </button>
               </Card>
               <Card title="Stock">
-                <div className="text-2xl font-semibold text-slate-800">{stockCount}</div>
+                <div className="text-2xl font-semibold"><Quantity value={stockCount} className="text-left block" /></div>
                 <div className="text-sm text-slate-600 mb-2">stock records</div>
                 <button className="text-brand-600 hover:underline text-sm" onClick={() => setHash('stock')} type="button">
                   View stock
                 </button>
               </Card>
               <Card title="Sales orders">
-                <div className="text-2xl font-semibold text-slate-800">{ordersCount}</div>
-                <div className="text-sm text-slate-600 mb-2">orders loaded</div>
+                <div className="text-2xl font-semibold"><Quantity value={ordersCount} className="text-left block" /></div>
+                <div className="text-sm text-slate-600 mb-2">orders loaded · {formatPrice(totalSalesAmount)}</div>
                 <button className="text-brand-600 hover:underline text-sm" onClick={() => setHash('orders')} type="button">
                   View orders
                 </button>
               </Card>
               <Card title="Shipments">
-                <div className="text-2xl font-semibold text-slate-800">{shipmentsCount}</div>
+                <div className="text-2xl font-semibold"><Quantity value={shipmentsCount} className="text-left block" /></div>
                 <div className="text-sm text-slate-600 mb-2">shipments loaded</div>
                 <button className="text-brand-600 hover:underline text-sm" onClick={() => setHash('shipments')} type="button">
                   View shipments
                 </button>
               </Card>
               <Card title="Production Orders">
-                <div className="text-2xl font-semibold text-slate-800">{productionCount}</div>
-                <div className="text-sm text-slate-600 mb-2">production orders</div>
+                <div className="text-2xl font-semibold"><Quantity value={productionCount} className="text-left block" /></div>
+                <div className="text-sm text-slate-600 mb-2">production orders · <Quantity value={totalProductionQty} className="font-mono inline" /> items</div>
                 <button className="text-brand-600 hover:underline text-sm" onClick={() => setHash('production')} type="button">
                   View production
                 </button>

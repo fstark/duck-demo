@@ -4,6 +4,7 @@ import { Table } from '../components/Table'
 import { ProductionOrder } from '../types'
 import { api } from '../api'
 import { useNavigation } from '../contexts/NavigationContext'
+import { Quantity } from '../utils/quantity.tsx'
 
 type SortDir = 'asc' | 'desc'
 type SortState<T> = { key: keyof T; dir: SortDir }
@@ -122,8 +123,8 @@ export function ProductionOrdersListPage() {
                                 </div>
                             ),
                         },
-                        { key: 'qty_planned', label: 'Planned', sortable: true },
-                        { key: 'qty_completed', label: 'Completed', sortable: true },
+                        { key: 'qty_planned', label: 'Planned', sortable: true, render: (row) => <Quantity value={row.qty_planned} /> },
+                        { key: 'qty_completed', label: 'Completed', sortable: true, render: (row) => <Quantity value={row.qty_completed} /> },
                         { key: 'current_operation', label: 'Operation', sortable: true },
                         { key: 'eta_finish', label: 'ETA Finish', sortable: true },
                         { key: 'eta_ship', label: 'ETA Ship', sortable: true },

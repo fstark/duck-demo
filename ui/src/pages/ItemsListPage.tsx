@@ -6,6 +6,7 @@ import { Item } from '../types'
 import { api } from '../api'
 import { useNavigation } from '../contexts/NavigationContext'
 import { formatPrice } from '../utils/currency'
+import { Quantity } from '../utils/quantity.tsx'
 
 type SortDir = 'asc' | 'desc'
 type SortState = { key: keyof Item; dir: SortDir }
@@ -121,7 +122,7 @@ export function ItemsListPage() {
                             key: 'unit_price',
                             label: 'Unit price',
                             sortable: true,
-                            render: (row) => formatPrice(row.unit_price),
+                            render: (row) => <div className="text-right">{formatPrice(row.unit_price)}</div>,
                         },
                         {
                             key: 'type',
@@ -130,10 +131,22 @@ export function ItemsListPage() {
                             render: (row) => <Badge>{row.type}</Badge>,
                         },
                         {
+                            key: 'on_hand_total',
+                            label: 'On hand',
+                            sortable: true,
+                            render: (row) => <Quantity value={row.on_hand_total} />,
+                        },
+                        {
+                            key: 'reserved_total',
+                            label: 'Reserved',
+                            sortable: true,
+                            render: (row) => <Quantity value={row.reserved_total} />,
+                        },
+                        {
                             key: 'available_total',
                             label: 'Available',
                             sortable: true,
-                            render: (row) => (row.available_total === 0 ? '—' : row.available_total),
+                            render: (row) => <Quantity value={row.available_total} />,
                         },
                     ]}
                 />

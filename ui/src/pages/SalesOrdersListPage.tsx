@@ -5,6 +5,7 @@ import { Badge } from '../components/Badge'
 import { SalesOrder } from '../types'
 import { api } from '../api'
 import { useNavigation } from '../contexts/NavigationContext'
+import { formatPrice } from '../utils/currency'
 
 type SortDir = 'asc' | 'desc'
 type SortState = { key: keyof SalesOrder; dir: SortDir }
@@ -135,6 +136,12 @@ export function SalesOrdersListPage() {
                             ),
                         },
                         { key: 'summary', label: 'Summary' },
+                        {
+                            key: 'total',
+                            label: 'Total',
+                            sortable: true,
+                            render: (row) => <div className="text-right">{row.total != null ? formatPrice(row.total, row.currency) : '—'}</div>,
+                        },
                         {
                             key: 'fulfillment_state',
                             label: 'Status',
