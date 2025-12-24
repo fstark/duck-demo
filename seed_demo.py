@@ -71,15 +71,15 @@ def seed():
 
         # Stock
         conn.executemany(
-            "INSERT INTO stock (id, item_id, warehouse, location, on_hand, reserved) VALUES (?, ?, ?, ?, ?, ?)",
+            "INSERT INTO stock (id, item_id, warehouse, location, on_hand) VALUES (?, ?, ?, ?, ?)",
             [
-                ("STK-0001", "ITEM-ELVIS-20", "WH-LYON", "FG/BIN-12", 12, 0),
-                ("STK-0002", "ITEM-MARILYN-20", "WH-LYON", "FG/BIN-14", 12, 0),
-                ("STK-0003", "ITEM-CLASSIC-10", "WH-LYON", "FG/BIN-02", 100, 10),
-                ("STK-0004", "ITEM-PVC", "WH-LYON", "RM/BULK-01", 1000, 0),
-                ("STK-0005", "ITEM-BLACK-DYE", "WH-LYON", "RM/SHELF-01", 50, 0),
-                ("STK-0006", "ITEM-YELLOW-DYE", "WH-LYON", "RM/SHELF-02", 50, 0),
-                ("STK-0007", "ITEM-BOX-SMALL", "WH-LYON", "PK/BIN-01", 200, 0),
+                ("STK-0001", "ITEM-ELVIS-20", "WH-LYON", "FG/BIN-12", 12),
+                ("STK-0002", "ITEM-MARILYN-20", "WH-LYON", "FG/BIN-14", 12),
+                ("STK-0003", "ITEM-CLASSIC-10", "WH-LYON", "FG/BIN-02", 100),
+                ("STK-0004", "ITEM-PVC", "WH-LYON", "RM/BULK-01", 1000),
+                ("STK-0005", "ITEM-BLACK-DYE", "WH-LYON", "RM/SHELF-01", 50),
+                ("STK-0006", "ITEM-YELLOW-DYE", "WH-LYON", "RM/SHELF-02", 50),
+                ("STK-0007", "ITEM-BOX-SMALL", "WH-LYON", "PK/BIN-01", 200),
             ],
         )
 
@@ -120,15 +120,6 @@ def seed():
             [
                 ("SO-1030-1", "SO-1030", "ITEM-CLASSIC-10", 10),
                 ("SO-1037-1", "SO-1037", "ITEM-ELVIS-20", 50),
-            ],
-        )
-
-        # Pricing (optional pre-fill)
-        conn.executemany(
-            "INSERT INTO sales_order_pricing (sales_order_id, currency, subtotal, discount, shipping, total) VALUES (?, ?, ?, ?, ?, ?)",
-            [
-                ("SO-1030", "EUR", 120.0, 0.0, 15.0, 135.0),
-                ("SO-1037", "EUR", 600.0, 30.0, 0.0, 570.0),
             ],
         )
 
@@ -269,19 +260,6 @@ def seed():
             ],
         )
 
-        # Pricelist data (not strictly required)
-        conn.execute(
-            "INSERT INTO pricelists (id, name, currency) VALUES (?, ?, ?)",
-            ("PL-EU-2026", "Retail EU 2026", "EUR"),
-        )
-        conn.executemany(
-            "INSERT INTO pricelist_lines (id, pricelist_id, item_id, unit_price) VALUES (?, ?, ?, ?)",
-            [
-                ("PLL-1", "PL-EU-2026", "ITEM-ELVIS-20", 12.0),
-                ("PLL-2", "PL-EU-2026", "ITEM-MARILYN-20", 12.0),
-                ("PLL-3", "PL-EU-2026", "ITEM-CLASSIC-10", 10.0),
-            ],
-        )
 
         conn.commit()
         print(f"Seeded demo database at {DB_PATH}")

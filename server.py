@@ -127,20 +127,15 @@ def load_item(conn: sqlite3.Connection, sku: str) -> Optional[sqlite3.Row]:
 def stock_summary(conn: sqlite3.Connection, item_id: str) -> Dict[str, Any]:
     rows = dict_rows(
         conn.execute(
-            "SELECT id, warehouse, location, on_hand, reserved FROM stock WHERE item_id = ?",
+            "SELECT id, warehouse, location, on_hand FROM stock WHERE item_id = ?",
             (item_id,),
         )
     )
-    # Calculate available for each location
-    for row in rows:
-        row["available"] = row["on_hand"] - row["reserved"]
     on_hand = sum(r["on_hand"] for r in rows)
-    reserved = sum(r["reserved"] for r in rows)
     return {
         "item_id": item_id,
         "on_hand_total": on_hand,
-        "reserved_total": reserved,
-        "available_total": on_hand - reserved,
+        "available_total": on_hand,
         "by_location": rows,
     }
 
@@ -162,11 +157,7 @@ def get_unit_price(conn: sqlite3.Connection, item_id: str) -> float:
     item_row = conn.execute("SELECT unit_price FROM items WHERE id = ?", (item_id,)).fetchone()
     if item_row and item_row["unit_price"] is not None:
         return float(item_row["unit_price"])
-    row = conn.execute(
-        "SELECT unit_price FROM pricelist_lines WHERE item_id = ? ORDER BY pricelist_id LIMIT 1",
-        (item_id,),
-    ).fetchone()
-    return float(row["unit_price"]) if row else PRICING_DEFAULT_UNIT_PRICE
+    return PRICING_DEFAULT_UNIT_PRICE
 
 
 def find_substitutions(
@@ -212,7 +203,7 @@ def inventory_list_items(in_stock_only: bool = False, limit: int = 50) -> Dict[s
         base_sql = "SELECT id, sku, name, type, unit_price FROM items"
         params: List[Any] = []
         if in_stock_only:
-            base_sql += " WHERE id IN (SELECT DISTINCT item_id FROM stock WHERE on_hand - reserved > 0)"
+            base_sql += " WHERE id IN (SELECT DISTINCT item_id FROM stock WHERE on_hand > 0)"
         base_sql += " ORDER BY sku LIMIT ?"
         params.append(limit)
         rows = dict_rows(conn.execute(base_sql, params))
@@ -220,7 +211,6 @@ def inventory_list_items(in_stock_only: bool = False, limit: int = 50) -> Dict[s
         for row in rows:
             summary = stock_summary(conn, row["id"])
             row["on_hand_total"] = summary["on_hand_total"]
-            row["reserved_total"] = summary["reserved_total"]
             row["available_total"] = summary["available_total"]
         for row in rows:
             row["ui_url"] = ui_href("items", row["sku"])
@@ -249,15 +239,12 @@ def compute_pricing(conn: sqlite3.Connection, sales_order_id: str) -> Dict[str, 
     discount = PRICING_VOLUME_DISCOUNT_PCT * subtotal if total_qty >= PRICING_VOLUME_QTY_THRESHOLD else 0.0
     shipping = 0.0 if subtotal >= PRICING_FREE_SHIPPING_THRESHOLD else 20.0
     total = subtotal - discount + shipping
-    conn.execute(
-        "REPLACE INTO sales_order_pricing (sales_order_id, currency, subtotal, discount, shipping, total) VALUES (?, ?, ?, ?, ?, ?)",
-        (sales_order_id, PRICING_CURRENCY, subtotal, discount, shipping, total),
-    )
-    conn.commit()
     return {
         "sales_order_id": sales_order_id,
         "pricing": {
             "currency": PRICING_CURRENCY,
+            "subtotal": subtotal,
+            "discount": discount,
             "lines": line_totals,
             "discounts": []
             if discount == 0
@@ -266,6 +253,8 @@ def compute_pricing(conn: sqlite3.Connection, sales_order_id: str) -> Dict[str, 
             ],
             "shipping": {"amount": shipping, "description": "Free shipping threshold" if shipping == 0 else "Flat shipping"},
             "total": total,
+            "subtotal": subtotal,
+            "discount": discount,
         },
     }
 
@@ -288,11 +277,7 @@ def load_sales_order_detail(conn: sqlite3.Connection, sales_order_id: str) -> Op
         ).fetchall()
     )
 
-    pricing_row = conn.execute(
-        "SELECT * FROM sales_order_pricing WHERE sales_order_id = ?",
-        (sales_order_id,),
-    ).fetchone()
-    pricing = dict(pricing_row) if pricing_row else compute_pricing(conn, sales_order_id)["pricing"]
+    pricing = compute_pricing(conn, sales_order_id)["pricing"]
 
     shipments = dict_rows(
         conn.execute(
@@ -429,30 +414,7 @@ def quote_options(conn: sqlite3.Connection, sku: str, qty: int, need_by: Optiona
     return {"options": options}
 
 
-def reserve_stock(conn: sqlite3.Connection, reference_id: str, reservations: List[Dict[str, Any]], reference_type: str = "sales_order") -> Dict[str, Any]:
-    reservation_id = generate_id(conn, "RSV", "stock_reservations")
-    for res in reservations:
-        item = load_item(conn, res["sku"])
-        if not item:
-            raise ValueError(f"Unknown SKU {res['sku']}")
-        conn.execute(
-            "INSERT INTO stock_reservations (id, reference_type, reference_id, item_id, qty, warehouse, location) VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (
-                reservation_id,
-                reference_type,
-                reference_id,
-                item["id"],
-                res["qty"],
-                res.get("warehouse"),
-                res.get("location"),
-            ),
-        )
-        conn.execute(
-            "UPDATE stock SET reserved = reserved + ? WHERE item_id = ? AND warehouse = ? AND location = ?",
-            (res["qty"], item["id"], res.get("warehouse"), res.get("location")),
-        )
-    conn.commit()
-    return {"status": "reserved", "reservation_id": reservation_id}
+
 
 
 @mcp.tool(name="get_statistics")
@@ -475,7 +437,7 @@ def get_statistics(
         entity: The entity to query (customers, sales_orders, items, stock, production_orders, shipments)
         metric: The metric to calculate (count, sum, avg, min, max)
         group_by: Optional field to group by (status, type, city, warehouse, etc.)
-        field: Field name for sum/avg/min/max operations (qty, on_hand, reserved, unit_price, etc.)
+        field: Field name for sum/avg/min/max operations (qty, on_hand, unit_price, etc.)
         status: Filter by status (for sales_orders, production_orders, shipments)
         item_type: Filter by item type (for items)
         warehouse: Filter by warehouse (for stock)
@@ -494,7 +456,7 @@ def get_statistics(
         "customers": {"table": "customers", "valid_fields": ["id"], "valid_groups": ["city", "company"]},
         "sales_orders": {"table": "sales_orders", "valid_fields": ["id"], "valid_groups": ["status", "customer_id"]},
         "items": {"table": "items", "valid_fields": ["unit_price"], "valid_groups": ["type"]},
-        "stock": {"table": "stock", "valid_fields": ["on_hand", "reserved"], "valid_groups": ["warehouse", "location", "item_id"]},
+        "stock": {"table": "stock", "valid_fields": ["on_hand"], "valid_groups": ["warehouse", "location", "item_id"]},
         "production_orders": {"table": "production_orders", "valid_fields": ["qty"], "valid_groups": ["status", "item_id"]},
         "shipments": {"table": "shipments", "valid_fields": ["id"], "valid_groups": ["status"]},
     }
@@ -709,7 +671,7 @@ def search_items(words: List[str], limit: int = 10, min_score: int = 1) -> Dict[
 @mcp.tool(name="inventory_get_stock_summary")
 @log_tool("inventory_get_stock_summary")
 def get_stock_summary(item_id: Optional[str] = None, sku: Optional[str] = None) -> Dict[str, Any]:
-    """Return on-hand, reserved, and available by location for an item."""
+    """Return on-hand and available by location for an item."""
     if not item_id and not sku:
         raise ValueError("Provide item_id or sku")
     with db_conn() as conn:
@@ -789,18 +751,6 @@ def price_sales_order(sales_order_id: str, pricelist: Optional[str] = None) -> D
     """Apply simple pricing logic (12 EUR each, 5% discount for 24+, free shipping over €300)."""
     with db_conn() as conn:
         return compute_pricing(conn, sales_order_id)
-
-
-@mcp.tool(name="inventory_reserve_stock")
-@log_tool("inventory_reserve_stock")
-def reserve_stock_tool(
-    reference_id: str,
-    reservations: List[Dict[str, Any]],
-    reason: str = "sales_order",
-) -> Dict[str, Any]:
-    """Reserve stock for a reference (e.g., sales order)."""
-    with db_conn() as conn:
-        return reserve_stock(conn, reference_id, reservations, reference_type=reason)
 
 
 @mcp.tool(name="logistics_create_shipment")
@@ -885,67 +835,7 @@ def _render_body(subject: str, context: Optional[Dict[str, Any]]) -> str:
     return "\n".join(lines)
 
 
-@mcp.tool(name="sales_draft_email")
-@log_tool("sales_draft_email")
-def draft_email(
-    to: str,
-    subject: str,
-    body: Optional[str] = None,
-    context: Optional[Dict[str, Any]] = None,
-) -> Dict[str, Any]:
-    """Store an email draft for later sending."""
-    with db_conn() as conn:
-        draft_id = generate_id(conn, "DRAFT", "email_drafts")
-        draft_body = body or _render_body(subject, context)
-        conn.execute(
-            "INSERT INTO email_drafts (id, to_address, subject, body) VALUES (?, ?, ?, ?)",
-            (draft_id, to, subject, draft_body),
-        )
-        conn.commit()
-        return {"draft_id": draft_id, "body": draft_body}
 
-
-@mcp.tool(name="sales_mark_email_sent")
-@log_tool("sales_mark_email_sent")
-def mark_email_sent(draft_id: str, sent_at: Optional[str] = None) -> Dict[str, Any]:
-    """Mark a draft as sent."""
-    when = sent_at or datetime.utcnow().isoformat()
-    with db_conn() as conn:
-        conn.execute(
-            "UPDATE email_drafts SET sent_at = ? WHERE id = ?",
-            (when, draft_id),
-        )
-        conn.commit()
-        return {"status": "sent", "draft_id": draft_id, "sent_at": when}
-
-
-@mcp.tool(name="sales_list_email_drafts")
-@log_tool("sales_list_email_drafts")
-def list_email_drafts(sent_only: bool = False, include_body: bool = False, limit: int = 20) -> Dict[str, Any]:
-    """Fetch email drafts. Defaults to unsent; set sent_only to True to fetch sent drafts."""
-    with db_conn() as conn:
-        if sent_only:
-            rows = conn.execute(
-                "SELECT id, to_address, subject, body, sent_at FROM email_drafts WHERE sent_at IS NOT NULL ORDER BY sent_at DESC LIMIT ?",
-                (limit,),
-            ).fetchall()
-        else:
-            rows = conn.execute(
-                "SELECT id, to_address, subject, body, sent_at FROM email_drafts WHERE sent_at IS NULL ORDER BY id DESC LIMIT ?",
-                (limit,),
-            ).fetchall()
-        drafts = []
-        for row in rows:
-            entry = {
-                "draft_id": row["id"],
-                "to": row["to_address"],
-                "subject": row["subject"],
-                "sent_at": row["sent_at"],
-            }
-            if include_body:
-                entry["body"] = row["body"]
-            drafts.append(entry)
-        return {"drafts": drafts}
 
 
 @mcp.tool(name="sales_search_sales_orders")
@@ -986,11 +876,8 @@ def search_sales_orders(customer_id: Optional[str] = None, limit: int = 5, sort:
             customer_name = customer_row["name"] if customer_row else None
             customer_company = customer_row["company"] if customer_row else None
             
-            # Get pricing info
-            pricing_row = conn.execute(
-                "SELECT currency, total FROM sales_order_pricing WHERE sales_order_id = ?",
-                (row["id"],),
-            ).fetchone()
+            # Compute pricing on-the-fly
+            pricing_data = compute_pricing(conn, row["id"])["pricing"]
             
             sales_orders.append(
                 {
@@ -1002,8 +889,8 @@ def search_sales_orders(customer_id: Optional[str] = None, limit: int = 5, sort:
                     "summary": summary,
                     "fulfillment_state": fulfillment_state,
                     "lines": lines,
-                    "total": pricing_row["total"] if pricing_row else None,
-                    "currency": pricing_row["currency"] if pricing_row else None,
+                    "total": pricing_data["total"],
+                    "currency": pricing_data["currency"],
                     "ui_url": ui_href("orders", row["id"]),
                 }
             )
@@ -1269,9 +1156,7 @@ async def api_stock(request):
                 i.type as item_type,
                 s.warehouse,
                 s.location,
-                s.on_hand,
-                s.reserved,
-                (s.on_hand - s.reserved) as available
+                s.on_hand
             FROM stock s
             JOIN items i ON s.item_id = i.id
             ORDER BY s.warehouse, s.location
@@ -1298,9 +1183,7 @@ async def api_stock_detail(request):
                 i.type as item_type,
                 s.warehouse,
                 s.location,
-                s.on_hand,
-                s.reserved,
-                (s.on_hand - s.reserved) as available
+                s.on_hand
             FROM stock s
             JOIN items i ON s.item_id = i.id
             WHERE s.id = ?
