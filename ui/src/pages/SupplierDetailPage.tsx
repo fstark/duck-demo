@@ -151,7 +151,7 @@ export function SupplierDetailPage({ supplierId }: SupplierDetailPageProps) {
                                         <Badge>{row.status}</Badge>
                                     )
                                 },
-                                { key: 'eta_delivery', label: 'ETA Delivery', sortable: true },
+                                { key: 'expected_delivery', label: 'Expected Delivery', sortable: true },
                             ]}
                             sortKey={poSort?.key}
                             sortDir={poSort?.dir}

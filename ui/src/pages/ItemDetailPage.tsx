@@ -28,12 +28,11 @@ export function ItemDetailPage({ sku }: ItemDetailPageProps) {
 
     useEffect(() => {
         Promise.all([
-            api.items(false),
+            api.itemDetail(sku),
             api.stock(sku)
         ])
-            .then(([itemsRes, stockRes]) => {
-                const found = itemsRes.items?.find((i) => i.sku === sku)
-                setItem(found || null)
+            .then(([itemRes, stockRes]) => {
+                setItem(itemRes as Item)
                 setStock(stockRes as StockSummary)
                 setLoading(false)
             })
@@ -166,6 +165,46 @@ export function ItemDetailPage({ sku }: ItemDetailPageProps) {
                         <span className="font-medium">Unit price:</span> {formatPrice(item.unit_price)}
                     </div>
                 </div>
+                {((item.recipes && item.recipes.length > 0) || (item.used_in_recipes && item.used_in_recipes.length > 0)) && (
+                    <Card title="Recipes">
+                        <Table
+                            rows={[
+                                ...(item.recipes || []).map(r => ({
+                                    ...r,
+                                    role: 'output',
+                                    recipe_id: r.id,
+                                    item_name: item.name,
+                                    batch_qty: `${r.output_qty} ${item.uom || 'ea'}`,
+                                })),
+                                ...(item.used_in_recipes || []).map(r => ({
+                                    ...r,
+                                    role: 'ingredient',
+                                    id: r.recipe_id,
+                                    item_name: r.output_name,
+                                    batch_qty: `${r.qty_per_batch} ${item.uom || ''}`,
+                                    production_time_hours: undefined,
+                                    ingredient_count: undefined,
+                                    operation_count: undefined,
+                                })),
+                            ] as any}
+                            columns={[
+                                { 
+                                    key: 'role', 
+                                    label: 'Role', 
+                                    sortable: true,
+                                    render: (row) => <Badge>{row.role}</Badge>
+                                },
+                                { key: 'recipe_id', label: 'Recipe ID', sortable: true, render: (row) => row.recipe_id || row.id },
+                                { key: 'item_name', label: 'Item', sortable: true },
+                                { key: 'batch_qty', label: 'Qty/Batch', sortable: true },
+                                { key: 'production_time_hours', label: 'Time', sortable: true, render: (row) => row.production_time_hours ? `${row.production_time_hours}h` : '—' },
+                                { key: 'ingredient_count', label: 'Ingredients', sortable: true, render: (row) => row.ingredient_count ?? '—' },
+                                { key: 'operation_count', label: 'Operations', sortable: true, render: (row) => row.operation_count ?? '—' },
+                            ]}
+                            onRowClick={(row) => setHash('recipes', row.recipe_id || row.id)}
+                        />
+                    </Card>
+                )}
                 {stock && stock.by_location.length > 0 && (
                     <Card title="Stock Summary">
                         <div className="flex gap-3 text-slate-600 text-sm mb-3">

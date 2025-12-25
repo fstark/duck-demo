@@ -78,8 +78,8 @@ export function PurchaseOrderDetailPage({ purchaseOrderId }: PurchaseOrderDetail
                         </dd>
                     </div>
                     <div>
-                        <dt className="text-sm font-medium text-gray-500">ETA Delivery</dt>
-                        <dd className="text-sm text-gray-900">{purchaseOrder.eta_delivery || '—'}</dd>
+                        <dt className="text-sm font-medium text-gray-500">Expected Delivery</dt>
+                        <dd className="text-sm text-gray-900">{purchaseOrder.expected_delivery || '—'}</dd>
                     </div>
                     <div>
                         <dt className="text-sm font-medium text-gray-500">Supplier</dt>

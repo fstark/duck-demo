@@ -176,7 +176,7 @@ export type PurchaseOrder = {
   uom?: string
   qty: number
   status: string
-  eta_delivery?: string
+  expected_delivery?: string
   contact_name?: string
   contact_email?: string
 }

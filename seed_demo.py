@@ -314,6 +314,22 @@ def seed():
             ],
         )
 
+        # Purchase orders for materials
+        conn.executemany(
+            "INSERT INTO purchase_orders (id, item_id, qty, supplier_id, status, ordered_at, expected_delivery, received_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            [
+                ("PO-1001", "ITEM-PVC", 500, "SUP-001", "received", "2025-12-01", "2025-12-08", "2025-12-07"),
+                ("PO-1002", "ITEM-BLACK-DYE", 50, "SUP-002", "received", "2025-12-01", "2025-12-06", "2025-12-06"),
+                ("PO-1003", "ITEM-YELLOW-DYE", 30, "SUP-002", "received", "2025-12-01", "2025-12-06", "2025-12-06"),
+                ("PO-1004", "ITEM-BLACK-DYE", 25, "SUP-002", "received", "2025-12-05", "2025-12-10", "2025-12-10"),
+                ("PO-1005", "ITEM-BOX-SMALL", 1000, "SUP-003", "received", "2025-12-10", "2025-12-17", "2025-12-16"),
+                ("PO-1006", "ITEM-PVC", 750, "SUP-001", "ordered", "2025-12-20", "2025-12-27", None),
+                ("PO-1007", "ITEM-YELLOW-DYE", 40, "SUP-002", "ordered", "2025-12-22", "2025-12-29", None),
+                ("PO-1008", "ITEM-BLACK-DYE", 60, "SUP-002", "ordered", "2025-12-23", "2025-12-30", None),
+                ("PO-1009", "ITEM-BOX-SMALL", 1500, "SUP-003", "ordered", "2025-12-24", "2026-01-02", None),
+            ],
+        )
+
         # Production orders (recipe-based, smaller set)
         conn.executemany(
             "INSERT INTO production_orders (id, recipe_id, item_id, qty_planned, qty_completed, current_operation, status, eta_finish, eta_ship) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",

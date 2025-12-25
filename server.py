@@ -1028,9 +1028,8 @@ def get_production_order_status(production_order_id: str) -> Dict[str, Any]:
                 ingredients = dict_rows(conn.execute(
                     """SELECT ri.*, i.sku as ingredient_sku, i.name as ingredient_name, i.uom as ingredient_uom
                        FROM recipe_ingredients ri
-                       JOIN items i ON ri.ingredient_item_id = i.id
-                       WHERE ri.recipe_id = ?
-                       ORDER BY ri.seq""",
+                       JOIN items i ON ri.input_item_id = i.id
+                       WHERE ri.recipe_id = ?""",
                     (result["recipe_id"],)
                 ))
                 result["recipe"]["ingredients"] = ingredients
@@ -1039,7 +1038,7 @@ def get_production_order_status(production_order_id: str) -> Dict[str, Any]:
                 operations = dict_rows(conn.execute(
                     """SELECT * FROM recipe_operations
                        WHERE recipe_id = ?
-                       ORDER BY seq""",
+                       ORDER BY sequence_order""",
                     (result["recipe_id"],)
                 ))
                 result["recipe"]["operations"] = operations
@@ -1177,9 +1176,8 @@ def recipe_get(recipe_id: str) -> Dict[str, Any]:
         ingredients = dict_rows(conn.execute(
             """SELECT ri.*, i.sku as ingredient_sku, i.name as ingredient_name, i.uom as ingredient_uom
                FROM recipe_ingredients ri
-               JOIN items i ON ri.ingredient_item_id = i.id
-               WHERE ri.recipe_id = ?
-               ORDER BY ri.seq""",
+               JOIN items i ON ri.input_item_id = i.id
+               WHERE ri.recipe_id = ?""",
             (recipe_id,)
         ))
         result["ingredients"] = ingredients
@@ -1188,7 +1186,7 @@ def recipe_get(recipe_id: str) -> Dict[str, Any]:
         operations = dict_rows(conn.execute(
             """SELECT * FROM recipe_operations 
                WHERE recipe_id = ?
-               ORDER BY seq""",
+               ORDER BY sequence_order""",
             (recipe_id,)
         ))
         result["operations"] = operations
@@ -1286,7 +1284,7 @@ def production_start_order(production_order_id: str) -> Dict[str, Any]:
         
         # Get first operation
         first_op = conn.execute(
-            "SELECT operation_name FROM recipe_operations WHERE recipe_id = ? ORDER BY seq LIMIT 1",
+            "SELECT operation_name FROM recipe_operations WHERE recipe_id = ? ORDER BY sequence_order LIMIT 1",
             (order["recipe_id"],)
         ).fetchone()
         
@@ -1403,13 +1401,13 @@ def purchase_create_order(
         
         # Create purchase order
         po_id = generate_id("PO")
-        eta_delivery = (datetime.utcnow().date() + timedelta(days=7)).isoformat()
+        expected_delivery = (datetime.utcnow().date() + timedelta(days=7)).isoformat()
         
         conn.execute(
             """INSERT INTO purchase_orders 
-               (id, supplier_id, item_id, qty, status, eta_delivery)
+               (id, supplier_id, item_id, qty, status, expected_delivery)
                VALUES (?, ?, ?, ?, 'ordered', ?)""",
-            (po_id, supplier["id"], item["id"], qty, eta_delivery)
+            (po_id, supplier["id"], item["id"], qty, expected_delivery)
         )
         conn.commit()
         
@@ -1420,7 +1418,7 @@ def purchase_create_order(
             "item_name": item["name"],
             "qty": qty,
             "status": "ordered",
-            "eta_delivery": eta_delivery,
+            "expected_delivery": expected_delivery,
             "message": f"Purchase order {po_id} created for {qty} {item['uom']} of {item['name']} from {supplier['name']}"
         }
 
@@ -1615,33 +1613,31 @@ async def api_item_detail(request):
         stock = stock_summary(conn, item["id"])
         result["stock"] = stock
         
-        # If finished good, find recipes that produce it
-        if item["type"] == "finished_good":
-            recipes = dict_rows(conn.execute(
-                """SELECT r.*, 
-                   (SELECT COUNT(*) FROM recipe_ingredients WHERE recipe_id = r.id) as ingredient_count,
-                   (SELECT COUNT(*) FROM recipe_operations WHERE recipe_id = r.id) as operation_count
-                   FROM recipes r
-                   WHERE r.output_item_id = ?
-                   ORDER BY r.id""",
-                (item["id"],)
-            ))
-            result["recipes"] = recipes
+        # Find recipes that produce this item
+        recipes = dict_rows(conn.execute(
+            """SELECT r.*, 
+               (SELECT COUNT(*) FROM recipe_ingredients WHERE recipe_id = r.id) as ingredient_count,
+               (SELECT COUNT(*) FROM recipe_operations WHERE recipe_id = r.id) as operation_count
+               FROM recipes r
+               WHERE r.output_item_id = ?
+               ORDER BY r.id""",
+            (item["id"],)
+        ))
+        result["recipes"] = recipes
         
-        # If raw material or component, find recipes that use it
-        if item["type"] in ("raw_material", "component"):
-            used_in_recipes = dict_rows(conn.execute(
-                """SELECT DISTINCT r.id as recipe_id, r.output_item_id, 
-                          i.sku as output_sku, i.name as output_name,
-                          ri.qty_per_batch
-                   FROM recipe_ingredients ri
-                   JOIN recipes r ON ri.recipe_id = r.id
-                   JOIN items i ON r.output_item_id = i.id
-                   WHERE ri.ingredient_item_id = ?
-                   ORDER BY r.id""",
-                (item["id"],)
-            ))
-            result["used_in_recipes"] = used_in_recipes
+        # Find recipes that use this item as an ingredient
+        used_in_recipes = dict_rows(conn.execute(
+            """SELECT DISTINCT r.id as recipe_id, r.output_item_id, 
+                      i.sku as output_sku, i.name as output_name,
+                      ri.input_qty as qty_per_batch
+               FROM recipe_ingredients ri
+               JOIN recipes r ON ri.recipe_id = r.id
+               JOIN items i ON r.output_item_id = i.id
+               WHERE ri.input_item_id = ?
+               ORDER BY r.id""",
+            (item["id"],)
+        ))
+        result["used_in_recipes"] = used_in_recipes
         
         return _json(result)
 
@@ -1884,7 +1880,7 @@ async def api_supplier_detail(request):
                FROM purchase_orders po
                JOIN items i ON po.item_id = i.id
                WHERE po.supplier_id = ?
-               ORDER BY po.eta_delivery DESC
+               ORDER BY po.expected_delivery DESC
                LIMIT 100""",
             (supplier_id,)
         ))
@@ -1909,7 +1905,7 @@ async def api_purchase_orders(request):
                    JOIN suppliers s ON po.supplier_id = s.id
                    JOIN items i ON po.item_id = i.id
                    WHERE po.status = ?
-                   ORDER BY po.eta_delivery DESC
+                   ORDER BY po.expected_delivery DESC
                    LIMIT ?""",
                 (status, limit)
             ))
@@ -1919,7 +1915,7 @@ async def api_purchase_orders(request):
                    FROM purchase_orders po
                    JOIN suppliers s ON po.supplier_id = s.id
                    JOIN items i ON po.item_id = i.id
-                   ORDER BY po.eta_delivery DESC
+                   ORDER BY po.expected_delivery DESC
                    LIMIT ?""",
                 (limit,)
             ))
@@ -1935,7 +1931,7 @@ async def api_purchase_order_detail(request):
     
     with db_conn() as conn:
         po = conn.execute(
-            """SELECT po.*, s.name as supplier_name, s.contact_name, s.contact_email,
+            """SELECT po.*, s.name as supplier_name, s.contact_email,
                       i.sku as item_sku, i.name as item_name, i.type as item_type, i.uom
                FROM purchase_orders po
                JOIN suppliers s ON po.supplier_id = s.id
