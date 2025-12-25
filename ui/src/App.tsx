@@ -21,11 +21,17 @@ import { ProductionOrdersListPage } from './pages/ProductionOrdersListPage'
 import { ProductionOrderDetailPage } from './pages/ProductionOrderDetailPage'
 import { StockListPage } from './pages/StockListPage'
 import { StockDetailPage } from './pages/StockDetailPage'
+import { SuppliersListPage } from './pages/SuppliersListPage'
+import { SupplierDetailPage } from './pages/SupplierDetailPage'
+import { RecipesListPage } from './pages/RecipesListPage'
+import { RecipeDetailPage } from './pages/RecipeDetailPage'
+import { PurchaseOrdersListPage } from './pages/PurchaseOrdersListPage'
+import { PurchaseOrderDetailPage } from './pages/PurchaseOrderDetailPage'
 
 type SortDir = 'asc' | 'desc'
 type SortState<T> = { key: keyof T; dir: SortDir }
 
-type ViewPage = 'home' | 'customers' | 'items' | 'stock' | 'orders' | 'shipments' | 'production'
+type ViewPage = 'home' | 'customers' | 'items' | 'stock' | 'orders' | 'shipments' | 'production' | 'suppliers' | 'recipes' | 'purchase-orders'
 type ViewState = { page: ViewPage; id?: string }
 
 function SectionHeading({ id, title }: { id: string; title: string }) {
@@ -42,7 +48,7 @@ function parseHash(): ViewState {
   const parts = hash.split('/').filter(Boolean)
   const page = (parts[0] as ViewPage) || 'home'
   const id = parts[1] ? decodeURIComponent(parts.slice(1).join('/')) : undefined
-  const allowed: ViewPage[] = ['home', 'customers', 'items', 'stock', 'orders', 'shipments', 'production']
+  const allowed: ViewPage[] = ['home', 'customers', 'items', 'stock', 'orders', 'shipments', 'production', 'suppliers', 'recipes', 'purchase-orders']
   return { page: allowed.includes(page) ? page : 'home', id }
 }
 
@@ -131,6 +137,9 @@ function AppContent() {
           { page: 'orders', label: 'Sales Orders' },
           { page: 'shipments', label: 'Shipments' },
           { page: 'production', label: 'Production' },
+          { page: 'recipes', label: 'Recipes' },
+          { page: 'suppliers', label: 'Suppliers' },
+          { page: 'purchase-orders', label: 'Purchases' },
         ] as Array<{ page: ViewPage; label: string }>
       ).map((link) => (
         <button
@@ -229,6 +238,15 @@ function AppContent() {
 
         {view.page === 'shipments' && !view.id && <ShipmentsListPage />}
         {view.page === 'shipments' && view.id && <ShipmentDetailPage shipmentId={view.id} />}
+
+        {view.page === 'suppliers' && !view.id && <SuppliersListPage />}
+        {view.page === 'suppliers' && view.id && <SupplierDetailPage supplierId={view.id} />}
+
+        {view.page === 'recipes' && !view.id && <RecipesListPage />}
+        {view.page === 'recipes' && view.id && <RecipeDetailPage recipeId={view.id} />}
+
+        {view.page === 'purchase-orders' && !view.id && <PurchaseOrdersListPage />}
+        {view.page === 'purchase-orders' && view.id && <PurchaseOrderDetailPage purchaseOrderId={view.id} />}
 
         {view.page === 'production' && !view.id && <ProductionOrdersListPage />}
         {view.page === 'production' && view.id && <ProductionOrderDetailPage productionOrderId={view.id} />}
