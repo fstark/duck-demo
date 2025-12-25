@@ -13,7 +13,9 @@ CREATE TABLE IF NOT EXISTS items (
     sku TEXT NOT NULL UNIQUE,
     name TEXT NOT NULL,
     type TEXT NOT NULL,
-    unit_price REAL
+    unit_price REAL,
+    uom TEXT DEFAULT 'ea',
+    reorder_qty REAL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS stock (
@@ -71,12 +73,69 @@ CREATE TABLE IF NOT EXISTS sales_order_shipments (
     PRIMARY KEY (sales_order_id, shipment_id)
 );
 
+-- Production order workflow: planned -> waiting (blocked on stock) -> ready -> in_progress -> completed
+-- qty_planned and qty_completed represent number of recipe batches, not individual units
 CREATE TABLE IF NOT EXISTS production_orders (
     id TEXT PRIMARY KEY,
+    recipe_id TEXT,
     item_id TEXT NOT NULL,
     qty_planned REAL NOT NULL,
     qty_completed REAL NOT NULL,
     current_operation TEXT,
+    status TEXT DEFAULT 'planned',
+    parent_production_order_id TEXT,
     eta_finish TEXT,
     eta_ship TEXT
+);
+
+-- Suppliers for raw materials
+CREATE TABLE IF NOT EXISTS suppliers (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    contact_email TEXT,
+    lead_time_days INTEGER NOT NULL
+);
+
+-- Recipes define how to produce finished goods from materials
+CREATE TABLE IF NOT EXISTS recipes (
+    id TEXT PRIMARY KEY,
+    output_item_id TEXT NOT NULL,
+    output_qty REAL NOT NULL,
+    output_uom TEXT NOT NULL DEFAULT 'ea',
+    production_time_hours REAL NOT NULL,
+    notes TEXT
+);
+
+-- Recipe ingredients (bill of materials)
+CREATE TABLE IF NOT EXISTS recipe_ingredients (
+    id TEXT PRIMARY KEY,
+    recipe_id TEXT NOT NULL,
+    input_item_id TEXT NOT NULL,
+    input_qty REAL NOT NULL,
+    input_uom TEXT NOT NULL,
+    notes TEXT
+);
+
+-- Recipe operations (production steps)
+CREATE TABLE IF NOT EXISTS recipe_operations (
+    id TEXT PRIMARY KEY,
+    recipe_id TEXT NOT NULL,
+    sequence_order INTEGER NOT NULL,
+    operation_name TEXT NOT NULL,
+    duration_hours REAL NOT NULL,
+    notes TEXT
+);
+
+-- Purchase orders for restocking materials
+-- Status: 'ordered' (sent to supplier), 'received' (arrived)
+-- reorder_qty on items accumulates need; purchase_restock_materials() creates these orders
+CREATE TABLE IF NOT EXISTS purchase_orders (
+    id TEXT PRIMARY KEY,
+    item_id TEXT NOT NULL,
+    qty REAL NOT NULL,
+    supplier_id TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'ordered',
+    ordered_at TEXT DEFAULT (datetime('now')),
+    expected_delivery TEXT,
+    received_at TEXT
 );

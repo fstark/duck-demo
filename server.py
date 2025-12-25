@@ -1007,7 +1007,44 @@ def get_production_order_status(production_order_id: str) -> Dict[str, Any]:
         row = conn.execute(query, (production_order_id,)).fetchone()
         if not row:
             return {"error": "Production order not found", "production_order_id": production_order_id}
-        return dict(row)
+        
+        result = dict(row)
+        result["ui_url"] = ui_href("production-orders", production_order_id)
+        
+        # If recipe-based production order, include recipe details
+        if result.get("recipe_id"):
+            recipe = conn.execute(
+                """SELECT r.*, i.sku as output_sku, i.name as output_name
+                   FROM recipes r
+                   JOIN items i ON r.output_item_id = i.id
+                   WHERE r.id = ?""",
+                (result["recipe_id"],)
+            ).fetchone()
+            
+            if recipe:
+                result["recipe"] = dict(recipe)
+                
+                # Get recipe ingredients
+                ingredients = dict_rows(conn.execute(
+                    """SELECT ri.*, i.sku as ingredient_sku, i.name as ingredient_name, i.uom as ingredient_uom
+                       FROM recipe_ingredients ri
+                       JOIN items i ON ri.ingredient_item_id = i.id
+                       WHERE ri.recipe_id = ?
+                       ORDER BY ri.seq""",
+                    (result["recipe_id"],)
+                ))
+                result["recipe"]["ingredients"] = ingredients
+                
+                # Get recipe operations
+                operations = dict_rows(conn.execute(
+                    """SELECT * FROM recipe_operations
+                       WHERE recipe_id = ?
+                       ORDER BY seq""",
+                    (result["recipe_id"],)
+                ))
+                result["recipe"]["operations"] = operations
+        
+        return result
 
 
 @mcp.tool(name="production_find_orders_by_date_range")
@@ -1043,6 +1080,438 @@ def find_production_orders_by_date_range(
         """
         rows = conn.execute(query, (start_date, end_date, limit)).fetchall()
         return [dict(row) for row in rows]
+
+
+@mcp.tool(name="inventory_check_availability")
+@log_tool("inventory_check_availability")
+def inventory_check_availability(item_sku: str, qty_required: float) -> Dict[str, Any]:
+    """
+    Check if sufficient inventory is available for an item.
+    Returns availability status, on_hand total, and shortfall if any.
+    
+    Parameters:
+        item_sku: The SKU of the item to check
+        qty_required: The quantity needed
+    """
+    with db_conn() as conn:
+        item = load_item(conn, item_sku)
+        if not item:
+            raise ValueError(f"Item {item_sku} not found")
+        
+        summary = stock_summary(conn, item["id"])
+        available = summary["available_total"]
+        is_available = available >= qty_required
+        shortfall = 0.0 if is_available else (qty_required - available)
+        
+        return {
+            "item_sku": item_sku,
+            "item_name": item["name"],
+            "qty_required": qty_required,
+            "qty_available": available,
+            "is_available": is_available,
+            "shortfall": shortfall,
+            "stock_locations": summary["by_location"]
+        }
+
+
+@mcp.tool(name="recipe_list")
+@log_tool("recipe_list")
+def recipe_list(output_item_sku: Optional[str] = None, limit: int = 50) -> Dict[str, Any]:
+    """
+    List recipes, optionally filtering by output item SKU.
+    
+    Parameters:
+        output_item_sku: Optional SKU to filter recipes that produce this item
+        limit: Maximum number of recipes to return
+    """
+    with db_conn() as conn:
+        if output_item_sku:
+            item = load_item(conn, output_item_sku)
+            if not item:
+                raise ValueError(f"Item {output_item_sku} not found")
+            rows = dict_rows(conn.execute(
+                """SELECT r.*, i.sku as output_sku, i.name as output_name 
+                   FROM recipes r 
+                   JOIN items i ON r.output_item_id = i.id 
+                   WHERE r.output_item_id = ?
+                   ORDER BY r.id LIMIT ?""",
+                (item["id"], limit)
+            ))
+        else:
+            rows = dict_rows(conn.execute(
+                """SELECT r.*, i.sku as output_sku, i.name as output_name 
+                   FROM recipes r 
+                   JOIN items i ON r.output_item_id = i.id 
+                   ORDER BY r.id LIMIT ?""",
+                (limit,)
+            ))
+        
+        return {"recipes": rows}
+
+
+@mcp.tool(name="recipe_get")
+@log_tool("recipe_get")
+def recipe_get(recipe_id: str) -> Dict[str, Any]:
+    """
+    Get detailed recipe information including ingredients and operations.
+    
+    Parameters:
+        recipe_id: The recipe ID (e.g., 'RCP-ELVIS-20')
+    """
+    with db_conn() as conn:
+        # Get recipe header
+        recipe = conn.execute(
+            """SELECT r.*, i.sku as output_sku, i.name as output_name, i.type as output_type
+               FROM recipes r 
+               JOIN items i ON r.output_item_id = i.id 
+               WHERE r.id = ?""",
+            (recipe_id,)
+        ).fetchone()
+        
+        if not recipe:
+            raise ValueError(f"Recipe {recipe_id} not found")
+        
+        result = dict(recipe)
+        
+        # Get ingredients
+        ingredients = dict_rows(conn.execute(
+            """SELECT ri.*, i.sku as ingredient_sku, i.name as ingredient_name, i.uom as ingredient_uom
+               FROM recipe_ingredients ri
+               JOIN items i ON ri.ingredient_item_id = i.id
+               WHERE ri.recipe_id = ?
+               ORDER BY ri.seq""",
+            (recipe_id,)
+        ))
+        result["ingredients"] = ingredients
+        
+        # Get operations
+        operations = dict_rows(conn.execute(
+            """SELECT * FROM recipe_operations 
+               WHERE recipe_id = ?
+               ORDER BY seq""",
+            (recipe_id,)
+        ))
+        result["operations"] = operations
+        
+        return result
+
+
+@mcp.tool(name="production_create_order")
+@log_tool("production_create_order")
+def production_create_order(
+    recipe_id: str,
+    batches: int,
+    notes: Optional[str] = None
+) -> Dict[str, Any]:
+    """
+    Create a new production order to execute a recipe.
+    Checks ingredient availability and creates order with 'planned' status.
+    
+    Parameters:
+        recipe_id: The recipe to execute (e.g., 'RCP-ELVIS-20')
+        batches: Number of recipe batches to produce
+        notes: Optional notes for the production order
+    """
+    with db_conn() as conn:
+        # Get recipe details
+        recipe_data = recipe_get(recipe_id)
+        
+        # Check ingredient availability
+        shortfalls = []
+        for ing in recipe_data["ingredients"]:
+            qty_needed = ing["qty_per_batch"] * batches
+            check = inventory_check_availability(ing["ingredient_sku"], qty_needed)
+            if not check["is_available"]:
+                shortfalls.append({
+                    "ingredient_sku": ing["ingredient_sku"],
+                    "ingredient_name": ing["ingredient_name"],
+                    "qty_needed": qty_needed,
+                    "qty_available": check["qty_available"],
+                    "shortfall": check["shortfall"]
+                })
+        
+        # Determine initial status
+        status = "planned" if shortfalls else "ready"
+        
+        # Calculate dates
+        prod_time_days = recipe_data["production_time_hours"] / 24.0
+        eta_start = (datetime.utcnow().date() + timedelta(days=1)).isoformat()
+        eta_finish = (datetime.utcnow().date() + timedelta(days=1 + int(prod_time_days))).isoformat()
+        
+        # Create production order
+        order_id = generate_id("MO")
+        conn.execute(
+            """INSERT INTO production_orders 
+               (id, recipe_id, item_id, qty_planned, qty_produced, current_operation, status, eta_start, eta_finish, notes)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (order_id, recipe_id, recipe_data["output_item_id"], batches, 0, None, status, eta_start, eta_finish, notes)
+        )
+        conn.commit()
+        
+        return {
+            "production_order_id": order_id,
+            "recipe_id": recipe_id,
+            "output_item": recipe_data["output_sku"],
+            "batches": batches,
+            "total_output_qty": batches * recipe_data["output_qty"],
+            "status": status,
+            "eta_start": eta_start,
+            "eta_finish": eta_finish,
+            "ingredient_shortfalls": shortfalls,
+            "ui_url": ui_href("production-orders", order_id)
+        }
+
+
+@mcp.tool(name="production_start_order")
+@log_tool("production_start_order")
+def production_start_order(production_order_id: str) -> Dict[str, Any]:
+    """
+    Start a production order (change status from 'ready' to 'in_progress').
+    Sets current_operation to the first operation in the recipe.
+    
+    Parameters:
+        production_order_id: The production order ID (e.g., 'MO-1000')
+    """
+    with db_conn() as conn:
+        order = conn.execute(
+            "SELECT * FROM production_orders WHERE id = ?",
+            (production_order_id,)
+        ).fetchone()
+        
+        if not order:
+            raise ValueError(f"Production order {production_order_id} not found")
+        
+        if order["status"] != "ready":
+            raise ValueError(f"Production order {production_order_id} is not ready (current status: {order['status']})")
+        
+        # Get first operation
+        first_op = conn.execute(
+            "SELECT operation_name FROM recipe_operations WHERE recipe_id = ? ORDER BY seq LIMIT 1",
+            (order["recipe_id"],)
+        ).fetchone()
+        
+        current_operation = first_op["operation_name"] if first_op else None
+        
+        conn.execute(
+            "UPDATE production_orders SET status = 'in_progress', current_operation = ? WHERE id = ?",
+            (current_operation, production_order_id)
+        )
+        conn.commit()
+        
+        return {
+            "production_order_id": production_order_id,
+            "status": "in_progress",
+            "current_operation": current_operation,
+            "message": f"Production order {production_order_id} started"
+        }
+
+
+@mcp.tool(name="production_complete_order")
+@log_tool("production_complete_order")
+def production_complete_order(
+    production_order_id: str,
+    qty_produced: int,
+    warehouse: str = "MAIN",
+    location: str = "FG-A"
+) -> Dict[str, Any]:
+    """
+    Complete a production order and add produced goods to stock.
+    
+    Parameters:
+        production_order_id: The production order ID (e.g., 'MO-1000')
+        qty_produced: Actual quantity produced
+        warehouse: Warehouse to add stock to (default: MAIN)
+        location: Location within warehouse (default: FG-A)
+    """
+    with db_conn() as conn:
+        order = conn.execute(
+            "SELECT * FROM production_orders WHERE id = ?",
+            (production_order_id,)
+        ).fetchone()
+        
+        if not order:
+            raise ValueError(f"Production order {production_order_id} not found")
+        
+        if order["status"] == "completed":
+            raise ValueError(f"Production order {production_order_id} already completed")
+        
+        # Update production order
+        conn.execute(
+            "UPDATE production_orders SET status = 'completed', qty_produced = ?, current_operation = NULL WHERE id = ?",
+            (qty_produced, production_order_id)
+        )
+        
+        # Add to stock
+        stock_id = generate_id("STK")
+        conn.execute(
+            "INSERT INTO stock (id, item_id, warehouse, location, on_hand) VALUES (?, ?, ?, ?, ?)",
+            (stock_id, order["item_id"], warehouse, location, qty_produced)
+        )
+        
+        conn.commit()
+        
+        return {
+            "production_order_id": production_order_id,
+            "status": "completed",
+            "qty_produced": qty_produced,
+            "stock_id": stock_id,
+            "warehouse": warehouse,
+            "location": location,
+            "message": f"Production order {production_order_id} completed, {qty_produced} units added to stock"
+        }
+
+
+@mcp.tool(name="purchase_create_order")
+@log_tool("purchase_create_order")
+def purchase_create_order(
+    item_sku: str,
+    qty: float,
+    supplier_name: Optional[str] = None
+) -> Dict[str, Any]:
+    """
+    Create a purchase order for raw materials or components.
+    If supplier_name not provided, auto-selects based on item type.
+    
+    Parameters:
+        item_sku: SKU of item to purchase (e.g., 'ITEM-PVC')
+        qty: Quantity to order
+        supplier_name: Optional supplier name (auto-selected if not provided)
+    """
+    with db_conn() as conn:
+        item = load_item(conn, item_sku)
+        if not item:
+            raise ValueError(f"Item {item_sku} not found")
+        
+        # Auto-select supplier if not provided
+        if not supplier_name:
+            if "pvc" in item["name"].lower() or "plastic" in item["name"].lower():
+                supplier_name = "PlasticCorp"
+            elif "dye" in item["name"].lower() or "color" in item["name"].lower():
+                supplier_name = "ColorMaster"
+            elif "box" in item["name"].lower() or "packaging" in item["name"].lower():
+                supplier_name = "PackagingPlus"
+            else:
+                supplier_name = "PlasticCorp"  # default
+        
+        supplier = conn.execute(
+            "SELECT * FROM suppliers WHERE name = ?",
+            (supplier_name,)
+        ).fetchone()
+        
+        if not supplier:
+            raise ValueError(f"Supplier {supplier_name} not found")
+        
+        # Create purchase order
+        po_id = generate_id("PO")
+        eta_delivery = (datetime.utcnow().date() + timedelta(days=7)).isoformat()
+        
+        conn.execute(
+            """INSERT INTO purchase_orders 
+               (id, supplier_id, item_id, qty, status, eta_delivery)
+               VALUES (?, ?, ?, ?, 'ordered', ?)""",
+            (po_id, supplier["id"], item["id"], qty, eta_delivery)
+        )
+        conn.commit()
+        
+        return {
+            "purchase_order_id": po_id,
+            "supplier_name": supplier["name"],
+            "item_sku": item_sku,
+            "item_name": item["name"],
+            "qty": qty,
+            "status": "ordered",
+            "eta_delivery": eta_delivery,
+            "message": f"Purchase order {po_id} created for {qty} {item['uom']} of {item['name']} from {supplier['name']}"
+        }
+
+
+@mcp.tool(name="purchase_restock_materials")
+@log_tool("purchase_restock_materials")
+def purchase_restock_materials() -> Dict[str, Any]:
+    """
+    Check all raw materials and create purchase orders for items below reorder quantity.
+    Returns list of purchase orders created.
+    """
+    with db_conn() as conn:
+        # Find items below reorder point
+        items_to_reorder = dict_rows(conn.execute(
+            """SELECT i.*, COALESCE(SUM(s.on_hand), 0) as current_stock
+               FROM items i
+               LEFT JOIN stock s ON i.id = s.item_id
+               WHERE i.type IN ('raw_material', 'component') AND i.reorder_qty > 0
+               GROUP BY i.id
+               HAVING current_stock < i.reorder_qty
+               ORDER BY i.sku"""
+        ))
+        
+        purchase_orders = []
+        for item in items_to_reorder:
+            qty_to_order = item["reorder_qty"] - item["current_stock"]
+            po = purchase_create_order(item["sku"], qty_to_order)
+            purchase_orders.append(po)
+        
+        return {
+            "items_checked": len(items_to_reorder),
+            "purchase_orders_created": len(purchase_orders),
+            "purchase_orders": purchase_orders
+        }
+
+
+@mcp.tool(name="purchase_receive")
+@log_tool("purchase_receive")
+def purchase_receive(
+    purchase_order_id: str,
+    warehouse: str = "MAIN",
+    location: str = "RM-A"
+) -> Dict[str, Any]:
+    """
+    Receive a purchase order and add materials to stock.
+    
+    Parameters:
+        purchase_order_id: The purchase order ID (e.g., 'PO-1000')
+        warehouse: Warehouse to add stock to (default: MAIN)
+        location: Location within warehouse (default: RM-A for raw materials)
+    """
+    with db_conn() as conn:
+        po = conn.execute(
+            """SELECT po.*, i.sku as item_sku, i.name as item_name
+               FROM purchase_orders po
+               JOIN items i ON po.item_id = i.id
+               WHERE po.id = ?""",
+            (purchase_order_id,)
+        ).fetchone()
+        
+        if not po:
+            raise ValueError(f"Purchase order {purchase_order_id} not found")
+        
+        if po["status"] == "received":
+            raise ValueError(f"Purchase order {purchase_order_id} already received")
+        
+        # Update purchase order
+        conn.execute(
+            "UPDATE purchase_orders SET status = 'received' WHERE id = ?",
+            (purchase_order_id,)
+        )
+        
+        # Add to stock
+        stock_id = generate_id("STK")
+        conn.execute(
+            "INSERT INTO stock (id, item_id, warehouse, location, on_hand) VALUES (?, ?, ?, ?, ?)",
+            (stock_id, po["item_id"], warehouse, location, po["qty"])
+        )
+        
+        conn.commit()
+        
+        return {
+            "purchase_order_id": purchase_order_id,
+            "item_sku": po["item_sku"],
+            "item_name": po["item_name"],
+            "qty_received": po["qty"],
+            "stock_id": stock_id,
+            "warehouse": warehouse,
+            "location": location,
+            "message": f"Purchase order {purchase_order_id} received, {po['qty']} units added to stock"
+        }
 
 
 # --- Minimal REST API for demo UI (read-only, no auth) ---
@@ -1126,6 +1595,55 @@ async def api_items(request):
     in_stock_only = _parse_bool(qp.get("in_stock_only"))
     result = inventory_list_items(in_stock_only=in_stock_only, limit=limit)
     return _json(result)
+
+
+@mcp.custom_route("/api/items/{sku}", methods=["GET", "OPTIONS"])
+async def api_item_detail(request):
+    if request.method == "OPTIONS":
+        return _cors_preflight(["GET"])
+    sku = request.path_params.get("sku")
+    
+    with db_conn() as conn:
+        item = load_item(conn, sku)
+        if not item:
+            return _json({"error": "Item not found"}, status_code=404)
+        
+        result = dict(item)
+        result["ui_url"] = ui_href("items", sku)
+        
+        # Add stock summary
+        stock = stock_summary(conn, item["id"])
+        result["stock"] = stock
+        
+        # If finished good, find recipes that produce it
+        if item["type"] == "finished_good":
+            recipes = dict_rows(conn.execute(
+                """SELECT r.*, 
+                   (SELECT COUNT(*) FROM recipe_ingredients WHERE recipe_id = r.id) as ingredient_count,
+                   (SELECT COUNT(*) FROM recipe_operations WHERE recipe_id = r.id) as operation_count
+                   FROM recipes r
+                   WHERE r.output_item_id = ?
+                   ORDER BY r.id""",
+                (item["id"],)
+            ))
+            result["recipes"] = recipes
+        
+        # If raw material or component, find recipes that use it
+        if item["type"] in ("raw_material", "component"):
+            used_in_recipes = dict_rows(conn.execute(
+                """SELECT DISTINCT r.id as recipe_id, r.output_item_id, 
+                          i.sku as output_sku, i.name as output_name,
+                          ri.qty_per_batch
+                   FROM recipe_ingredients ri
+                   JOIN recipes r ON ri.recipe_id = r.id
+                   JOIN items i ON r.output_item_id = i.id
+                   WHERE ri.ingredient_item_id = ?
+                   ORDER BY r.id""",
+                (item["id"],)
+            ))
+            result["used_in_recipes"] = used_in_recipes
+        
+        return _json(result)
 
 
 @mcp.custom_route("/api/items/{sku}/stock", methods=["GET", "OPTIONS"])
@@ -1305,6 +1823,132 @@ async def api_quotes(request):
         allowed_substitutions=allowed_subs,
     )
     return _json(result)
+
+
+@mcp.custom_route("/api/recipes", methods=["GET", "OPTIONS"])
+async def api_recipes(request):
+    if request.method == "OPTIONS":
+        return _cors_preflight(["GET"])
+    qp = request.query_params
+    output_item_sku = qp.get("output_item_sku")
+    limit = int(qp.get("limit", 50))
+    result = recipe_list(output_item_sku=output_item_sku, limit=limit)
+    return _json(result)
+
+
+@mcp.custom_route("/api/recipes/{recipe_id}", methods=["GET", "OPTIONS"])
+async def api_recipe_detail(request):
+    if request.method == "OPTIONS":
+        return _cors_preflight(["GET"])
+    recipe_id = request.path_params.get("recipe_id")
+    try:
+        result = recipe_get(recipe_id)
+        return _json(result)
+    except ValueError as exc:
+        return _json({"error": str(exc)}, status_code=404)
+
+
+@mcp.custom_route("/api/suppliers", methods=["GET", "OPTIONS"])
+async def api_suppliers(request):
+    if request.method == "OPTIONS":
+        return _cors_preflight(["GET"])
+    qp = request.query_params
+    limit = int(qp.get("limit", 50))
+    with db_conn() as conn:
+        rows = dict_rows(conn.execute(
+            "SELECT * FROM suppliers ORDER BY name LIMIT ?",
+            (limit,)
+        ))
+        return _json({"suppliers": rows})
+
+
+@mcp.custom_route("/api/suppliers/{supplier_id}", methods=["GET", "OPTIONS"])
+async def api_supplier_detail(request):
+    if request.method == "OPTIONS":
+        return _cors_preflight(["GET"])
+    supplier_id = request.path_params.get("supplier_id")
+    with db_conn() as conn:
+        supplier = conn.execute(
+            "SELECT * FROM suppliers WHERE id = ?",
+            (supplier_id,)
+        ).fetchone()
+        
+        if not supplier:
+            return _json({"error": "Supplier not found"}, status_code=404)
+        
+        result = dict(supplier)
+        
+        # Get purchase orders
+        po_rows = dict_rows(conn.execute(
+            """SELECT po.*, i.sku as item_sku, i.name as item_name
+               FROM purchase_orders po
+               JOIN items i ON po.item_id = i.id
+               WHERE po.supplier_id = ?
+               ORDER BY po.eta_delivery DESC
+               LIMIT 100""",
+            (supplier_id,)
+        ))
+        result["purchase_orders"] = po_rows
+        
+        return _json(result)
+
+
+@mcp.custom_route("/api/purchase-orders", methods=["GET", "OPTIONS"])
+async def api_purchase_orders(request):
+    if request.method == "OPTIONS":
+        return _cors_preflight(["GET"])
+    qp = request.query_params
+    limit = int(qp.get("limit", 100))
+    status = qp.get("status")
+    
+    with db_conn() as conn:
+        if status:
+            rows = dict_rows(conn.execute(
+                """SELECT po.*, s.name as supplier_name, i.sku as item_sku, i.name as item_name
+                   FROM purchase_orders po
+                   JOIN suppliers s ON po.supplier_id = s.id
+                   JOIN items i ON po.item_id = i.id
+                   WHERE po.status = ?
+                   ORDER BY po.eta_delivery DESC
+                   LIMIT ?""",
+                (status, limit)
+            ))
+        else:
+            rows = dict_rows(conn.execute(
+                """SELECT po.*, s.name as supplier_name, i.sku as item_sku, i.name as item_name
+                   FROM purchase_orders po
+                   JOIN suppliers s ON po.supplier_id = s.id
+                   JOIN items i ON po.item_id = i.id
+                   ORDER BY po.eta_delivery DESC
+                   LIMIT ?""",
+                (limit,)
+            ))
+        
+        return _json({"purchase_orders": rows})
+
+
+@mcp.custom_route("/api/purchase-orders/{po_id}", methods=["GET", "OPTIONS"])
+async def api_purchase_order_detail(request):
+    if request.method == "OPTIONS":
+        return _cors_preflight(["GET"])
+    po_id = request.path_params.get("po_id")
+    
+    with db_conn() as conn:
+        po = conn.execute(
+            """SELECT po.*, s.name as supplier_name, s.contact_name, s.contact_email,
+                      i.sku as item_sku, i.name as item_name, i.type as item_type, i.uom
+               FROM purchase_orders po
+               JOIN suppliers s ON po.supplier_id = s.id
+               JOIN items i ON po.item_id = i.id
+               WHERE po.id = ?""",
+            (po_id,)
+        ).fetchone()
+        
+        if not po:
+            return _json({"error": "Purchase order not found"}, status_code=404)
+        
+        return _json(dict(po))
+
 
 if __name__ == "__main__":
     # Run as HTTP server using the streamable-http transport (host/port come from FastMCP settings).

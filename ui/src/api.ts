@@ -1,4 +1,4 @@
-import { Customer, Item, SalesOrder, SalesOrderDetail, Shipment, StockSummary, QuoteOption, ProductionOrder } from './types'
+import { Customer, Item, SalesOrder, SalesOrderDetail, Shipment, StockSummary, QuoteOption, ProductionOrder, Recipe, Supplier, PurchaseOrder } from './types'
 
 const API_BASE = import.meta.env.VITE_API_BASE || '/api'
 
@@ -24,6 +24,7 @@ export const api = {
   customerDetail: (id: string) => fetchJson<import('./types').CustomerDetail>(`/customers/${encodeURIComponent(id)}`),
   items: (inStockOnly = false) =>
     fetchJson<{ items: Item[] }>(`/items${inStockOnly ? '?in_stock_only=1' : ''}`),
+  itemDetail: (sku: string) => fetchJson<Item>(`/items/${encodeURIComponent(sku)}`),
   stock: (sku: string) => fetchJson<StockSummary>(`/items/${encodeURIComponent(sku)}/stock`),
   stockList: () => fetchJson<{ stock: import('./types').Stock[] }>(`/stock`),
   stockDetail: (id: string) => fetchJson<import('./types').Stock>(`/stock/${encodeURIComponent(id)}`),
@@ -34,4 +35,12 @@ export const api = {
   productionOrders: () => fetchJson<{ production_orders: ProductionOrder[] }>(`/production-orders?limit=100`),
   productionOrder: (id: string) => fetchJson<ProductionOrder>(`/production-orders/${encodeURIComponent(id)}`),
   quote: (sku: string, qty: number) => fetchJson<{ options: QuoteOption[] }>(`/quotes?sku=${encodeURIComponent(sku)}&qty=${qty}`),
+  recipes: (outputItemSku?: string) => 
+    fetchJson<{ recipes: Recipe[] }>(`/recipes${outputItemSku ? `?output_item_sku=${encodeURIComponent(outputItemSku)}` : ''}`),
+  recipeDetail: (id: string) => fetchJson<Recipe>(`/recipes/${encodeURIComponent(id)}`),
+  suppliers: () => fetchJson<{ suppliers: Supplier[] }>(`/suppliers`),
+  supplierDetail: (id: string) => fetchJson<Supplier>(`/suppliers/${encodeURIComponent(id)}`),
+  purchaseOrders: (status?: string) => 
+    fetchJson<{ purchase_orders: PurchaseOrder[] }>(`/purchase-orders${status ? `?status=${encodeURIComponent(status)}` : ''}`),
+  purchaseOrderDetail: (id: string) => fetchJson<PurchaseOrder>(`/purchase-orders/${encodeURIComponent(id)}`),
 }
