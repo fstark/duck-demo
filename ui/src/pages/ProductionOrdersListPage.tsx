@@ -4,7 +4,6 @@ import { Table } from '../components/Table'
 import { ProductionOrder } from '../types'
 import { api } from '../api'
 import { useNavigation } from '../contexts/NavigationContext'
-import { Quantity } from '../utils/quantity.tsx'
 
 type SortDir = 'asc' | 'desc'
 type SortState<T> = { key: keyof T; dir: SortDir }
@@ -104,7 +103,7 @@ export function ProductionOrdersListPage() {
                     rows={sortedProductionOrders}
                     sortKey={productionSort?.key}
                     sortDir={productionSort?.dir}
-                    onSort={(key) => setProductionSort((prev) => nextSort(prev, key, key === 'eta_finish' ? 'desc' : 'asc'))}
+                    onSort={(key) => setProductionSort((prev) => nextSort(prev, key, key === 'status' ? 'desc' : 'asc'))}
                     onRowClick={handleProductionOrderClick}
                     columns={[
                         {
@@ -123,9 +122,9 @@ export function ProductionOrdersListPage() {
                                 </div>
                             ),
                         },
-                        { key: 'qty_planned', label: 'Planned', sortable: true, render: (row) => <Quantity value={row.qty_planned} /> },
-                        { key: 'qty_completed', label: 'Completed', sortable: true, render: (row) => <Quantity value={row.qty_completed} /> },
-                        { key: 'current_operation', label: 'Operation', sortable: true },
+                        { key: 'status', label: 'Status', sortable: true },
+                        { key: 'started_at', label: 'Started', sortable: true },
+                        { key: 'completed_at', label: 'Completed', sortable: true },
                         { key: 'eta_finish', label: 'ETA Finish', sortable: true },
                         { key: 'eta_ship', label: 'ETA Ship', sortable: true },
                     ]}

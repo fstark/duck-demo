@@ -1011,6 +1011,15 @@ def get_production_order_status(production_order_id: str) -> Dict[str, Any]:
         result = dict(row)
         result["ui_url"] = ui_href("production-orders", production_order_id)
         
+        # Get production operations for this order
+        operations = dict_rows(conn.execute(
+            """SELECT * FROM production_operations
+               WHERE production_order_id = ?
+               ORDER BY sequence_order""",
+            (production_order_id,)
+        ))
+        result["operations"] = operations
+        
         # If recipe-based production order, include recipe details
         if result.get("recipe_id"):
             recipe = conn.execute(
@@ -1034,14 +1043,14 @@ def get_production_order_status(production_order_id: str) -> Dict[str, Any]:
                 ))
                 result["recipe"]["ingredients"] = ingredients
                 
-                # Get recipe operations
-                operations = dict_rows(conn.execute(
+                # Get recipe operations template
+                recipe_operations = dict_rows(conn.execute(
                     """SELECT * FROM recipe_operations
                        WHERE recipe_id = ?
                        ORDER BY sequence_order""",
                     (result["recipe_id"],)
                 ))
-                result["recipe"]["operations"] = operations
+                result["recipe"]["operations"] = recipe_operations
         
         return result
 
@@ -1198,26 +1207,25 @@ def recipe_get(recipe_id: str) -> Dict[str, Any]:
 @log_tool("production_create_order")
 def production_create_order(
     recipe_id: str,
-    batches: int,
     notes: Optional[str] = None
 ) -> Dict[str, Any]:
     """
-    Create a new production order to execute a recipe.
+    Create a new production order to execute one batch of a recipe.
     Checks ingredient availability and creates order with 'planned' status.
+    Creates production operations for each step in the recipe.
     
     Parameters:
         recipe_id: The recipe to execute (e.g., 'RCP-ELVIS-20')
-        batches: Number of recipe batches to produce
         notes: Optional notes for the production order
     """
     with db_conn() as conn:
         # Get recipe details
         recipe_data = recipe_get(recipe_id)
         
-        # Check ingredient availability
+        # Check ingredient availability for one batch
         shortfalls = []
         for ing in recipe_data["ingredients"]:
-            qty_needed = ing["qty_per_batch"] * batches
+            qty_needed = ing["input_qty"]
             check = inventory_check_availability(ing["ingredient_sku"], qty_needed)
             if not check["is_available"]:
                 shortfalls.append({
@@ -1229,35 +1237,46 @@ def production_create_order(
                 })
         
         # Determine initial status
-        status = "planned" if shortfalls else "ready"
+        status = "waiting" if shortfalls else "ready"
         
         # Calculate dates
         prod_time_days = recipe_data["production_time_hours"] / 24.0
-        eta_start = (datetime.utcnow().date() + timedelta(days=1)).isoformat()
         eta_finish = (datetime.utcnow().date() + timedelta(days=1 + int(prod_time_days))).isoformat()
+        eta_ship = (datetime.utcnow().date() + timedelta(days=2 + int(prod_time_days))).isoformat()
         
         # Create production order
         order_id = generate_id("MO")
         conn.execute(
             """INSERT INTO production_orders 
-               (id, recipe_id, item_id, qty_planned, qty_produced, current_operation, status, eta_start, eta_finish, notes)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            (order_id, recipe_id, recipe_data["output_item_id"], batches, 0, None, status, eta_start, eta_finish, notes)
+               (id, recipe_id, item_id, status, eta_finish, eta_ship)
+               VALUES (?, ?, ?, ?, ?, ?)""",
+            (order_id, recipe_id, recipe_data["output_item_id"], status, eta_finish, eta_ship)
         )
+        
+        # Create production operations from recipe operations
+        for op in recipe_data["operations"]:
+            pop_id = generate_id("POP")
+            conn.execute(
+                """INSERT INTO production_operations
+                   (id, production_order_id, recipe_operation_id, sequence_order, operation_name, duration_hours, status)
+                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                (pop_id, order_id, op["id"], op["sequence_order"], op["operation_name"], op["duration_hours"], "pending")
+            )
+        
         conn.commit()
         
         return {
             "production_order_id": order_id,
             "recipe_id": recipe_id,
             "output_item": recipe_data["output_sku"],
-            "batches": batches,
-            "total_output_qty": batches * recipe_data["output_qty"],
+            "output_qty": recipe_data["output_qty"],
             "status": status,
-            "eta_start": eta_start,
             "eta_finish": eta_finish,
+            "eta_ship": eta_ship,
             "ingredient_shortfalls": shortfalls,
             "ui_url": ui_href("production-orders", order_id)
         }
+
 
 
 @mcp.tool(name="production_start_order")

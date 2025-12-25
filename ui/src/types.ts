@@ -114,17 +114,27 @@ export type ProductionOrder = {
   item_sku?: string
   item_type?: string
   recipe_id?: string
-  qty_planned: number
-  qty_completed: number
-  qty_produced?: number
-  current_operation?: string
   status?: string
-  eta_start?: string
+  started_at?: string
+  completed_at?: string
   eta_finish?: string
   eta_ship?: string
   parent_production_order_id?: string
   notes?: string
   recipe?: Recipe
+  operations?: ProductionOperation[]
+}
+
+export type ProductionOperation = {
+  id: string
+  production_order_id: string
+  recipe_operation_id: string
+  sequence_order: number
+  operation_name: string
+  duration_hours: number
+  status: 'pending' | 'in_progress' | 'completed' | 'failed'
+  started_at?: string
+  completed_at?: string
 }
 
 export type Recipe = {

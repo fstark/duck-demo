@@ -74,18 +74,31 @@ CREATE TABLE IF NOT EXISTS sales_order_shipments (
 );
 
 -- Production order workflow: planned -> waiting (blocked on stock) -> ready -> in_progress -> completed
--- qty_planned and qty_completed represent number of recipe batches, not individual units
+-- Each production order produces exactly one batch from one recipe
 CREATE TABLE IF NOT EXISTS production_orders (
     id TEXT PRIMARY KEY,
-    recipe_id TEXT,
+    recipe_id TEXT NOT NULL,
     item_id TEXT NOT NULL,
-    qty_planned REAL NOT NULL,
-    qty_completed REAL NOT NULL,
-    current_operation TEXT,
     status TEXT DEFAULT 'planned',
     parent_production_order_id TEXT,
+    started_at TEXT,
+    completed_at TEXT,
     eta_finish TEXT,
     eta_ship TEXT
+);
+
+-- Production operations track execution of each step in a production order
+-- Status: pending -> in_progress -> completed (or failed)
+CREATE TABLE IF NOT EXISTS production_operations (
+    id TEXT PRIMARY KEY,
+    production_order_id TEXT NOT NULL,
+    recipe_operation_id TEXT NOT NULL,
+    sequence_order INTEGER NOT NULL,
+    operation_name TEXT NOT NULL,
+    duration_hours REAL NOT NULL,
+    status TEXT DEFAULT 'pending',
+    started_at TEXT,
+    completed_at TEXT
 );
 
 -- Suppliers for raw materials

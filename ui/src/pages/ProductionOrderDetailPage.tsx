@@ -163,14 +163,17 @@ export function ProductionOrderDetailPage({ productionOrderId }: ProductionOrder
                             <div className="font-medium">Item Type:</div>
                             <div>{productionOrder.item_type ? <Badge>{productionOrder.item_type}</Badge> : '—'}</div>
 
-                            <div className="font-medium">Planned Quantity:</div>
-                            <div><Quantity value={productionOrder.qty_planned} /></div>
+                            <div className="font-medium">Status:</div>
+                            <div>{productionOrder.status ? <Badge>{productionOrder.status}</Badge> : '—'}</div>
 
-                            <div className="font-medium">Completed Quantity:</div>
-                            <div><Quantity value={productionOrder.qty_completed} /></div>
+                            <div className="font-medium">Recipe ID:</div>
+                            <div>{productionOrder.recipe_id || '—'}</div>
 
-                            <div className="font-medium">Current Operation:</div>
-                            <div>{productionOrder.current_operation || '—'}</div>
+                            <div className="font-medium">Started:</div>
+                            <div>{productionOrder.started_at || '—'}</div>
+
+                            <div className="font-medium">Completed:</div>
+                            <div>{productionOrder.completed_at || '—'}</div>
 
                             <div className="font-medium">ETA Finish:</div>
                             <div>{productionOrder.eta_finish || '—'}</div>
@@ -179,6 +182,40 @@ export function ProductionOrderDetailPage({ productionOrderId }: ProductionOrder
                             <div>{productionOrder.eta_ship || '—'}</div>
                         </div>
                     </div>
+
+                    {productionOrder.operations && productionOrder.operations.length > 0 && (
+                        <div className="mt-6">
+                            <div className="text-sm font-semibold text-slate-800 mb-3">Production Operations</div>
+                            <div className="overflow-x-auto">
+                                <table className="min-w-full divide-y divide-slate-200">
+                                    <thead>
+                                        <tr className="bg-slate-50">
+                                            <th className="px-3 py-2 text-left text-xs font-medium text-slate-600">Seq</th>
+                                            <th className="px-3 py-2 text-left text-xs font-medium text-slate-600">Operation</th>
+                                            <th className="px-3 py-2 text-left text-xs font-medium text-slate-600">Duration (hrs)</th>
+                                            <th className="px-3 py-2 text-left text-xs font-medium text-slate-600">Status</th>
+                                            <th className="px-3 py-2 text-left text-xs font-medium text-slate-600">Started</th>
+                                            <th className="px-3 py-2 text-left text-xs font-medium text-slate-600">Completed</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-200">
+                                        {productionOrder.operations.map((op) => (
+                                            <tr key={op.id} className="hover:bg-slate-50">
+                                                <td className="px-3 py-2 text-sm text-slate-700">{op.sequence_order}</td>
+                                                <td className="px-3 py-2 text-sm text-slate-700">{op.operation_name}</td>
+                                                <td className="px-3 py-2 text-sm text-slate-700">{op.duration_hours}</td>
+                                                <td className="px-3 py-2 text-sm">
+                                                    <Badge>{op.status}</Badge>
+                                                </td>
+                                                <td className="px-3 py-2 text-sm text-slate-700">{op.started_at || '—'}</td>
+                                                <td className="px-3 py-2 text-sm text-slate-700">{op.completed_at || '—'}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    )}
                 </div>
             </Card>
         </section>

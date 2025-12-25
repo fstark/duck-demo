@@ -330,27 +330,59 @@ def seed():
             ],
         )
 
-        # Production orders (recipe-based, smaller set)
+# Production orders (one per batch) with their operations
+        production_orders = [
+            ("MO-1001", "RCP-ELVIS-20", "ITEM-ELVIS-20", "completed", "2025-12-19T08:00", "2025-12-19T11:30", "2025-12-20", "2025-12-21"),
+            ("MO-1002", "RCP-ELVIS-20", "ITEM-ELVIS-20", "in_progress", "2025-12-24T09:00", None, "2025-12-25", "2025-12-26"),
+            ("MO-1003", "RCP-CLASSIC-10", "ITEM-CLASSIC-10", "completed", "2025-12-14T10:00", "2025-12-14T12:30", "2025-12-15", "2025-12-16"),
+            ("MO-1004", "RCP-CLASSIC-10", "ITEM-CLASSIC-10", "ready", None, None, "2026-01-10", "2026-01-11"),
+            ("MO-1005", "RCP-ROBOT-25", "ITEM-ROBOT-25", "in_progress", "2025-12-23T14:00", None, "2025-12-29", "2025-12-30"),
+            ("MO-1006", "RCP-PIRATE-15", "ITEM-PIRATE-15", "completed", "2025-12-17T08:00", "2025-12-17T14:00", "2025-12-18", "2025-12-19"),
+            ("MO-1007", "RCP-NINJA-12", "ITEM-NINJA-12", "planned", None, None, "2026-01-05", "2026-01-06"),
+            ("MO-1008", "RCP-UNICORN-25", "ITEM-UNICORN-25", "waiting", None, None, "2026-02-01", "2026-02-02"),
+        ]
         conn.executemany(
-            "INSERT INTO production_orders (id, recipe_id, item_id, qty_planned, qty_completed, current_operation, status, eta_finish, eta_ship) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            [
-                ("MO-555", "RCP-ELVIS-20", "ITEM-ELVIS-20", 5, 2, "Paint hair black", "in_progress", "2026-01-19", "2026-01-20"),
-                ("MO-1000", "RCP-PIRATE-15", "ITEM-PIRATE-15", 10, 8, "Pack into box", "in_progress", "2026-01-03", "2026-01-04"),
-                ("MO-1001", "RCP-UNICORN-25", "ITEM-UNICORN-25", 15, 2, "Paint rainbow colors", "in_progress", "2026-02-10", "2026-02-11"),
-                ("MO-1002", "RCP-ROBOT-25", "ITEM-ROBOT-25", 50, 22, "Paint robot details", "in_progress", "2026-01-24", "2026-01-25"),
-                ("MO-1003", "RCP-NINJA-12", "ITEM-NINJA-12", 20, 7, "Paint ninja outfit", "in_progress", "2025-12-31", "2026-01-01"),
-                ("MO-1004", "RCP-CLASSIC-10", "ITEM-CLASSIC-10", 12, 10, "Pack into boxes", "in_progress", "2026-01-05", "2026-01-06"),
-                ("MO-1005", "RCP-ELVIS-20", "ITEM-ELVIS-20", 8, 8, "Pack into box", "completed", "2025-12-20", "2025-12-21"),
-                ("MO-1006", "RCP-PIRATE-15", "ITEM-PIRATE-15", 6, 6, "Pack into box", "completed", "2025-12-18", "2025-12-19"),
-                ("MO-1007", "RCP-CLASSIC-10", "ITEM-CLASSIC-10", 15, 15, "Pack into boxes", "completed", "2025-12-15", "2025-12-16"),
-                ("MO-1008", "RCP-ROBOT-25", "ITEM-ROBOT-25", 4, 0, None, "planned", "2026-02-08", "2026-02-09"),
-                ("MO-1009", "RCP-NINJA-12", "ITEM-NINJA-12", 12, 0, None, "planned", "2026-02-15", "2026-02-16"),
-                ("MO-1010", "RCP-UNICORN-25", "ITEM-UNICORN-25", 8, 0, None, "waiting", "2026-03-01", "2026-03-02"),
-                ("MO-1011", "RCP-ELVIS-20", "ITEM-ELVIS-20", 10, 0, None, "ready", "2026-01-28", "2026-01-29"),
-                ("MO-1012", "RCP-CLASSIC-10", "ITEM-CLASSIC-10", 20, 0, None, "ready", "2026-01-15", "2026-01-16"),
-            ],
+            "INSERT INTO production_orders (id, recipe_id, item_id, status, started_at, completed_at, eta_finish, eta_ship) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            production_orders
         )
-
+        
+        # Production operations for each order
+        # MO-1001 (Elvis, completed)
+        conn.executemany(
+            "INSERT INTO production_operations (id, production_order_id, recipe_operation_id, sequence_order, operation_name, duration_hours, status, started_at, completed_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            [
+                ("POP-1001-1", "MO-1001", "OP-ELVIS-1", 1, "Mold duck shape", 1.5, "completed", "2025-12-19T08:00", "2025-12-19T09:30"),
+                ("POP-1001-2", "MO-1001", "OP-ELVIS-2", 2, "Cooling", 0.5, "completed", "2025-12-19T09:30", "2025-12-19T10:00"),
+                ("POP-1001-3", "MO-1001", "OP-ELVIS-3", 3, "Paint hair black", 0.75, "completed", "2025-12-19T10:00", "2025-12-19T10:45"),
+                ("POP-1001-4", "MO-1001", "OP-ELVIS-4", 4, "Paint details", 0.5, "completed", "2025-12-19T10:45", "2025-12-19T11:15"),
+                ("POP-1001-5", "MO-1001", "OP-ELVIS-5", 5, "Pack into box", 0.25, "completed", "2025-12-19T11:15", "2025-12-19T11:30"),
+                # MO-1002 (Elvis, in progress on operation 3)
+                ("POP-1002-1", "MO-1002", "OP-ELVIS-1", 1, "Mold duck shape", 1.5, "completed", "2025-12-24T09:00", "2025-12-24T10:30"),
+                ("POP-1002-2", "MO-1002", "OP-ELVIS-2", 2, "Cooling", 0.5, "completed", "2025-12-24T10:30", "2025-12-24T11:00"),
+                ("POP-1002-3", "MO-1002", "OP-ELVIS-3", 3, "Paint hair black", 0.75, "in_progress", "2025-12-24T11:00", None),
+                ("POP-1002-4", "MO-1002", "OP-ELVIS-4", 4, "Paint details", 0.5, "pending", None, None),
+                ("POP-1002-5", "MO-1002", "OP-ELVIS-5", 5, "Pack into box", 0.25, "pending", None, None),
+                # MO-1003 (Classic, completed)
+                ("POP-1003-1", "MO-1003", "OP-CLASSIC-1", 1, "Mold classic shape", 1.0, "completed", "2025-12-14T10:00", "2025-12-14T11:00"),
+                ("POP-1003-2", "MO-1003", "OP-CLASSIC-2", 2, "Cooling", 0.5, "completed", "2025-12-14T11:00", "2025-12-14T11:30"),
+                ("POP-1003-3", "MO-1003", "OP-CLASSIC-3", 3, "Paint yellow", 0.5, "completed", "2025-12-14T11:30", "2025-12-14T12:00"),
+                ("POP-1003-4", "MO-1003", "OP-CLASSIC-4", 4, "Pack into boxes", 0.5, "completed", "2025-12-14T12:00", "2025-12-14T12:30"),
+                # MO-1005 (Robot, in progress on operation 4)
+                ("POP-1005-1", "MO-1005", "OP-ROBOT-1", 1, "Mold robot shape", 2.5, "completed", "2025-12-23T14:00", "2025-12-23T16:30"),
+                ("POP-1005-2", "MO-1005", "OP-ROBOT-2", 2, "Cooling", 1.0, "completed", "2025-12-23T16:30", "2025-12-23T17:30"),
+                ("POP-1005-3", "MO-1005", "OP-ROBOT-3", 3, "Paint silver base", 1.0, "completed", "2025-12-23T17:30", "2025-12-23T18:30"),
+                ("POP-1005-4", "MO-1005", "OP-ROBOT-4", 4, "Paint robot details", 1.5, "in_progress", "2025-12-24T08:00", None),
+                ("POP-1005-5", "MO-1005", "OP-ROBOT-5", 5, "Quality check", 0.25, "pending", None, None),
+                ("POP-1005-6", "MO-1005", "OP-ROBOT-6", 6, "Pack into box", 0.25, "pending", None, None),
+                # MO-1006 (Pirate, completed)
+                ("POP-1006-1", "MO-1006", "OP-PIRATE-1", 1, "Mold pirate shape", 1.5, "completed", "2025-12-17T08:00", "2025-12-17T09:30"),
+                ("POP-1006-2", "MO-1006", "OP-PIRATE-2", 2, "Cooling", 0.5, "completed", "2025-12-17T09:30", "2025-12-17T10:00"),
+                ("POP-1006-3", "MO-1006", "OP-PIRATE-3", 3, "Paint pirate outfit", 1.0, "completed", "2025-12-17T10:00", "2025-12-17T11:00"),
+                ("POP-1006-4", "MO-1006", "OP-PIRATE-4", 4, "Paint details", 0.75, "completed", "2025-12-17T11:00", "2025-12-17T11:45"),
+                ("POP-1006-5", "MO-1006", "OP-PIRATE-5", 5, "Quality check", 0.25, "completed", "2025-12-17T11:45", "2025-12-17T12:00"),
+                ("POP-1006-6", "MO-1006", "OP-PIRATE-6", 6, "Pack into box", 0.25, "completed", "2025-12-17T13:45", "2025-12-17T14:00"),
+            ]
+        )
 
         conn.commit()
         print(f"Seeded demo database at {DB_PATH}")
