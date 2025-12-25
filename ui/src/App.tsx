@@ -93,6 +93,9 @@ function AppContent() {
   const [shipmentsCount, setShipmentsCount] = useState(0)
   const [productionCount, setProductionCount] = useState(0)
   const [totalProductionQty, setTotalProductionQty] = useState(0)
+  const [recipesCount, setRecipesCount] = useState(0)
+  const [suppliersCount, setSuppliersCount] = useState(0)
+  const [activePurchasesCount, setActivePurchasesCount] = useState(0)
   const [view, setView] = useState<ViewState>(() => parseHash())
   const [apiError, setApiError] = useState<string | null>(null)
 
@@ -118,6 +121,9 @@ function AppContent() {
       const totalQty = res.production_orders?.reduce((sum, order) => sum + (order.qty_planned || 0), 0) || 0
       setTotalProductionQty(totalQty)
     }).catch(handleApiError)
+    api.recipes().then((res) => setRecipesCount(res.recipes?.length || 0)).catch(handleApiError)
+    api.suppliers().then((res) => setSuppliersCount(res.suppliers?.length || 0)).catch(handleApiError)
+    api.purchaseOrders('ordered').then((res) => setActivePurchasesCount(res.purchase_orders?.length || 0)).catch(handleApiError)
   }, [])
 
   useEffect(() => {
@@ -218,6 +224,27 @@ function AppContent() {
                 <div className="text-sm text-slate-600 mb-2">production orders · <Quantity value={totalProductionQty} className="font-mono inline" /> items</div>
                 <button className="text-brand-600 hover:underline text-sm" onClick={() => setHash('production')} type="button">
                   View production
+                </button>
+              </Card>
+              <Card title="Recipes">
+                <div className="text-2xl font-semibold"><Quantity value={recipesCount} className="text-left block" /></div>
+                <div className="text-sm text-slate-600 mb-2">recipes loaded</div>
+                <button className="text-brand-600 hover:underline text-sm" onClick={() => setHash('recipes')} type="button">
+                  View recipes
+                </button>
+              </Card>
+              <Card title="Suppliers">
+                <div className="text-2xl font-semibold"><Quantity value={suppliersCount} className="text-left block" /></div>
+                <div className="text-sm text-slate-600 mb-2">suppliers loaded</div>
+                <button className="text-brand-600 hover:underline text-sm" onClick={() => setHash('suppliers')} type="button">
+                  View suppliers
+                </button>
+              </Card>
+              <Card title="Purchase Orders">
+                <div className="text-2xl font-semibold"><Quantity value={activePurchasesCount} className="text-left block" /></div>
+                <div className="text-sm text-slate-600 mb-2">active purchase orders</div>
+                <button className="text-brand-600 hover:underline text-sm" onClick={() => setHash('purchase-orders')} type="button">
+                  View purchase orders
                 </button>
               </Card>
             </div>

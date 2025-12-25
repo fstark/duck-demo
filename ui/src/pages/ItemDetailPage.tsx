@@ -188,9 +188,9 @@ export function ItemDetailPage({ sku }: ItemDetailPageProps) {
                                 })),
                             ] as any}
                             columns={[
-                                { 
-                                    key: 'role', 
-                                    label: 'Role', 
+                                {
+                                    key: 'role',
+                                    label: 'Role',
                                     sortable: true,
                                     render: (row) => <Badge>{row.role}</Badge>
                                 },

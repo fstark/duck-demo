@@ -104,25 +104,22 @@ export function PurchaseOrdersListPage() {
             <div className="mb-4 flex gap-2">
                 <button
                     onClick={() => setStatusFilter('')}
-                    className={`px-3 py-1 text-sm rounded ${
-                        statusFilter === '' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700'
-                    }`}
+                    className={`px-3 py-1 text-sm rounded ${statusFilter === '' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700'
+                        }`}
                 >
                     All
                 </button>
                 <button
                     onClick={() => setStatusFilter('ordered')}
-                    className={`px-3 py-1 text-sm rounded ${
-                        statusFilter === 'ordered' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700'
-                    }`}
+                    className={`px-3 py-1 text-sm rounded ${statusFilter === 'ordered' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700'
+                        }`}
                 >
                     Ordered
                 </button>
                 <button
                     onClick={() => setStatusFilter('received')}
-                    className={`px-3 py-1 text-sm rounded ${
-                        statusFilter === 'received' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700'
-                    }`}
+                    className={`px-3 py-1 text-sm rounded ${statusFilter === 'received' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700'
+                        }`}
                 >
                     Received
                 </button>
@@ -135,14 +132,14 @@ export function PurchaseOrdersListPage() {
                         { key: 'supplier_name', label: 'Supplier', sortable: true },
                         { key: 'item_sku', label: 'Item SKU', sortable: true },
                         { key: 'item_name', label: 'Item', sortable: true },
-                        { 
-                            key: 'qty', 
+                        {
+                            key: 'qty',
                             label: 'Quantity',
                             sortable: true,
                             render: (row) => `${formatQuantity(row.qty)} ${row.uom || 'ea'}`
                         },
-                        { 
-                            key: 'status', 
+                        {
+                            key: 'status',
                             label: 'Status',
                             sortable: true,
                             render: (row) => <Badge>{row.status}</Badge>

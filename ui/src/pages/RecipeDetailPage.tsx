@@ -150,7 +150,7 @@ export function RecipeDetailPage({ recipeId }: RecipeDetailPageProps) {
                         <div>
                             <dt className="text-sm font-medium text-gray-500">Output Item</dt>
                             <dd className="text-sm text-gray-900">
-                                <a 
+                                <a
                                     href={`#/items/${recipe.output_sku}`}
                                     className="text-blue-600 hover:underline"
                                 >
@@ -187,8 +187,8 @@ export function RecipeDetailPage({ recipeId }: RecipeDetailPageProps) {
                                 { key: 'seq', label: '#', sortable: true },
                                 { key: 'ingredient_sku', label: 'SKU', sortable: true },
                                 { key: 'ingredient_name', label: 'Ingredient', sortable: true },
-                                { 
-                                    key: 'qty_per_batch', 
+                                {
+                                    key: 'qty_per_batch',
                                     label: 'Qty per Batch',
                                     sortable: true,
                                     render: (row) => `${formatQuantity(row.qty_per_batch)} ${row.ingredient_uom || 'ea'}`

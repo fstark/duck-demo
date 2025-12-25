@@ -84,7 +84,7 @@ export function PurchaseOrderDetailPage({ purchaseOrderId }: PurchaseOrderDetail
                     <div>
                         <dt className="text-sm font-medium text-gray-500">Supplier</dt>
                         <dd className="text-sm text-gray-900">
-                            <a 
+                            <a
                                 href={`#/suppliers/${purchaseOrder.supplier_id}`}
                                 className="text-blue-600 hover:underline"
                             >
@@ -114,7 +114,7 @@ export function PurchaseOrderDetailPage({ purchaseOrderId }: PurchaseOrderDetail
                         <div>
                             <dt className="text-sm font-medium text-gray-500">Item SKU</dt>
                             <dd className="text-sm text-gray-900">
-                                <a 
+                                <a
                                     href={`#/items/${purchaseOrder.item_sku}`}
                                     className="text-blue-600 hover:underline"
                                 >

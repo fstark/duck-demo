@@ -143,8 +143,8 @@ export function SupplierDetailPage({ supplierId }: SupplierDetailPageProps) {
                                 { key: 'item_sku', label: 'Item SKU', sortable: true },
                                 { key: 'item_name', label: 'Item', sortable: true },
                                 { key: 'qty', label: 'Qty', sortable: true },
-                                { 
-                                    key: 'status', 
+                                {
+                                    key: 'status',
                                     label: 'Status',
                                     sortable: true,
                                     render: (row) => (
