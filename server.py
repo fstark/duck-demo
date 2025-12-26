@@ -1204,6 +1204,76 @@ def recipe_get(recipe_id: str) -> Dict[str, Any]:
         return result
 
 
+@mcp.tool(name="simulation_get_time")
+@log_tool("simulation_get_time")
+def simulation_get_time() -> Dict[str, Any]:
+    """
+    Get the current simulated time.
+    
+    Returns:
+        Dictionary with current_time (ISO format string)
+    """
+    with db_conn() as conn:
+        result = conn.execute(
+            "SELECT sim_time FROM simulation_state WHERE id = 1"
+        ).fetchone()
+        
+        return {"current_time": result[0]}
+
+
+@mcp.tool(name="simulation_advance_time")
+@log_tool("simulation_advance_time")
+def simulation_advance_time(
+    hours: Optional[float] = None,
+    days: Optional[int] = None,
+    to_time: Optional[str] = None
+) -> Dict[str, Any]:
+    """
+    Advance the simulated time forward.
+    
+    Parameters:
+        hours: Number of hours to advance (e.g., 2.5)
+        days: Number of days to advance (e.g., 7)
+        to_time: ISO datetime to set time to (e.g., '2025-01-15 14:00:00')
+    
+    Returns:
+        Dictionary with old_time and new_time
+    """
+    with db_conn() as conn:
+        old_time = conn.execute(
+            "SELECT sim_time FROM simulation_state WHERE id = 1"
+        ).fetchone()[0]
+        
+        if to_time:
+            conn.execute(
+                "UPDATE simulation_state SET sim_time = ? WHERE id = 1",
+                (to_time,)
+            )
+        elif hours:
+            conn.execute(
+                "UPDATE simulation_state SET sim_time = datetime(sim_time, ? || ' hours') WHERE id = 1",
+                (f'+{hours}',)
+            )
+        elif days:
+            conn.execute(
+                "UPDATE simulation_state SET sim_time = datetime(sim_time, ? || ' days') WHERE id = 1",
+                (f'+{days}',)
+            )
+        else:
+            raise ValueError("Must specify hours, days, or to_time")
+        
+        conn.commit()
+        
+        new_time = conn.execute(
+            "SELECT sim_time FROM simulation_state WHERE id = 1"
+        ).fetchone()[0]
+        
+        return {
+            "old_time": old_time,
+            "new_time": new_time
+        }
+
+
 @mcp.tool(name="production_create_order")
 @log_tool("production_create_order")
 def production_create_order(
@@ -1540,6 +1610,17 @@ async def api_health(request):
     if request.method == "OPTIONS":
         return _cors_preflight(["GET"])
     return _json({"status": "ok"})
+
+
+@mcp.custom_route("/api/simulation/time", methods=["GET", "OPTIONS"])
+async def api_simulation_time(request):
+    if request.method == "OPTIONS":
+        return _cors_preflight(["GET"])
+    try:
+        result = simulation_get_time()
+        return _json(result)
+    except Exception as exc:
+        return _json({"error": str(exc)}, status_code=500)
 
 
 @mcp.custom_route("/api/customers", methods=["GET", "OPTIONS"])

@@ -13,6 +13,12 @@ def seed():
     conn = sqlite3.connect(DB_PATH)
     try:
         conn.row_factory = sqlite3.Row
+        
+        # Initialize simulation state with fixed starting time for reproducibility
+        conn.execute(
+            "INSERT INTO simulation_state (id, sim_time) VALUES (1, '2025-01-15 08:00:00')"
+        )
+        
         # Customers
         conn.executemany(
             "INSERT INTO customers (id, name, company, email, city) VALUES (?, ?, ?, ?, ?)",

@@ -43,4 +43,5 @@ export const api = {
   purchaseOrders: (status?: string) =>
     fetchJson<{ purchase_orders: PurchaseOrder[] }>(`/purchase-orders${status ? `?status=${encodeURIComponent(status)}` : ''}`),
   purchaseOrderDetail: (id: string) => fetchJson<PurchaseOrder>(`/purchase-orders/${encodeURIComponent(id)}`),
+  simulationTime: () => fetchJson<{ current_time: string }>(`/simulation/time`),
 }

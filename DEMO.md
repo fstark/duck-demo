@@ -43,3 +43,12 @@ can you give the dates of the shipment too?
 what ducks are going to be produced in january 2026?
 
 what is the most produced duck in february 2026?
+
+
+in which cities do we have customers?
+
+how many customers do we have?
+how many orders are pending?
+what wharehouses do we have?
+what customer do we have in paris?
+in which cities do we have customers?
