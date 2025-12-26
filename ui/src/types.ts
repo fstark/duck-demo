@@ -46,6 +46,8 @@ export type Item = {
     output_name: string
     qty_per_batch: number
   }>
+  production_orders?: ProductionOrder[]
+  purchase_orders?: PurchaseOrder[]
   stock?: StockSummary
 }
 
@@ -151,17 +153,18 @@ export type Recipe = {
 
 export type RecipeIngredient = {
   recipe_id: string
-  seq: number
-  ingredient_item_id: string
+  sequence_order: number
+  input_item_id: string
   ingredient_sku?: string
   ingredient_name?: string
   ingredient_uom?: string
-  qty_per_batch: number
+  input_qty: number
+  input_uom: string
 }
 
 export type RecipeOperation = {
   recipe_id: string
-  seq: number
+  sequence_order: number
   operation_name: string
   duration_hours: number
 }

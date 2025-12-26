@@ -123,6 +123,7 @@ CREATE TABLE IF NOT EXISTS recipes (
 CREATE TABLE IF NOT EXISTS recipe_ingredients (
     id TEXT PRIMARY KEY,
     recipe_id TEXT NOT NULL,
+    sequence_order INTEGER NOT NULL,
     input_item_id TEXT NOT NULL,
     input_qty REAL NOT NULL,
     input_uom TEXT NOT NULL,

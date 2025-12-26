@@ -168,12 +168,12 @@ def seed():
             ("RCP-ELVIS-20", "ITEM-ELVIS-20", 12, "ea", 3.5, "Elvis Duck 20cm - signature black hair and white jumpsuit details"),
         )
         conn.executemany(
-            "INSERT INTO recipe_ingredients (id, recipe_id, input_item_id, input_qty, input_uom) VALUES (?, ?, ?, ?, ?)",
+            "INSERT INTO recipe_ingredients (id, recipe_id, sequence_order, input_item_id, input_qty, input_uom) VALUES (?, ?, ?, ?, ?, ?)",
             [
-                ("ING-ELVIS-1", "RCP-ELVIS-20", "ITEM-PVC", 2.4, "kg"),
-                ("ING-ELVIS-2", "RCP-ELVIS-20", "ITEM-BLACK-DYE", 180, "ml"),
-                ("ING-ELVIS-3", "RCP-ELVIS-20", "ITEM-YELLOW-DYE", 50, "ml"),
-                ("ING-ELVIS-4", "RCP-ELVIS-20", "ITEM-BOX-SMALL", 1, "ea"),
+                ("ING-ELVIS-1", "RCP-ELVIS-20", 1, "ITEM-PVC", 2.4, "kg"),
+                ("ING-ELVIS-2", "RCP-ELVIS-20", 2, "ITEM-BLACK-DYE", 180, "ml"),
+                ("ING-ELVIS-3", "RCP-ELVIS-20", 3, "ITEM-YELLOW-DYE", 50, "ml"),
+                ("ING-ELVIS-4", "RCP-ELVIS-20", 4, "ITEM-BOX-SMALL", 1, "ea"),
             ],
         )
         conn.executemany(
@@ -193,11 +193,11 @@ def seed():
             ("RCP-CLASSIC-10", "ITEM-CLASSIC-10", 24, "ea", 2.5, "Classic yellow duck - high volume simple design"),
         )
         conn.executemany(
-            "INSERT INTO recipe_ingredients (id, recipe_id, input_item_id, input_qty, input_uom) VALUES (?, ?, ?, ?, ?)",
+            "INSERT INTO recipe_ingredients (id, recipe_id, sequence_order, input_item_id, input_qty, input_uom) VALUES (?, ?, ?, ?, ?, ?)",
             [
-                ("ING-CLASSIC-1", "RCP-CLASSIC-10", "ITEM-PVC", 1.2, "kg"),
-                ("ING-CLASSIC-2", "RCP-CLASSIC-10", "ITEM-YELLOW-DYE", 150, "ml"),
-                ("ING-CLASSIC-3", "RCP-CLASSIC-10", "ITEM-BOX-SMALL", 2, "ea"),
+                ("ING-CLASSIC-1", "RCP-CLASSIC-10", 1, "ITEM-PVC", 1.2, "kg"),
+                ("ING-CLASSIC-2", "RCP-CLASSIC-10", 2, "ITEM-YELLOW-DYE", 150, "ml"),
+                ("ING-CLASSIC-3", "RCP-CLASSIC-10", 3, "ITEM-BOX-SMALL", 2, "ea"),
             ],
         )
         conn.executemany(
@@ -216,12 +216,12 @@ def seed():
             ("RCP-ROBOT-25", "ITEM-ROBOT-25", 8, "ea", 6.5, "Robot Duck - metallic finish, most complex design"),
         )
         conn.executemany(
-            "INSERT INTO recipe_ingredients (id, recipe_id, input_item_id, input_qty, input_uom) VALUES (?, ?, ?, ?, ?)",
+            "INSERT INTO recipe_ingredients (id, recipe_id, sequence_order, input_item_id, input_qty, input_uom) VALUES (?, ?, ?, ?, ?, ?)",
             [
-                ("ING-ROBOT-1", "RCP-ROBOT-25", "ITEM-PVC", 3.2, "kg"),
-                ("ING-ROBOT-2", "RCP-ROBOT-25", "ITEM-BLACK-DYE", 200, "ml"),
-                ("ING-ROBOT-3", "RCP-ROBOT-25", "ITEM-YELLOW-DYE", 80, "ml"),
-                ("ING-ROBOT-4", "RCP-ROBOT-25", "ITEM-BOX-SMALL", 1, "ea"),
+                ("ING-ROBOT-1", "RCP-ROBOT-25", 1, "ITEM-PVC", 3.2, "kg"),
+                ("ING-ROBOT-2", "RCP-ROBOT-25", 2, "ITEM-BLACK-DYE", 200, "ml"),
+                ("ING-ROBOT-3", "RCP-ROBOT-25", 3, "ITEM-YELLOW-DYE", 80, "ml"),
+                ("ING-ROBOT-4", "RCP-ROBOT-25", 4, "ITEM-BOX-SMALL", 1, "ea"),
             ],
         )
         conn.executemany(
@@ -243,12 +243,12 @@ def seed():
             ("RCP-PIRATE-15", "ITEM-PIRATE-15", 12, "ea", 4.0, "Pirate Duck with eye patch and hat"),
         )
         conn.executemany(
-            "INSERT INTO recipe_ingredients (id, recipe_id, input_item_id, input_qty, input_uom) VALUES (?, ?, ?, ?, ?)",
+            "INSERT INTO recipe_ingredients (id, recipe_id, sequence_order, input_item_id, input_qty, input_uom) VALUES (?, ?, ?, ?, ?, ?)",
             [
-                ("ING-PIRATE-1", "RCP-PIRATE-15", "ITEM-PVC", 1.8, "kg"),
-                ("ING-PIRATE-2", "RCP-PIRATE-15", "ITEM-BLACK-DYE", 150, "ml"),
-                ("ING-PIRATE-3", "RCP-PIRATE-15", "ITEM-YELLOW-DYE", 60, "ml"),
-                ("ING-PIRATE-4", "RCP-PIRATE-15", "ITEM-BOX-SMALL", 1, "ea"),
+                ("ING-PIRATE-1", "RCP-PIRATE-15", 1, "ITEM-PVC", 1.8, "kg"),
+                ("ING-PIRATE-2", "RCP-PIRATE-15", 2, "ITEM-BLACK-DYE", 150, "ml"),
+                ("ING-PIRATE-3", "RCP-PIRATE-15", 3, "ITEM-YELLOW-DYE", 60, "ml"),
+                ("ING-PIRATE-4", "RCP-PIRATE-15", 4, "ITEM-BOX-SMALL", 1, "ea"),
             ],
         )
         conn.executemany(
@@ -269,12 +269,12 @@ def seed():
             ("RCP-NINJA-12", "ITEM-NINJA-12", 12, "ea", 3.75, "Ninja Duck with mask and ninja outfit"),
         )
         conn.executemany(
-            "INSERT INTO recipe_ingredients (id, recipe_id, input_item_id, input_qty, input_uom) VALUES (?, ?, ?, ?, ?)",
+            "INSERT INTO recipe_ingredients (id, recipe_id, sequence_order, input_item_id, input_qty, input_uom) VALUES (?, ?, ?, ?, ?, ?)",
             [
-                ("ING-NINJA-1", "RCP-NINJA-12", "ITEM-PVC", 1.4, "kg"),
-                ("ING-NINJA-2", "RCP-NINJA-12", "ITEM-BLACK-DYE", 160, "ml"),
-                ("ING-NINJA-3", "RCP-NINJA-12", "ITEM-YELLOW-DYE", 40, "ml"),
-                ("ING-NINJA-4", "RCP-NINJA-12", "ITEM-BOX-SMALL", 1, "ea"),
+                ("ING-NINJA-1", "RCP-NINJA-12", 1, "ITEM-PVC", 1.4, "kg"),
+                ("ING-NINJA-2", "RCP-NINJA-12", 2, "ITEM-BLACK-DYE", 160, "ml"),
+                ("ING-NINJA-3", "RCP-NINJA-12", 3, "ITEM-YELLOW-DYE", 40, "ml"),
+                ("ING-NINJA-4", "RCP-NINJA-12", 4, "ITEM-BOX-SMALL", 1, "ea"),
             ],
         )
         conn.executemany(
@@ -294,12 +294,12 @@ def seed():
             ("RCP-UNICORN-25", "ITEM-UNICORN-25", 10, "ea", 5.0, "Unicorn Duck with horn and rainbow colors"),
         )
         conn.executemany(
-            "INSERT INTO recipe_ingredients (id, recipe_id, input_item_id, input_qty, input_uom) VALUES (?, ?, ?, ?, ?)",
+            "INSERT INTO recipe_ingredients (id, recipe_id, sequence_order, input_item_id, input_qty, input_uom) VALUES (?, ?, ?, ?, ?, ?)",
             [
-                ("ING-UNICORN-1", "RCP-UNICORN-25", "ITEM-PVC", 2.5, "kg"),
-                ("ING-UNICORN-2", "RCP-UNICORN-25", "ITEM-BLACK-DYE", 100, "ml"),
-                ("ING-UNICORN-3", "RCP-UNICORN-25", "ITEM-YELLOW-DYE", 120, "ml"),
-                ("ING-UNICORN-4", "RCP-UNICORN-25", "ITEM-BOX-SMALL", 1, "ea"),
+                ("ING-UNICORN-1", "RCP-UNICORN-25", 1, "ITEM-PVC", 2.5, "kg"),
+                ("ING-UNICORN-2", "RCP-UNICORN-25", 2, "ITEM-BLACK-DYE", 100, "ml"),
+                ("ING-UNICORN-3", "RCP-UNICORN-25", 3, "ITEM-YELLOW-DYE", 120, "ml"),
+                ("ING-UNICORN-4", "RCP-UNICORN-25", 4, "ITEM-BOX-SMALL", 1, "ea"),
             ],
         )
         conn.executemany(

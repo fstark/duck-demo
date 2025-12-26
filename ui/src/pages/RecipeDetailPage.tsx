@@ -4,7 +4,6 @@ import { Table } from '../components/Table'
 import { Recipe, RecipeIngredient, RecipeOperation } from '../types'
 import { api } from '../api'
 import { useNavigation } from '../contexts/NavigationContext'
-import { formatQuantity } from '../utils/quantity'
 
 type SortDir = 'asc' | 'desc'
 type IngredientSortState = { key: keyof RecipeIngredient; dir: SortDir }
@@ -184,14 +183,14 @@ export function RecipeDetailPage({ recipeId }: RecipeDetailPageProps) {
                         <Table
                             rows={sortedIngredients}
                             columns={[
-                                { key: 'seq', label: '#', sortable: true },
+                                { key: 'sequence_order', label: '#', sortable: true },
                                 { key: 'ingredient_sku', label: 'SKU', sortable: true },
                                 { key: 'ingredient_name', label: 'Ingredient', sortable: true },
                                 {
-                                    key: 'qty_per_batch',
+                                    key: 'input_qty',
                                     label: 'Qty per Batch',
                                     sortable: true,
-                                    render: (row) => `${formatQuantity(row.qty_per_batch)} ${row.ingredient_uom || 'ea'}`
+                                    render: (row) => `${row.input_qty} ${row.input_uom}`
                                 },
                             ]}
                             sortKey={ingredientSort?.key}
@@ -212,7 +211,7 @@ export function RecipeDetailPage({ recipeId }: RecipeDetailPageProps) {
                         <Table
                             rows={sortedOperations}
                             columns={[
-                                { key: 'seq', label: '#', sortable: true },
+                                { key: 'sequence_order', label: '#', sortable: true },
                                 { key: 'operation_name', label: 'Operation', sortable: true },
                                 { key: 'duration_hours', label: 'Duration (hrs)', sortable: true },
                             ]}

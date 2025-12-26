@@ -233,6 +233,40 @@ export function ItemDetailPage({ sku }: ItemDetailPageProps) {
                         />
                     </Card>
                 )}
+                {item.production_orders && item.production_orders.length > 0 && (
+                    <Card title="Production Orders">
+                        <Table
+                            rows={item.production_orders as any}
+                            columns={[
+                                { key: 'id', label: 'Order ID', sortable: true },
+                                { key: 'recipe_id', label: 'Recipe', sortable: true },
+                                { key: 'output_qty', label: 'Qty', sortable: true, render: (row) => <Quantity value={row.output_qty} /> },
+                                { key: 'status', label: 'Status', sortable: true, render: (row) => <Badge>{row.status}</Badge> },
+                                { key: 'started_at', label: 'Started', sortable: true },
+                                { key: 'eta_finish', label: 'ETA Finish', sortable: true },
+                            ]}
+                            onRowClick={(row) => {
+                                setReferrer({ page: 'items', id: sku, label: item.name })
+                                setHash('production', row.id)
+                            }}
+                        />
+                    </Card>
+                )}
+                {item.purchase_orders && item.purchase_orders.length > 0 && (
+                    <Card title="Purchase Orders">
+                        <Table
+                            rows={item.purchase_orders as any}
+                            columns={[
+                                { key: 'id', label: 'PO ID', sortable: true },
+                                { key: 'supplier_name', label: 'Supplier', sortable: true },
+                                { key: 'qty', label: 'Qty', sortable: true, render: (row) => <Quantity value={row.qty} /> },
+                                { key: 'status', label: 'Status', sortable: true, render: (row) => <Badge>{row.status}</Badge> },
+                                { key: 'ordered_at', label: 'Ordered', sortable: true },
+                                { key: 'expected_delivery', label: 'Expected', sortable: true },
+                            ]}
+                        />
+                    </Card>
+                )}
             </Card>
         </section>
     )

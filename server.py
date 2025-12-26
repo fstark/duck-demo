@@ -1183,10 +1183,11 @@ def recipe_get(recipe_id: str) -> Dict[str, Any]:
         
         # Get ingredients
         ingredients = dict_rows(conn.execute(
-            """SELECT ri.*, i.sku as ingredient_sku, i.name as ingredient_name, i.uom as ingredient_uom
+            """SELECT ri.*, i.sku as ingredient_sku, i.name as ingredient_name
                FROM recipe_ingredients ri
                JOIN items i ON ri.input_item_id = i.id
-               WHERE ri.recipe_id = ?""",
+               WHERE ri.recipe_id = ?
+               ORDER BY ri.sequence_order""",
             (recipe_id,)
         ))
         result["ingredients"] = ingredients
@@ -1657,6 +1658,30 @@ async def api_item_detail(request):
             (item["id"],)
         ))
         result["used_in_recipes"] = used_in_recipes
+        
+        # Get production orders for this item
+        production_orders = dict_rows(conn.execute(
+            """SELECT po.id, po.recipe_id, po.status, po.started_at, po.completed_at, 
+                      po.eta_finish, po.eta_ship, r.output_qty
+               FROM production_orders po
+               JOIN recipes r ON po.recipe_id = r.id
+               WHERE po.item_id = ?
+               ORDER BY po.id DESC""",
+            (item["id"],)
+        ))
+        result["production_orders"] = production_orders
+        
+        # Get purchase orders for this item
+        purchase_orders = dict_rows(conn.execute(
+            """SELECT po.id, po.qty, po.status, po.ordered_at, po.expected_delivery, 
+                      po.received_at, s.id as supplier_id, s.name as supplier_name
+               FROM purchase_orders po
+               JOIN suppliers s ON po.supplier_id = s.id
+               WHERE po.item_id = ?
+               ORDER BY po.id DESC""",
+            (item["id"],)
+        ))
+        result["purchase_orders"] = purchase_orders
         
         return _json(result)
 
