@@ -5,7 +5,7 @@ import { Card } from './components/Card'
 import { Table } from './components/Table'
 import { Badge } from './components/Badge'
 import { api } from './api'
-import { Customer, Item, SalesOrder, SalesOrderDetail, StockSummary, Shipment, ProductionOrder } from './types'
+import { Customer, Item, SalesOrder, SalesOrderDetail, StockSummary, Shipment, ProductionOrder, Email } from './types'
 import { NavigationProvider, useNavigation } from './contexts/NavigationContext'
 import { Quantity } from './utils/quantity.tsx'
 import { formatPrice } from './utils/currency'
@@ -27,11 +27,13 @@ import { RecipesListPage } from './pages/RecipesListPage'
 import { RecipeDetailPage } from './pages/RecipeDetailPage'
 import { PurchaseOrdersListPage } from './pages/PurchaseOrdersListPage'
 import { PurchaseOrderDetailPage } from './pages/PurchaseOrderDetailPage'
+import { EmailsListPage } from './pages/EmailsListPage'
+import { EmailDetailPage } from './pages/EmailDetailPage'
 
 type SortDir = 'asc' | 'desc'
 type SortState<T> = { key: keyof T; dir: SortDir }
 
-type ViewPage = 'home' | 'customers' | 'items' | 'stock' | 'orders' | 'shipments' | 'production' | 'suppliers' | 'recipes' | 'purchase-orders'
+type ViewPage = 'home' | 'customers' | 'items' | 'stock' | 'orders' | 'shipments' | 'production' | 'suppliers' | 'recipes' | 'purchase-orders' | 'emails'
 type ViewState = { page: ViewPage; id?: string }
 
 function SectionHeading({ id, title }: { id: string; title: string }) {
@@ -48,7 +50,7 @@ function parseHash(): ViewState {
   const parts = hash.split('/').filter(Boolean)
   const page = (parts[0] as ViewPage) || 'home'
   const id = parts[1] ? decodeURIComponent(parts.slice(1).join('/')) : undefined
-  const allowed: ViewPage[] = ['home', 'customers', 'items', 'stock', 'orders', 'shipments', 'production', 'suppliers', 'recipes', 'purchase-orders']
+  const allowed: ViewPage[] = ['home', 'customers', 'items', 'stock', 'orders', 'shipments', 'production', 'suppliers', 'recipes', 'purchase-orders', 'emails']
   return { page: allowed.includes(page) ? page : 'home', id }
 }
 
@@ -96,6 +98,7 @@ function AppContent() {
   const [recipesCount, setRecipesCount] = useState(0)
   const [suppliersCount, setSuppliersCount] = useState(0)
   const [activePurchasesCount, setActivePurchasesCount] = useState(0)
+  const [draftsCount, setDraftsCount] = useState(0)
   const [view, setView] = useState<ViewState>(() => parseHash())
   const [apiError, setApiError] = useState<string | null>(null)
 
@@ -124,6 +127,7 @@ function AppContent() {
     api.recipes().then((res) => setRecipesCount(res.recipes?.length || 0)).catch(handleApiError)
     api.suppliers().then((res) => setSuppliersCount(res.suppliers?.length || 0)).catch(handleApiError)
     api.purchaseOrders('ordered').then((res) => setActivePurchasesCount(res.purchase_orders?.length || 0)).catch(handleApiError)
+    api.emails({ status: 'draft' }).then((res) => setDraftsCount(res.emails?.length || 0)).catch(handleApiError)
   }, [])
 
   useEffect(() => {
@@ -142,6 +146,7 @@ function AppContent() {
           { page: 'stock', label: 'Stock' },
           { page: 'orders', label: 'Sales Orders' },
           { page: 'shipments', label: 'Shipments' },
+          { page: 'emails', label: 'Emails' },
           { page: 'production', label: 'Production' },
           { page: 'recipes', label: 'Recipes' },
           { page: 'suppliers', label: 'Suppliers' },
@@ -247,6 +252,13 @@ function AppContent() {
                   View purchase orders
                 </button>
               </Card>
+              <Card title="Emails">
+                <div className="text-2xl font-semibold"><Quantity value={draftsCount} className="text-left block" /></div>
+                <div className="text-sm text-slate-600 mb-2">draft emails</div>
+                <button className="text-brand-600 hover:underline text-sm" onClick={() => setHash('emails')} type="button">
+                  View emails
+                </button>
+              </Card>
             </div>
           </section>
         )}
@@ -274,6 +286,9 @@ function AppContent() {
 
         {view.page === 'purchase-orders' && !view.id && <PurchaseOrdersListPage />}
         {view.page === 'purchase-orders' && view.id && <PurchaseOrderDetailPage purchaseOrderId={view.id} />}
+
+        {view.page === 'emails' && !view.id && <EmailsListPage />}
+        {view.page === 'emails' && view.id && <EmailDetailPage emailId={view.id} />}
 
         {view.page === 'production' && !view.id && <ProductionOrdersListPage />}
         {view.page === 'production' && view.id && <ProductionOrderDetailPage productionOrderId={view.id} />}

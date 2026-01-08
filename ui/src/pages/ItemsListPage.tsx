@@ -109,6 +109,26 @@ export function ItemsListPage() {
                     onRowClick={handleItemClick}
                     columns={[
                         {
+                            key: 'image_url',
+                            label: '',
+                            sortable: false,
+                            render: (row) => (
+                                <div className="w-10 h-10 flex items-center justify-center">
+                                    {row.image_url ? (
+                                        <img
+                                            src={row.image_url}
+                                            alt={row.name}
+                                            className="w-10 h-10 object-contain"
+                                        />
+                                    ) : (
+                                        <div className="w-10 h-10 bg-slate-100 rounded flex items-center justify-center text-slate-400 text-xs">
+                                            —
+                                        </div>
+                                    )}
+                                </div>
+                            ),
+                        },
+                        {
                             key: 'sku',
                             label: 'SKU',
                             sortable: true,

@@ -4,6 +4,7 @@ export type Customer = {
   company?: string
   email?: string
   city?: string
+  created_at?: string
 }
 
 export type CustomerDetail = Customer & {
@@ -33,6 +34,7 @@ export type Item = {
   unit_price?: number
   uom?: string
   reorder_qty?: number
+  image_url?: string
   recipes?: Array<{
     id: string
     output_qty: number
@@ -192,6 +194,38 @@ export type PurchaseOrder = {
   expected_delivery?: string
   contact_name?: string
   contact_email?: string
+}
+
+export type Email = {
+  id: string
+  customer_id: string
+  sales_order_id?: string
+  recipient_email: string
+  recipient_name?: string
+  subject: string
+  body: string
+  status: 'draft' | 'sent'
+  created_at: string
+  modified_at: string
+  sent_at?: string
+}
+
+export type EmailDetail = {
+  email: Email
+  customer?: {
+    id: string
+    name: string
+    company?: string
+    email?: string
+    city?: string
+    ui_url?: string
+  }
+  sales_order?: {
+    id: string
+    status?: string
+    created_at?: string
+    ui_url?: string
+  }
 }
 
 export type QuoteOption = {

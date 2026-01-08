@@ -1,4 +1,4 @@
-import { Customer, Item, SalesOrder, SalesOrderDetail, Shipment, StockSummary, QuoteOption, ProductionOrder, Recipe, Supplier, PurchaseOrder } from './types'
+import { Customer, Item, SalesOrder, SalesOrderDetail, Shipment, StockSummary, QuoteOption, ProductionOrder, Recipe, Supplier, PurchaseOrder, Email, EmailDetail } from './types'
 
 const API_BASE = import.meta.env.VITE_API_BASE || '/api'
 
@@ -44,4 +44,13 @@ export const api = {
     fetchJson<{ purchase_orders: PurchaseOrder[] }>(`/purchase-orders${status ? `?status=${encodeURIComponent(status)}` : ''}`),
   purchaseOrderDetail: (id: string) => fetchJson<PurchaseOrder>(`/purchase-orders/${encodeURIComponent(id)}`),
   simulationTime: () => fetchJson<{ current_time: string }>(`/simulation/time`),
+  emails: (q?: { customer_id?: string; sales_order_id?: string; status?: string }) => {
+    const params = new URLSearchParams()
+    if (q?.customer_id) params.set('customer_id', q.customer_id)
+    if (q?.sales_order_id) params.set('sales_order_id', q.sales_order_id)
+    if (q?.status) params.set('status', q.status)
+    const query = params.toString()
+    return fetchJson<{ emails: Email[] }>(`/emails${query ? `?${query}` : ''}`)
+  },
+  emailDetail: (id: string) => fetchJson<EmailDetail>(`/emails/${encodeURIComponent(id)}`),
 }

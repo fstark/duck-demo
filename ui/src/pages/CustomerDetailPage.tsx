@@ -2,9 +2,10 @@ import { useState, useEffect } from 'react'
 import { Card } from '../components/Card'
 import { Table } from '../components/Table'
 import { Badge } from '../components/Badge'
-import { CustomerDetail, Customer } from '../types'
+import { CustomerDetail, Customer, Email } from '../types'
 import { api } from '../api'
 import { useNavigation } from '../contexts/NavigationContext'
+import { formatDate } from '../utils/date'
 
 function setHash(page: string, id?: string) {
     const path = id ? `#/${page}/${encodeURIComponent(id)}` : `#/${page}`
@@ -19,15 +20,20 @@ interface CustomerDetailPageProps {
 
 export function CustomerDetailPage({ customerId }: CustomerDetailPageProps) {
     const [customer, setCustomer] = useState<CustomerDetail | null>(null)
+    const [emails, setEmails] = useState<Email[]>([])
     const [loading, setLoading] = useState(true)
     const { listContext, setListContext, referrer, setReferrer } = useNavigation()
     const [error, setError] = useState<string | null>(null)
 
     useEffect(() => {
-        // Fetch customer details
-        api.customerDetail(customerId)
-            .then((customer) => {
-                setCustomer(customer)
+        // Fetch customer details and emails
+        Promise.all([
+            api.customerDetail(customerId),
+            api.emails({ customer_id: customerId })
+        ])
+            .then(([customerData, emailsData]) => {
+                setCustomer(customerData)
+                setEmails(emailsData.emails)
                 setLoading(false)
             })
             .catch((err) => {
@@ -161,6 +167,9 @@ export function CustomerDetailPage({ customerId }: CustomerDetailPageProps) {
                     <div className="text-slate-600">
                         <span className="font-medium">City:</span> {customer.city || '—'}
                     </div>
+                    <div className="text-slate-600">
+                        <span className="font-medium">Created:</span> {formatDate(customer.created_at)}
+                    </div>
                 </div>
                 {customer.sales_orders && customer.sales_orders.length > 0 && (
                     <Card title="Sales Orders">
@@ -202,6 +211,36 @@ export function CustomerDetailPage({ customerId }: CustomerDetailPageProps) {
                                 })
                                 setReferrer({ page: 'customers', id: customerId, label: customer.name })
                                 setHash('shipments', row.id)
+                            }}
+                        />
+                    </Card>
+                )}
+                {emails.length > 0 && (
+                    <Card title="Emails">
+                        <Table
+                            rows={emails as any}
+                            columns={[
+                                { key: 'subject', label: 'Subject' },
+                                { key: 'recipient_email', label: 'Recipient' },
+                                {
+                                    key: 'status',
+                                    label: 'Status',
+                                    render: (row: Email) => (
+                                        <Badge variant={row.status === 'sent' ? 'success' : 'neutral'}>
+                                            {row.status}
+                                        </Badge>
+                                    )
+                                },
+                                { key: 'modified_at', label: 'Modified', render: (row: Email) => formatDate(row.modified_at) },
+                            ]}
+                            onRowClick={(row: Email, index: number) => {
+                                setListContext({
+                                    listType: 'emails',
+                                    items: emails.map(e => ({ id: e.id })) as any,
+                                    currentIndex: index,
+                                })
+                                setReferrer({ page: 'customers', id: customerId, label: customer.name })
+                                setHash('emails', row.id)
                             }}
                         />
                     </Card>

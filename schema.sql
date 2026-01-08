@@ -12,7 +12,8 @@ CREATE TABLE IF NOT EXISTS customers (
     name TEXT NOT NULL,
     company TEXT,
     email TEXT,
-    city TEXT
+    city TEXT,
+    created_at TEXT
 );
 
 CREATE TABLE IF NOT EXISTS items (
@@ -22,7 +23,8 @@ CREATE TABLE IF NOT EXISTS items (
     type TEXT NOT NULL,
     unit_price REAL,
     uom TEXT DEFAULT 'ea',
-    reorder_qty REAL DEFAULT 0
+    reorder_qty REAL DEFAULT 0,
+    image BLOB
 );
 
 CREATE TABLE IF NOT EXISTS stock (
@@ -44,7 +46,7 @@ CREATE TABLE IF NOT EXISTS sales_orders (
     ship_to_country TEXT,
     note TEXT,
     status TEXT,
-    created_at TEXT DEFAULT (datetime('now'))
+    created_at TEXT
 );
 
 CREATE TABLE IF NOT EXISTS sales_order_lines (
@@ -156,7 +158,21 @@ CREATE TABLE IF NOT EXISTS purchase_orders (
     qty REAL NOT NULL,
     supplier_id TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'ordered',
-    ordered_at TEXT DEFAULT (datetime('now')),
+    ordered_at TEXT,
     expected_delivery TEXT,
     received_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS emails (
+    id TEXT PRIMARY KEY,
+    customer_id TEXT NOT NULL,
+    sales_order_id TEXT,
+    recipient_email TEXT NOT NULL,
+    recipient_name TEXT,
+    subject TEXT NOT NULL,
+    body TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'draft',
+    created_at TEXT NOT NULL,
+    modified_at TEXT NOT NULL,
+    sent_at TEXT
 );

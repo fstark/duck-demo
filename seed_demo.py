@@ -2,12 +2,15 @@
 
 from pathlib import Path
 import sqlite3
+import os
 
 from db import DB_PATH, init_db
 
 
-def seed():
-    if DB_PATH.exists():
+def seed(from_admin=False):
+    # When called standalone, delete file and start fresh
+    # When called from admin tool, tables already dropped so just init schema
+    if not from_admin and DB_PATH.exists():
         DB_PATH.unlink()
     init_db()
     conn = sqlite3.connect(DB_PATH)
@@ -16,64 +19,77 @@ def seed():
         
         # Initialize simulation state with fixed starting time for reproducibility
         conn.execute(
-            "INSERT INTO simulation_state (id, sim_time) VALUES (1, '2025-01-15 08:00:00')"
+            "INSERT INTO simulation_state (id, sim_time) VALUES (1, '2025-12-24 08:30:00')"
         )
         
         # Customers
         conn.executemany(
-            "INSERT INTO customers (id, name, company, email, city) VALUES (?, ?, ?, ?, ?)",
+            "INSERT INTO customers (id, name, company, email, city, created_at) VALUES (?, ?, ?, ?, ?, ?)",
             [
-                ("CUST-0044", "Sarah Martin", None, "sarah@martin-retail.example", "Paris"),
-                ("CUST-0001", "Rubber Duck Works", None, "contact@rubberduck.example", "Lyon"),
-                ("CUST-0102", "John Doe", "DuckFan Paris", "john@duckfan-paris.example", "Paris"),
-                ("CUST-0103", "Daisy Paddlesworth", "Splash & Co", "daisy@splashco.example", "Nice"),
-                ("CUST-0104", "Quackers McGee", None, "quackers@pond.example", "Marseille"),
-                ("CUST-0105", "Bella Featherstone", "The Duck Emporium", "bella@duckemporium.example", "Toulouse"),
-                ("CUST-0106", "Puddles O'Mallory", None, "puddles@mailexample.example", "Bordeaux"),
-                ("CUST-0107", "Drake Fluffington", "Fluff & Feathers", "drake@fluffnfeathers.example", "Strasbourg"),
-                ("CUST-0108", "Mallory Beakworth", None, "mallory@beakmail.example", "Nantes"),
-                ("CUST-0109", "Waddles Johnson", "Waddle Inc", "waddles@waddleinc.example", "Lille"),
-                ("CUST-0110", "Ducky McDuckface", None, "ducky@mcduckface.example", "Montpellier"),
-                ("CUST-0111", "Splash Gordon", "Aquatic Adventures", "splash@aquatic.example", "Rennes"),
-                ("CUST-0112", "Feather McFloaty", None, "feather@floaty.example", "Grenoble"),
-                ("CUST-0113", "Bubbles LaRue", "Bath Time Boutique", "bubbles@bathtime.example", "Dijon"),
-                ("CUST-0114", "Captain Quack", "Quack Squadron", "captain@quacksquadron.example", "Angers"),
-                ("CUST-0115", "Honk Singleton", None, "honk@singleton.example", "Le Havre"),
-                ("CUST-0116", "Webby Toes", "Webfoot Wonders", "webby@webfoot.example", "Reims"),
+                ("CUST-0044", "Sarah Martin", None, "sarah@martin-retail.example", "Paris", "2025-12-01 10:00:00"),
+                ("CUST-0001", "Rubber Duck Works", None, "contact@rubberduck.example", "Lyon", "2025-12-02 11:30:00"),
+                ("CUST-0102", "John Doe", "DuckFan Paris", "john@duckfan-paris.example", "Paris", "2025-12-05 14:20:00"),
+                ("CUST-0103", "Daisy Paddlesworth", "Splash & Co", "daisy@splashco.example", "Nice", "2025-12-07 09:15:00"),
+                ("CUST-0104", "Quackers McGee", None, "quackers@pond.example", "Marseille", "2025-12-08 16:45:00"),
+                ("CUST-0105", "Bella Featherstone", "The Duck Emporium", "bella@duckemporium.example", "Toulouse", "2025-12-10 13:00:00"),
+                ("CUST-0106", "Puddles O'Mallory", None, "puddles@mailexample.example", "Bordeaux", "2025-12-12 10:30:00"),
+                ("CUST-0107", "Drake Fluffington", "Fluff & Feathers", "drake@fluffnfeathers.example", "Strasbourg", "2025-12-14 15:20:00"),
+                ("CUST-0108", "Mallory Beakworth", None, "mallory@beakmail.example", "Nantes", "2025-12-15 11:00:00"),
+                ("CUST-0109", "Waddles Johnson", "Waddle Inc", "waddles@waddleinc.example", "Lille", "2025-12-16 14:45:00"),
+                ("CUST-0110", "Ducky McDuckface", None, "ducky@mcduckface.example", "Montpellier", "2025-12-17 09:30:00"),
+                ("CUST-0111", "Splash Gordon", "Aquatic Adventures", "splash@aquatic.example", "Rennes", "2025-12-18 16:00:00"),
+                ("CUST-0112", "Feather McFloaty", None, "feather@floaty.example", "Grenoble", "2025-12-19 10:15:00"),
+                ("CUST-0113", "Bubbles LaRue", "Bath Time Boutique", "bubbles@bathtime.example", "Dijon", "2025-12-20 13:30:00"),
+                ("CUST-0114", "Captain Quack", "Quack Squadron", "captain@quacksquadron.example", "Angers", "2025-12-21 11:45:00"),
+                ("CUST-0115", "Honk Singleton", None, "honk@singleton.example", "Le Havre", "2025-12-22 14:20:00"),
+                ("CUST-0116", "Webby Toes", "Webfoot Wonders", "webby@webfoot.example", "Reims", "2025-12-23 09:00:00"),
             ],
         )
 
-        # Items
-        conn.executemany(
-            "INSERT INTO items (id, sku, name, type, unit_price, uom, reorder_qty) VALUES (?, ?, ?, ?, ?, ?, ?)",
-            [
-                ("ITEM-ELVIS-20", "ELVIS-DUCK-20CM", "Elvis Duck 20cm", "finished_good", 12.0, "ea", 0),
-                ("ITEM-MARILYN-20", "MARILYN-DUCK-20CM", "Marilyn Duck 20cm", "finished_good", 12.0, "ea", 0),
-                ("ITEM-CLASSIC-10", "CLASSIC-DUCK-10CM", "Classic Duck 10cm", "finished_good", 10.0, "ea", 0),
-                ("ITEM-PIRATE-15", "PIRATE-DUCK-15CM", "Pirate Duck 15cm", "finished_good", 14.5, "ea", 0),
-                ("ITEM-NINJA-12", "NINJA-DUCK-12CM", "Ninja Duck 12cm", "finished_good", 13.0, "ea", 0),
-                ("ITEM-UNICORN-25", "UNICORN-DUCK-25CM", "Unicorn Duck 25cm", "finished_good", 18.0, "ea", 0),
-                ("ITEM-DISCO-18", "DISCO-DUCK-18CM", "Disco Duck 18cm", "finished_good", 15.5, "ea", 0),
-                ("ITEM-WIZARD-20", "WIZARD-DUCK-20CM", "Wizard Duck 20cm", "finished_good", 16.0, "ea", 0),
-                ("ITEM-ASTRONAUT-22", "ASTRONAUT-DUCK-22CM", "Astronaut Duck 22cm", "finished_good", 19.0, "ea", 0),
-                ("ITEM-SUPERHERO-20", "SUPERHERO-DUCK-20CM", "Superhero Duck 20cm", "finished_good", 17.5, "ea", 0),
-                ("ITEM-ZOMBIE-15", "ZOMBIE-DUCK-15CM", "Zombie Duck 15cm", "finished_good", 11.5, "ea", 0),
-                ("ITEM-VIKING-18", "VIKING-DUCK-18CM", "Viking Duck 18cm", "finished_good", 16.5, "ea", 0),
-                ("ITEM-MERMAID-20", "MERMAID-DUCK-20CM", "Mermaid Duck 20cm", "finished_good", 14.0, "ea", 0),
-                ("ITEM-ROBOT-25", "ROBOT-DUCK-25CM", "Robot Duck 25cm", "finished_good", 22.0, "ea", 0),
-                ("ITEM-CHEF-15", "CHEF-DUCK-15CM", "Chef Duck 15cm", "finished_good", 13.5, "ea", 0),
-                ("ITEM-ROCKSTAR-20", "ROCKSTAR-DUCK-20CM", "Rockstar Duck 20cm", "finished_good", 15.0, "ea", 0),
-                ("ITEM-DETECTIVE-18", "DETECTIVE-DUCK-18CM", "Detective Duck 18cm", "finished_good", 14.5, "ea", 0),
-                ("ITEM-SURFER-15", "SURFER-DUCK-15CM", "Surfer Duck 15cm", "finished_good", 12.5, "ea", 0),
-                ("ITEM-COWBOY-20", "COWBOY-DUCK-20CM", "Cowboy Duck 20cm", "finished_good", 16.0, "ea", 0),
-                ("ITEM-BALLERINA-12", "BALLERINA-DUCK-12CM", "Ballerina Duck 12cm", "finished_good", 11.0, "ea", 0),
-                ("ITEM-GARDEN-GNOME-30", "GNOME-DUCK-30CM", "Garden Gnome Duck 30cm", "finished_good", 25.0, "ea", 0),
-                ("ITEM-PVC", "PVC-PELLETS", "PVC Pellets", "material", None, "kg", 0),
-                ("ITEM-BLACK-DYE", "BLACK-DYE", "Black Dye", "material", None, "ml", 0),
-                ("ITEM-YELLOW-DYE", "YELLOW-DYE", "Yellow Dye", "material", None, "ml", 0),
-                ("ITEM-BOX-SMALL", "BOX-SMALL", "Small Box", "material", None, "ea", 0),
-            ],
-        )
+        # Items - prepare items with image loading
+        items_data = [
+            ("ITEM-ELVIS-20", "ELVIS-DUCK-20CM", "Elvis Duck 20cm", "finished_good", 12.0, "ea", 0),
+            ("ITEM-MARILYN-20", "MARILYN-DUCK-20CM", "Marilyn Duck 20cm", "finished_good", 12.0, "ea", 0),
+            ("ITEM-CLASSIC-10", "CLASSIC-DUCK-10CM", "Classic Duck 10cm", "finished_good", 10.0, "ea", 0),
+            ("ITEM-PIRATE-15", "PIRATE-DUCK-15CM", "Pirate Duck 15cm", "finished_good", 14.5, "ea", 0),
+            ("ITEM-NINJA-12", "NINJA-DUCK-12CM", "Ninja Duck 12cm", "finished_good", 13.0, "ea", 0),
+            ("ITEM-UNICORN-25", "UNICORN-DUCK-25CM", "Unicorn Duck 25cm", "finished_good", 18.0, "ea", 0),
+            ("ITEM-DISCO-18", "DISCO-DUCK-18CM", "Disco Duck 18cm", "finished_good", 15.5, "ea", 0),
+            ("ITEM-WIZARD-20", "WIZARD-DUCK-20CM", "Wizard Duck 20cm", "finished_good", 16.0, "ea", 0),
+            ("ITEM-ASTRONAUT-22", "ASTRONAUT-DUCK-22CM", "Astronaut Duck 22cm", "finished_good", 19.0, "ea", 0),
+            ("ITEM-SUPERHERO-20", "SUPERHERO-DUCK-20CM", "Superhero Duck 20cm", "finished_good", 17.5, "ea", 0),
+            ("ITEM-ZOMBIE-15", "ZOMBIE-DUCK-15CM", "Zombie Duck 15cm", "finished_good", 11.5, "ea", 0),
+            ("ITEM-VIKING-18", "VIKING-DUCK-18CM", "Viking Duck 18cm", "finished_good", 16.5, "ea", 0),
+            ("ITEM-MERMAID-20", "MERMAID-DUCK-20CM", "Mermaid Duck 20cm", "finished_good", 14.0, "ea", 0),
+            ("ITEM-ROBOT-25", "ROBOT-DUCK-25CM", "Robot Duck 25cm", "finished_good", 22.0, "ea", 0),
+            ("ITEM-CHEF-15", "CHEF-DUCK-15CM", "Chef Duck 15cm", "finished_good", 13.5, "ea", 0),
+            ("ITEM-ROCKSTAR-20", "ROCKSTAR-DUCK-20CM", "Rockstar Duck 20cm", "finished_good", 15.0, "ea", 0),
+            ("ITEM-DETECTIVE-18", "DETECTIVE-DUCK-18CM", "Detective Duck 18cm", "finished_good", 14.5, "ea", 0),
+            ("ITEM-SURFER-15", "SURFER-DUCK-15CM", "Surfer Duck 15cm", "finished_good", 12.5, "ea", 0),
+            ("ITEM-COWBOY-20", "COWBOY-DUCK-20CM", "Cowboy Duck 20cm", "finished_good", 16.0, "ea", 0),
+            ("ITEM-BALLERINA-12", "BALLERINA-DUCK-12CM", "Ballerina Duck 12cm", "finished_good", 11.0, "ea", 0),
+            ("ITEM-GARDEN-GNOME-30", "GNOME-DUCK-30CM", "Garden Gnome Duck 30cm", "finished_good", 25.0, "ea", 0),
+            ("ITEM-PVC", "PVC-PELLETS", "PVC Pellets", "material", None, "kg", 0),
+            ("ITEM-BLACK-DYE", "BLACK-DYE", "Black Dye", "material", None, "ml", 0),
+            ("ITEM-YELLOW-DYE", "YELLOW-DYE", "Yellow Dye", "material", None, "ml", 0),
+            ("ITEM-BOX-SMALL", "BOX-SMALL", "Small Box", "material", None, "ea", 0),
+        ]
+        
+        # Insert items with images
+        script_dir = Path(__file__).parent
+        images_dir = script_dir / "images"
+        
+        for item_id, sku, name, item_type, unit_price, uom, reorder_qty in items_data:
+            image_data = None
+            image_path = images_dir / f"{sku}.png"
+            if image_path.exists():
+                with open(image_path, "rb") as f:
+                    image_data = f.read()
+            
+            conn.execute(
+                "INSERT INTO items (id, sku, name, type, unit_price, uom, reorder_qty, image) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (item_id, sku, name, item_type, unit_price, uom, reorder_qty, image_data)
+            )
 
         # Stock
         conn.executemany(
@@ -387,6 +403,32 @@ def seed():
                 ("POP-1006-4", "MO-1006", "OP-PIRATE-4", 4, "Paint details", 0.75, "completed", "2025-12-17T11:00", "2025-12-17T11:45"),
                 ("POP-1006-5", "MO-1006", "OP-PIRATE-5", 5, "Quality check", 0.25, "completed", "2025-12-17T11:45", "2025-12-17T12:00"),
                 ("POP-1006-6", "MO-1006", "OP-PIRATE-6", 6, "Pack into box", 0.25, "completed", "2025-12-17T13:45", "2025-12-17T14:00"),
+            ]
+        )
+
+        # Emails
+        conn.executemany(
+            "INSERT INTO emails (id, customer_id, sales_order_id, recipient_email, recipient_name, subject, body, status, created_at, modified_at, sent_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            [
+                ("EMAIL-0001", "CUST-0044", "SO-1041", "sarah@martin-retail.example", "Sarah Martin",
+                 "Order Confirmation - SO-1041",
+                 "Dear Sarah,\n\nThank you for your order SO-1041. We have received your request for 12 Small Yellow Rubber Ducks (8cm).\n\nYour order is currently being processed and we will keep you updated on its progress.\n\nBest regards,\nDuck Inc Sales Team",
+                 "sent", "2025-12-20 09:00:00", "2025-12-20 09:00:00", "2025-12-20 09:00:00"),
+                
+                ("EMAIL-0002", "CUST-0102", "SO-1042", "john@duckfan-paris.example", "John Doe",
+                 "Quote for Elvis Duck Order",
+                 "Dear John,\n\nThank you for your interest in our Elvis Presley Rubber Ducks (20cm).\n\nFor an order of 24 units, we can offer:\n- Unit price: €12.00\n- Volume discount (5%): -€14.40\n- Subtotal: €273.60\n- Shipping: Free (order over €300 threshold)\n- Total: €273.60\n\nEstimated delivery: January 8, 2026\n\nPlease let us know if you would like to proceed.\n\nBest regards,\nDuck Inc Sales Team",
+                 "draft", "2025-12-21 14:30:00", "2025-12-22 10:15:00", None),
+                
+                ("EMAIL-0003", "CUST-0044", None, "sarah@martin-retail.example", "Sarah Martin",
+                 "New Product Announcement - Pirate Rubber Duck",
+                 "Dear Sarah,\n\nWe're excited to announce our latest addition to the Duck Inc collection: the Pirate Rubber Duck (15cm)!\n\nThis swashbuckling companion features:\n- Authentic pirate outfit with tricorn hat\n- Eye patch and bandana details\n- Premium quality vinyl construction\n- Perfect for bath time adventures\n\nSpecial launch price: €12.00 per unit\nAvailable now with immediate shipping.\n\nWould you like to add some to your next order?\n\nBest regards,\nDuck Inc Sales Team",
+                 "sent", "2025-12-22 11:00:00", "2025-12-22 11:00:00", "2025-12-22 11:00:00"),
+                
+                ("EMAIL-0004", "CUST-0103", None, "daisy@splashco.example", "Daisy Paddlesworth",
+                 "Follow-up: Your Recent Inquiry",
+                 "Dear Daisy,\n\nThank you for contacting Duck Inc regarding our rubber duck collection.\n\nI wanted to follow up on your inquiry about bulk ordering options for Splash & Co. We offer attractive volume discounts for orders over 24 units:\n- 5% discount on all items\n- Free shipping on orders over €300\n- Priority production scheduling\n\nOur current bestsellers are:\n1. Elvis Presley Rubber Duck (20cm) - €12.00\n2. Small Yellow Rubber Duck (8cm) - €12.00\n3. Pirate Rubber Duck (15cm) - €12.00\n\nWould you like to schedule a call to discuss your specific needs?\n\nBest regards,\nFred Stark\nDuck Inc Sales",
+                 "draft", "2025-12-23 15:45:00", "2025-12-23 16:20:00", None),
             ]
         )
 

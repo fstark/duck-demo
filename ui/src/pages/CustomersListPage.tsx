@@ -4,6 +4,7 @@ import { Table } from '../components/Table'
 import { Customer } from '../types'
 import { api } from '../api'
 import { useNavigation } from '../contexts/NavigationContext'
+import { formatDate } from '../utils/date'
 
 type SortDir = 'asc' | 'desc'
 type SortState = { key: keyof Customer; dir: SortDir }
@@ -132,6 +133,12 @@ export function CustomersListPage() {
                             label: 'City',
                             sortable: true,
                             render: (row) => row.city || '—'
+                        },
+                        {
+                            key: 'created_at',
+                            label: 'Created',
+                            sortable: true,
+                            render: (row) => formatDate(row.created_at)
                         },
                     ]}
                 />

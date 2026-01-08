@@ -1,3 +1,7 @@
+please reset the data using the password "kondor"
+
+https://mft-ai-chat-myforterro-ui.fcs-dev.eks.forterro.com/home
+
 New chat:
 
 Show me the last order created.
@@ -52,3 +56,16 @@ how many orders are pending?
 what wharehouses do we have?
 what customer do we have in paris?
 in which cities do we have customers?
+
+
+reset the data using the password "kondor"
+
+
+Draft a response to this email:
+
+From: dean.forbes@forterro.duck
+Hi, I am Dean Forbes, and I would love to buy a sample of your rubber ducks. what is the prices if I take one item of everything you havre in stock?
+
+
+Manage this other email:
+From: dean.forbes@forterro.duck

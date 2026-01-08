@@ -154,15 +154,28 @@ export function ItemDetailPage({ sku }: ItemDetailPageProps) {
                     )}
                 </div>
                 <div className="space-y-2 text-sm text-slate-700">
-                    <div className="font-semibold text-lg">{item.name}</div>
-                    <div className="text-slate-600">
-                        <span className="font-medium">SKU:</span> {item.sku}
-                    </div>
-                    <div className="text-slate-600">
-                        <span className="font-medium">Type:</span> {item.type ? <Badge>{item.type}</Badge> : '—'}
-                    </div>
-                    <div className="text-slate-600">
-                        <span className="font-medium">Unit price:</span> {formatPrice(item.unit_price)}
+                    <div className="flex items-start gap-6">
+                        <div className="flex-1">
+                            <div className="font-semibold text-lg">{item.name}</div>
+                            <div className="text-slate-600">
+                                <span className="font-medium">SKU:</span> {item.sku}
+                            </div>
+                            <div className="text-slate-600">
+                                <span className="font-medium">Type:</span> {item.type ? <Badge>{item.type}</Badge> : '—'}
+                            </div>
+                            <div className="text-slate-600">
+                                <span className="font-medium">Unit price:</span> {formatPrice(item.unit_price)}
+                            </div>
+                        </div>
+                        {item.image_url && (
+                            <div className="flex-shrink-0">
+                                <img
+                                    src={item.image_url}
+                                    alt={item.name}
+                                    className="w-64 h-64 object-contain rounded border border-slate-200"
+                                />
+                            </div>
+                        )}
                     </div>
                 </div>
                 {((item.recipes && item.recipes.length > 0) || (item.used_in_recipes && item.used_in_recipes.length > 0)) && (

@@ -2,11 +2,12 @@ import { useState, useEffect } from 'react'
 import { Card } from '../components/Card'
 import { Table } from '../components/Table'
 import { Badge } from '../components/Badge'
-import { SalesOrder, SalesOrderDetail } from '../types'
+import { SalesOrder, SalesOrderDetail, Email } from '../types'
 import { api } from '../api'
 import { useNavigation } from '../contexts/NavigationContext'
 import { formatPrice } from '../utils/currency'
 import { Quantity } from '../utils/quantity.tsx'
+import { formatDate } from '../utils/date'
 
 function setHash(page: string, id?: string) {
     const path = id ? `#/${page}/${encodeURIComponent(id)}` : `#/${page}`
@@ -21,14 +22,19 @@ interface SalesOrderDetailPageProps {
 
 export function SalesOrderDetailPage({ orderId }: SalesOrderDetailPageProps) {
     const [order, setOrder] = useState<SalesOrderDetail | null>(null)
+    const [emails, setEmails] = useState<Email[]>([])
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
     const { listContext, setListContext, setReferrer, referrer, clearListContext } = useNavigation()
 
     useEffect(() => {
-        api.salesOrder(orderId)
-            .then((res) => {
-                setOrder(res as SalesOrderDetail)
+        Promise.all([
+            api.salesOrder(orderId),
+            api.emails({ sales_order_id: orderId })
+        ])
+            .then(([orderData, emailsData]) => {
+                setOrder(orderData as SalesOrderDetail)
+                setEmails(emailsData.emails)
                 setLoading(false)
             })
             .catch((err) => {
@@ -230,6 +236,36 @@ export function SalesOrderDetailPage({ orderId }: SalesOrderDetailPageProps) {
                             <div className="text-slate-500">No shipments linked.</div>
                         )}
                     </Card>
+                    {emails.length > 0 && (
+                        <Card title="Emails">
+                            <Table
+                                rows={emails as any}
+                                columns={[
+                                    { key: 'subject', label: 'Subject' },
+                                    { key: 'recipient_email', label: 'Recipient' },
+                                    {
+                                        key: 'status',
+                                        label: 'Status',
+                                        render: (row: Email) => (
+                                            <Badge variant={row.status === 'sent' ? 'success' : 'neutral'}>
+                                                {row.status}
+                                            </Badge>
+                                        )
+                                    },
+                                    { key: 'modified_at', label: 'Modified', render: (row: Email) => formatDate(row.modified_at) },
+                                ]}
+                                onRowClick={(row: Email, index: number) => {
+                                    setListContext({
+                                        listType: 'emails',
+                                        items: emails.map(e => ({ id: e.id })) as any,
+                                        currentIndex: index,
+                                    })
+                                    setReferrer({ page: 'orders', id: orderId, label: `Order ${order.sales_order.id}` })
+                                    setHash('emails', row.id)
+                                }}
+                            />
+                        </Card>
+                    )}
                 </div>
             </Card>
         </section>

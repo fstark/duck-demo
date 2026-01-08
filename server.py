@@ -5,6 +5,7 @@ import json
 import functools
 import logging
 import re
+import base64
 from urllib.parse import quote
 from contextlib import contextmanager
 from datetime import datetime, timedelta
@@ -119,8 +120,14 @@ def db_conn() -> Iterator[sqlite3.Connection]:
         conn.close()
 
 
+def get_simulation_time(conn: sqlite3.Connection) -> str:
+    """Get current simulation time."""
+    result = conn.execute("SELECT sim_time FROM simulation_state WHERE id = 1").fetchone()
+    return result[0]
+
+
 def load_item(conn: sqlite3.Connection, sku: str) -> Optional[sqlite3.Row]:
-    cur = conn.execute("SELECT * FROM items WHERE sku = ?", (sku,))
+    cur = conn.execute("SELECT id, sku, name, type, unit_price, uom, reorder_qty, image FROM items WHERE sku = ?", (sku,))
     return cur.fetchone()
 
 
@@ -195,12 +202,24 @@ def find_substitutions(
     return filtered
 
 
+@mcp.tool(name="get_current_user")
+@log_tool("get_current_user")
+def get_current_user() -> Dict[str, Any]:
+    """Get current user information including first name, last name, role, and email."""
+    return {
+        "first_name": "Fred",
+        "last_name": "Stark",
+        "role": "Duck Inc Sales",
+        "email": "fred.stark@rubberducks.ia"
+    }
+
+
 @mcp.tool(name="inventory_list_items")
 @log_tool("inventory_list_items")
 def inventory_list_items(in_stock_only: bool = False, limit: int = 50) -> Dict[str, Any]:
     """List items, optionally only those with available stock."""
     with db_conn() as conn:
-        base_sql = "SELECT id, sku, name, type, unit_price FROM items"
+        base_sql = "SELECT id, sku, name, type, unit_price, image FROM items"
         params: List[Any] = []
         if in_stock_only:
             base_sql += " WHERE id IN (SELECT DISTINCT item_id FROM stock WHERE on_hand > 0)"
@@ -214,6 +233,9 @@ def inventory_list_items(in_stock_only: bool = False, limit: int = 50) -> Dict[s
             row["available_total"] = summary["available_total"]
         for row in rows:
             row["ui_url"] = ui_href("items", row["sku"])
+            if row.get("image"):
+                row["image_url"] = f"/api/items/{row['sku']}/image"
+            row.pop("image", None)
         return {"items": rows}
 
 
@@ -551,18 +573,23 @@ def find_customers(
 @mcp.tool(name="crm_create_customer")
 @log_tool("crm_create_customer")
 def create_customer(name: str, company: Optional[str] = None, email: Optional[str] = None, city: Optional[str] = None) -> Dict[str, Any]:
-    """Create a new customer explicitly."""
+    """Create a new customer. After creating the customer, briefly inform the user (not the customer) with the customer ID and creation timestamp."""
     with db_conn() as conn:
         customer_id = generate_id(conn, "CUST", "customers")
+        sim_time = get_simulation_time(conn)
         conn.execute(
-            "INSERT INTO customers (id, name, company, email, city) VALUES (?, ?, ?, ?, ?)",
-            (customer_id, name, company, email, city),
+            "INSERT INTO customers (id, name, company, email, city, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+            (customer_id, name, company, email, city, sim_time),
         )
         conn.commit()
         row = conn.execute("SELECT * FROM customers WHERE id = ?", (customer_id,)).fetchone()
         row_dict = dict(row)
         row_dict["ui_url"] = ui_href("customers", customer_id)
-        return {"customer_id": customer_id, "customer": row_dict}
+        return {
+            "customer_id": customer_id,
+            "customer": row_dict,
+            "message": f"Customer '{name}' created with ID {customer_id} at {sim_time}"
+        }
 
 
 @mcp.tool(name="crm_get_customer_details")
@@ -627,7 +654,11 @@ def get_item(sku: str) -> Dict[str, Any]:
         row = load_item(conn, sku)
         if not row:
             raise ValueError("Item not found")
-        return dict(row)
+        result = dict(row)
+        if result.get("image"):
+            result["image_url"] = f"/api/items/{sku}/image"
+        result.pop("image", None)
+        return result
 
 
 @mcp.tool(name="catalog_search_items")
@@ -716,8 +747,9 @@ def create_sales_order(
     ship_to = ship_to or {}
     with db_conn() as conn:
         so_id = generate_id(conn, "SO", "sales_orders")
+        sim_time = get_simulation_time(conn)
         conn.execute(
-            "INSERT INTO sales_orders (id, customer_id, requested_delivery_date, ship_to_line1, ship_to_postal_code, ship_to_city, ship_to_country, note, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO sales_orders (id, customer_id, requested_delivery_date, ship_to_line1, ship_to_postal_code, ship_to_city, ship_to_country, note, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 so_id,
                 customer_id,
@@ -728,6 +760,7 @@ def create_sales_order(
                 ship_to.get("country"),
                 note,
                 "draft",
+                sim_time,
             ),
         )
         line_results = []
@@ -1274,6 +1307,283 @@ def simulation_advance_time(
         }
 
 
+@mcp.tool(name="messaging_create_email")
+@log_tool("messaging_create_email")
+def messaging_create_email(
+    customer_id: str,
+    subject: str,
+    body: str,
+    sales_order_id: Optional[str] = None,
+    recipient_email: Optional[str] = None,
+    recipient_name: Optional[str] = None
+) -> Dict[str, Any]:
+    """
+    Create a new email draft for a customer.
+    Recipient details auto-populate from customer if not provided.
+    If sales_order_id is provided, validates it belongs to the customer.
+    """
+    with db_conn() as conn:
+        # Validate customer exists and get details
+        customer = conn.execute(
+            "SELECT id, name, email FROM customers WHERE id = ?",
+            (customer_id,)
+        ).fetchone()
+        if not customer:
+            raise ValueError(f"Customer {customer_id} not found")
+        
+        # Validate sales order belongs to customer if provided
+        if sales_order_id:
+            so = conn.execute(
+                "SELECT customer_id FROM sales_orders WHERE id = ?",
+                (sales_order_id,)
+            ).fetchone()
+            if not so:
+                raise ValueError(f"Sales order {sales_order_id} not found")
+            if so["customer_id"] != customer_id:
+                raise ValueError(f"Sales order {sales_order_id} does not belong to customer {customer_id}")
+        
+        # Use provided recipient or default to customer
+        final_recipient_email = recipient_email or customer["email"]
+        final_recipient_name = recipient_name or customer["name"]
+        
+        if not final_recipient_email:
+            raise ValueError(f"No email address available for customer {customer_id}")
+        
+        email_id = generate_id(conn, "EMAIL", "emails")
+        sim_time = get_simulation_time(conn)
+        
+        conn.execute(
+            """INSERT INTO emails (id, customer_id, sales_order_id, recipient_email, recipient_name,
+                                   subject, body, status, created_at, modified_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, 'draft', ?, ?)""",
+            (email_id, customer_id, sales_order_id, final_recipient_email, final_recipient_name,
+             subject, body, sim_time, sim_time)
+        )
+        conn.commit()
+        
+        email = dict(conn.execute("SELECT * FROM emails WHERE id = ?", (email_id,)).fetchone())
+        email["ui_url"] = ui_href("emails", email_id)
+        
+        return {
+            "email_id": email_id,
+            "email": email,
+            "message": f"Email draft '{subject}' created with ID {email_id} at {sim_time}"
+        }
+
+
+@mcp.tool(name="messaging_list_emails")
+@log_tool("messaging_list_emails")
+def messaging_list_emails(
+    customer_id: Optional[str] = None,
+    sales_order_id: Optional[str] = None,
+    status: Optional[str] = None,
+    limit: int = 20
+) -> Dict[str, Any]:
+    """
+    List emails with optional filters.
+    Results sorted by modified_at DESC (most recently modified first).
+    """
+    filters = []
+    params: List[Any] = []
+    
+    if customer_id:
+        filters.append("customer_id = ?")
+        params.append(customer_id)
+    
+    if sales_order_id:
+        filters.append("sales_order_id = ?")
+        params.append(sales_order_id)
+    
+    if status:
+        filters.append("status = ?")
+        params.append(status)
+    
+    where_clause = f"WHERE {' AND '.join(filters)}" if filters else ""
+    sql = f"SELECT * FROM emails {where_clause} ORDER BY modified_at DESC LIMIT ?"
+    params.append(limit)
+    
+    with db_conn() as conn:
+        rows = dict_rows(conn.execute(sql, params))
+        for row in rows:
+            row["ui_url"] = ui_href("emails", row["id"])
+        return {"emails": rows}
+
+
+@mcp.tool(name="messaging_get_email")
+@log_tool("messaging_get_email")
+def messaging_get_email(email_id: str) -> Dict[str, Any]:
+    """Get detailed email information including related customer and sales order."""
+    with db_conn() as conn:
+        email = conn.execute("SELECT * FROM emails WHERE id = ?", (email_id,)).fetchone()
+        if not email:
+            raise ValueError(f"Email {email_id} not found")
+        
+        result = {"email": dict(email)}
+        result["email"]["ui_url"] = ui_href("emails", email_id)
+        
+        # Get customer details
+        customer = conn.execute(
+            "SELECT id, name, company, email, city FROM customers WHERE id = ?",
+            (email["customer_id"],)
+        ).fetchone()
+        if customer:
+            result["customer"] = dict(customer)
+            result["customer"]["ui_url"] = ui_href("customers", customer["id"])
+        
+        # Get sales order details if linked
+        if email["sales_order_id"]:
+            so = conn.execute(
+                "SELECT id, status, created_at FROM sales_orders WHERE id = ?",
+                (email["sales_order_id"],)
+            ).fetchone()
+            if so:
+                result["sales_order"] = dict(so)
+                result["sales_order"]["ui_url"] = ui_href("orders", so["id"])
+        
+        return result
+
+
+@mcp.tool(name="messaging_update_email")
+@log_tool("messaging_update_email")
+def messaging_update_email(
+    email_id: str,
+    subject: Optional[str] = None,
+    body: Optional[str] = None
+) -> Dict[str, Any]:
+    """
+    Update email subject and/or body.
+    Only draft emails can be updated.
+    """
+    with db_conn() as conn:
+        email = conn.execute("SELECT status FROM emails WHERE id = ?", (email_id,)).fetchone()
+        if not email:
+            raise ValueError(f"Email {email_id} not found")
+        
+        if email["status"] != "draft":
+            raise ValueError(f"Cannot update email {email_id}: status is '{email['status']}', must be 'draft'")
+        
+        sim_time = get_simulation_time(conn)
+        updates = []
+        params: List[Any] = []
+        
+        if subject is not None:
+            updates.append("subject = ?")
+            params.append(subject)
+        
+        if body is not None:
+            updates.append("body = ?")
+            params.append(body)
+        
+        if not updates:
+            raise ValueError("Must provide at least one field to update (subject or body)")
+        
+        updates.append("modified_at = ?")
+        params.append(sim_time)
+        params.append(email_id)
+        
+        sql = f"UPDATE emails SET {', '.join(updates)} WHERE id = ?"
+        conn.execute(sql, params)
+        conn.commit()
+        
+        updated_email = dict(conn.execute("SELECT * FROM emails WHERE id = ?", (email_id,)).fetchone())
+        updated_email["ui_url"] = ui_href("emails", email_id)
+        
+        return {
+            "email_id": email_id,
+            "email": updated_email,
+            "message": f"Email {email_id} updated at {sim_time}"
+        }
+
+
+@mcp.tool(name="messaging_send_email")
+@log_tool("messaging_send_email")
+def messaging_send_email(email_id: str) -> Dict[str, Any]:
+    """
+    Mark email as sent (simulation only - no actual email sent).
+    Only draft emails can be sent.
+    """
+    with db_conn() as conn:
+        email = conn.execute("SELECT status FROM emails WHERE id = ?", (email_id,)).fetchone()
+        if not email:
+            raise ValueError(f"Email {email_id} not found")
+        
+        if email["status"] != "draft":
+            raise ValueError(f"Cannot send email {email_id}: status is '{email['status']}', must be 'draft'")
+        
+        sim_time = get_simulation_time(conn)
+        
+        conn.execute(
+            "UPDATE emails SET status = 'sent', sent_at = ?, modified_at = ? WHERE id = ?",
+            (sim_time, sim_time, email_id)
+        )
+        conn.commit()
+        
+        sent_email = dict(conn.execute("SELECT * FROM emails WHERE id = ?", (email_id,)).fetchone())
+        sent_email["ui_url"] = ui_href("emails", email_id)
+        
+        return {
+            "email_id": email_id,
+            "email": sent_email,
+            "message": f"Email {email_id} marked as sent at {sim_time}"
+        }
+
+
+@mcp.tool(name="messaging_delete_email")
+@log_tool("messaging_delete_email")
+def messaging_delete_email(email_id: str) -> Dict[str, Any]:
+    """
+    Delete an email.
+    Only draft emails can be deleted.
+    """
+    with db_conn() as conn:
+        email = conn.execute("SELECT status FROM emails WHERE id = ?", (email_id,)).fetchone()
+        if not email:
+            raise ValueError(f"Email {email_id} not found")
+        
+        if email["status"] != "draft":
+            raise ValueError(f"Cannot delete email {email_id}: status is '{email['status']}', must be 'draft'")
+        
+        conn.execute("DELETE FROM emails WHERE id = ?", (email_id,))
+        conn.commit()
+        
+        return {
+            "email_id": email_id,
+            "message": f"Email {email_id} deleted"
+        }
+
+
+@mcp.tool(name="admin_reset_database")
+@log_tool("admin_reset_database")
+def admin_reset_database(confirm: str) -> Dict[str, Any]:
+    """
+    Reset database to initial demo state (drops all tables and reloads).
+    
+    Parameters:
+        confirm: Safety parameter (required)
+    
+    Returns:
+        Dictionary with status message
+    """
+    if confirm != "kondor":
+        raise ValueError("Invalid confirmation")
+    
+    from seed_demo import seed
+    
+    with db_conn() as conn:
+        # Drop all tables
+        tables = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
+        ).fetchall()
+        for table in tables:
+            conn.execute(f"DROP TABLE IF EXISTS {table[0]}")
+        conn.commit()
+    
+    # Reinitialize schema and seed data (from_admin=True prevents file deletion)
+    seed(from_admin=True)
+    
+    return {"status": "Database reset complete", "initial_time": "2025-12-24 08:30:00"}
+
+
 @mcp.tool(name="production_create_order")
 @log_tool("production_create_order")
 def production_create_order(
@@ -1491,13 +1801,14 @@ def purchase_create_order(
         
         # Create purchase order
         po_id = generate_id("PO")
+        sim_time = get_simulation_time(conn)
         expected_delivery = (datetime.utcnow().date() + timedelta(days=7)).isoformat()
         
         conn.execute(
             """INSERT INTO purchase_orders 
-               (id, supplier_id, item_id, qty, status, expected_delivery)
-               VALUES (?, ?, ?, ?, 'ordered', ?)""",
-            (po_id, supplier["id"], item["id"], qty, expected_delivery)
+               (id, supplier_id, item_id, qty, status, expected_delivery, ordered_at)
+               VALUES (?, ?, ?, ?, 'ordered', ?, ?)""",
+            (po_id, supplier["id"], item["id"], qty, expected_delivery, sim_time)
         )
         conn.commit()
         
@@ -1710,6 +2021,11 @@ async def api_item_detail(request):
         result = dict(item)
         result["ui_url"] = ui_href("items", sku)
         
+        # Add image URL if image exists
+        if result.get("image"):
+            result["image_url"] = f"/api/items/{sku}/image"
+        result.pop("image", None)
+        
         # Add stock summary
         stock = stock_summary(conn, item["id"])
         result["stock"] = stock
@@ -1765,6 +2081,49 @@ async def api_item_detail(request):
         result["purchase_orders"] = purchase_orders
         
         return _json(result)
+
+
+@mcp.custom_route("/api/items/{sku}/image", methods=["GET", "OPTIONS"])
+async def api_item_image(request):
+    if request.method == "OPTIONS":
+        return _cors_preflight(["GET"])
+    sku = request.path_params.get("sku")
+    
+    with db_conn() as conn:
+        row = conn.execute(
+            "SELECT image FROM items WHERE sku = ?", (sku,)
+        ).fetchone()
+        
+        if not row or not row["image"]:
+            return _json({"error": "Image not found"}, status_code=404)
+        
+        return Response(
+            content=row["image"],
+            media_type="image/png",
+            headers=DEMO_CORS_HEADERS
+        )
+
+
+@mcp.custom_route("/api/items/{sku}/image/base64", methods=["GET", "OPTIONS"])
+async def api_item_image_base64(request):
+    if request.method == "OPTIONS":
+        return _cors_preflight(["GET"])
+    sku = request.path_params.get("sku")
+    
+    with db_conn() as conn:
+        row = conn.execute(
+            "SELECT image FROM items WHERE sku = ?", (sku,)
+        ).fetchone()
+        
+        if not row or not row["image"]:
+            return _json({"error": "Image not found"}, status_code=404)
+        
+        b64_data = base64.b64encode(row["image"]).decode("utf-8")
+        return Response(
+            content=b64_data,
+            media_type="text/plain",
+            headers=DEMO_CORS_HEADERS
+        )
 
 
 @mcp.custom_route("/api/items/{sku}/stock", methods=["GET", "OPTIONS"])
@@ -2069,6 +2428,33 @@ async def api_purchase_order_detail(request):
             return _json({"error": "Purchase order not found"}, status_code=404)
         
         return _json(dict(po))
+
+
+@mcp.custom_route("/api/emails", methods=["GET", "OPTIONS"])
+async def api_emails(request):
+    if request.method == "OPTIONS":
+        return _cors_preflight(["GET"])
+    qp = request.query_params
+    limit = int(qp.get("limit", 20))
+    result = messaging_list_emails(
+        customer_id=qp.get("customer_id"),
+        sales_order_id=qp.get("sales_order_id"),
+        status=qp.get("status"),
+        limit=limit
+    )
+    return _json(result)
+
+
+@mcp.custom_route("/api/emails/{email_id}", methods=["GET", "OPTIONS"])
+async def api_email_detail(request):
+    if request.method == "OPTIONS":
+        return _cors_preflight(["GET"])
+    email_id = request.path_params.get("email_id")
+    try:
+        result = messaging_get_email(email_id)
+        return _json(result)
+    except Exception as exc:
+        return _json({"error": str(exc)}, status_code=404)
 
 
 if __name__ == "__main__":
