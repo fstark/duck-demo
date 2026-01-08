@@ -114,31 +114,78 @@ def register_tools(mcp):
     @mcp.tool(name="crm_create_customer")
     @log_tool("crm_create_customer")
     def create_customer(name: str, company: Optional[str] = None, email: Optional[str] = None, city: Optional[str] = None) -> Dict[str, Any]:
-        """Create a new customer. After creating the customer, briefly inform the user (not the customer) with the customer ID and creation timestamp."""
+        """
+        Create a new customer.
+        
+        Parameters:
+            name: Customer name (required)
+            company: Company name
+            email: Email address
+            city: City location
+        
+        Returns:
+            Dictionary with customer_id, customer details, and creation message
+        """
         return customer_service.create_customer(name, company, email, city)
     
     @mcp.tool(name="crm_get_customer_details")
     @log_tool("crm_get_customer_details")
     def get_customer_details(customer_id: str, include_orders: bool = True) -> Dict[str, Any]:
-        """Get customer data plus recent orders."""
+        """
+        Get customer data plus up to 10 most recent sales orders.
+        
+        Parameters:
+            customer_id: The customer ID (e.g., 'CUST-1000')
+            include_orders: Whether to include recent orders (default: True)
+        
+        Returns:
+            Dictionary with customer details and orders array with lines, shipments, and fulfillment status
+        """
         return customer_service.get_customer_details(customer_id, include_orders)
     
     @mcp.tool(name="catalog_get_item")
     @log_tool("catalog_get_item")
     def get_item(sku: str) -> Dict[str, Any]:
-        """Fetch an item by SKU."""
+        """
+        Fetch an item by SKU.
+        
+        Parameters:
+            sku: The item SKU (e.g., 'ELVIS-RED-20')
+        
+        Returns:
+            Item details including id, sku, name, type, unit_price, uom, and image_url
+        """
         return catalog_service.get_item(sku)
     
     @mcp.tool(name="catalog_search_items")
     @log_tool("catalog_search_items")
     def search_items(words: List[str], limit: int = 10, min_score: int = 1) -> Dict[str, Any]:
-        """Fuzzy item search via containment on SKU/name tokens, ordered best to worst (demo-friendly)."""
+        """
+        Fuzzy search for items by keywords in SKU or name, ranked by relevance.
+        
+        Parameters:
+            words: List of search terms to match
+            limit: Maximum results to return (default: 10)
+            min_score: Minimum match score (default: 1)
+        
+        Returns:
+            Dictionary with items array (each with item details, score, and matched_words) and query tokens
+        """
         return catalog_service.search_items(words, limit, min_score)
     
     @mcp.tool(name="inventory_list_items")
     @log_tool("inventory_list_items")
     def inventory_list_items(in_stock_only: bool = False, limit: int = 50) -> Dict[str, Any]:
-        """List items, optionally only those with available stock."""
+        """
+        List all catalog items with their current stock levels.
+        
+        Parameters:
+            in_stock_only: If True, only return items with available stock (default: False)
+            limit: Maximum number of items to return (default: 50)
+        
+        Returns:
+            Dictionary with items array including sku, name, type, unit_price, on_hand_total, and available_total
+        """
         return catalog_service.list_items(in_stock_only, limit)
     
     @mcp.tool(name="inventory_get_stock_summary")
@@ -165,27 +212,38 @@ def register_tools(mcp):
     
     @mcp.tool(name="inventory_check_availability")
     @log_tool("inventory_check_availability")
-    def inventory_check_availability(item_sku: str, qty_required: float) -> Dict[str, Any]:
+    def inventory_check_availability(item_sku: str, quantity: float) -> Dict[str, Any]:
         """
         Check if sufficient inventory is available for an item.
         Returns availability status, on_hand total, and shortfall if any.
         
         Parameters:
             item_sku: The SKU of the item to check
-            qty_required: The quantity needed
+            quantity: The quantity needed
         """
-        return inventory_service.check_availability(item_sku, qty_required)
+        return inventory_service.check_availability(item_sku, quantity)
     
     @mcp.tool(name="sales_quote_options")
     @log_tool("sales_quote_options")
     def sales_quote_options(
         sku: str,
         qty: int,
-        need_by: Optional[str] = None,
+        delivery_date: Optional[str] = None,
         allowed_substitutions: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
-        """Generate quote / fulfillment options for a request."""
-        return pricing_service.calculate_quote_options(sku, qty, need_by, allowed_substitutions or [])
+        """
+        Generate quote with pricing, availability, lead times, and possible substitutions.
+        
+        Parameters:
+            sku: Item SKU to quote (e.g., 'ELVIS-RED-20')
+            qty: Quantity requested
+            delivery_date: Requested delivery date in YYYY-MM-DD format
+            allowed_substitutions: List of acceptable substitute SKUs
+        
+        Returns:
+            Dictionary with quote_option arrays containing price, availability, eta, and substitution details
+        """
+        return pricing_service.calculate_quote_options(sku, qty, delivery_date, allowed_substitutions or [])
     
     @mcp.tool(name="sales_create_sales_order")
     @log_tool("sales_create_sales_order")
@@ -208,13 +266,31 @@ def register_tools(mcp):
     @mcp.tool(name="sales_search_sales_orders")
     @log_tool("sales_search_sales_orders")
     def search_sales_orders(customer_id: Optional[str] = None, limit: int = 5, sort: str = "most_recent") -> Dict[str, Any]:
-        """Return recent sales orders for a customer."""
+        """
+        Search sales orders, optionally filtered by customer. Returns full order details including pricing and fulfillment state.
+        
+        Parameters:
+            customer_id: Optional customer ID to filter by (if omitted, searches all orders)
+            limit: Maximum results (default: 5)
+            sort: Sort order - 'most_recent' or by ID
+        
+        Returns:
+            Dictionary with sales_orders array including customer info, lines, total, currency, and fulfillment_state
+        """
         return sales_service.search_orders(customer_id, limit, sort)
     
     @mcp.tool(name="sales_get_sales_order")
     @log_tool("sales_get_sales_order")
     def get_sales_order(sales_order_id: str) -> Dict[str, Any]:
-        """Return a sales order with lines, pricing, and linked shipments."""
+        """
+        Get complete sales order details including customer, lines, pricing, and linked shipments.
+        
+        Parameters:
+            sales_order_id: The sales order ID (e.g., 'SO-1000')
+        
+        Returns:
+            Full order details with customer, lines array, pricing breakdown, and shipments array
+        """
         detail = sales_service.get_order_details(sales_order_id)
         if not detail:
             raise ValueError("Sales order not found")
@@ -236,13 +312,34 @@ def register_tools(mcp):
         packages: Optional[List[Dict[str, Any]]] = None,
         reference: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
-        """Create a planned shipment with basic package contents."""
+        """
+        Create a planned shipment with package contents and delivery schedule.
+        
+        Parameters:
+            ship_from: Dict with warehouse info {warehouse: str}
+            ship_to: Dict with address {line1, postal_code, city, country}
+            planned_departure: Departure date in ISO format
+            planned_arrival: Arrival date in ISO format
+            packages: List of dicts with contents: [{contents: [{sku, qty}]}]
+            reference: Optional sales order reference {type: 'sales_order', id: 'SO-1000'}
+        
+        Returns:
+            Dictionary with shipment_id, status, planned dates, and ui_url
+        """
         return logistics_service.create_shipment(ship_from, ship_to, planned_departure, planned_arrival, packages, reference)
     
     @mcp.tool(name="logistics_get_shipment_status")
     @log_tool("logistics_get_shipment_status")
     def get_shipment_status(shipment_id: str) -> Dict[str, Any]:
-        """Return the status of a shipment."""
+        """
+        Get shipment status including associated sales orders and customer details.
+        
+        Parameters:
+            shipment_id: The shipment ID (e.g., 'SHIP-1000')
+        
+        Returns:
+            Shipment details with status, dates, and sales_orders array with customer info
+        """
         return logistics_service.get_shipment_status(shipment_id)
     
     @mcp.tool(name="production_get_statistics")
@@ -254,22 +351,31 @@ def register_tools(mcp):
     @mcp.tool(name="production_get_production_order_status")
     @log_tool("production_get_production_order_status")
     def get_production_order_status(production_order_id: str) -> Dict[str, Any]:
-        """Return status of a production order."""
+        """
+        Get detailed production order status including operations, recipe, and ingredients.
+        
+        Parameters:
+            production_order_id: The production order ID (e.g., 'MO-1000')
+        
+        Returns:
+            Production order details with item info, status, operations array, and recipe details with ingredients
+        """
         return production_service.get_order_status(production_order_id)
     
     @mcp.tool(name="production_find_orders_by_date_range")
     @log_tool("production_find_orders_by_date_range")
     def find_production_orders_by_date_range(start_date: str, end_date: str, limit: int = 100) -> List[Dict[str, Any]]:
         """
-        Retrieve all production orders scheduled to finish within a specific date range.
-        Useful for:
-        Determine the most produced items within a specific timeframe.
-        Analyze production scheduling and capacity utilization.
-        Identify trends in production focus or priorities.
-    Parameters:
-        Start Date: Beginning of the date range in YYYY-MM-DD format.
-        End Date: End of the date range in YYYY-MM-DD format.
-        Limit: Maximum number of production order records to return.
+        Retrieve production orders scheduled to finish within a date range.
+        Useful for analyzing production scheduling, capacity utilization, and identifying trends.
+        
+        Parameters:
+            start_date: Beginning of date range in YYYY-MM-DD format
+            end_date: End of date range in YYYY-MM-DD format
+            limit: Maximum number of records to return (default: 100)
+        
+        Returns:
+            List of production orders with item details, status, and eta_finish dates
         """
         return production_service.find_orders_by_date_range(start_date, end_date, limit)
     
@@ -364,16 +470,19 @@ def register_tools(mcp):
         """
         return purchase_service.restock_materials()
     
-    @mcp.tool(name="purchase_receive")
-    @log_tool("purchase_receive")
-    def purchase_receive(purchase_order_id: str, warehouse: str = "MAIN", location: str = "RM-A") -> Dict[str, Any]:
+    @mcp.tool(name="purchase_receive_order")
+    @log_tool("purchase_receive_order")
+    def purchase_receive_order(purchase_order_id: str, warehouse: str = "MAIN", location: str = "RM-A") -> Dict[str, Any]:
         """
-        Receive a purchase order and add materials to stock.
+        Receive a purchase order delivery and add materials to stock.
         
         Parameters:
             purchase_order_id: The purchase order ID (e.g., 'PO-1000')
             warehouse: Warehouse to add stock to (default: MAIN)
             location: Location within warehouse (default: RM-A for raw materials)
+        
+        Returns:
+            Dictionary with stock_id, quantities received, and warehouse location
         """
         return purchase_service.receive(purchase_order_id, warehouse, location)
     
@@ -442,7 +551,15 @@ def register_tools(mcp):
     @mcp.tool(name="messaging_get_email")
     @log_tool("messaging_get_email")
     def messaging_get_email(email_id: str) -> Dict[str, Any]:
-        """Get detailed email information including related customer and sales order."""
+        """
+        Get detailed email information including related customer and sales order.
+        
+        Parameters:
+            email_id: The email ID (e.g., 'EMAIL-1000')
+        
+        Returns:
+            Dictionary with email details, customer info, and optional sales_order details
+        """
         return messaging_service.get_email(email_id)
     
     @mcp.tool(name="messaging_update_email")
@@ -479,9 +596,9 @@ def register_tools(mcp):
         Reset database to initial demo state (drops all tables and reloads).
         
         Parameters:
-            confirm: Safety parameter (required)
+            confirm: Safety parameter - must be exactly "kondor" to execute
         
         Returns:
-            Dictionary with status message
+            Dictionary with status message and initial_time
         """
         return admin_service.reset_database(confirm)

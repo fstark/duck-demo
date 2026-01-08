@@ -220,7 +220,7 @@ class InventoryService:
             }
     
     @staticmethod
-    def check_availability(item_sku: str, qty_required: float) -> Dict[str, Any]:
+    def check_availability(item_sku: str, quantity: float) -> Dict[str, Any]:
         """Check if sufficient inventory is available for an item."""
         with db_conn() as conn:
             item = CatalogService.load_item(item_sku)
@@ -229,13 +229,13 @@ class InventoryService:
             
             summary = InventoryService.get_stock_summary(item["id"])
             available = summary["available_total"]
-            is_available = available >= qty_required
-            shortfall = 0.0 if is_available else (qty_required - available)
+            is_available = available >= quantity
+            shortfall = 0.0 if is_available else (quantity - available)
             
             return {
                 "item_sku": item_sku,
                 "item_name": item["name"],
-                "qty_required": qty_required,
+                "qty_required": quantity,
                 "qty_available": available,
                 "is_available": is_available,
                 "shortfall": shortfall,
@@ -424,13 +424,13 @@ class PricingService:
             }
     
     @staticmethod
-    def calculate_quote_options(sku: str, qty: int, need_by: Optional[str], allowed_subs: List[str]) -> Dict[str, Any]:
+    def calculate_quote_options(sku: str, qty: int, delivery_date: Optional[str], allowed_subs: List[str]) -> Dict[str, Any]:
         """Generate quote / fulfillment options for a request."""
         item = catalog_service.load_item(sku)
         if not item:
             raise ValueError("Unknown item")
 
-        need_by_dt = parse_date(need_by)
+        need_by_dt = parse_date(delivery_date)
         availability = inventory_service.get_stock_summary(item["id"])
         available = max(0, availability["available_total"])
         transit_days = config.TRANSIT_DAYS_DEFAULT
