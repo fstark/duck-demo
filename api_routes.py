@@ -123,7 +123,7 @@ def register_routes(mcp):
             result = dict(item)
             result["ui_url"] = ui_href("items", sku)
             if result.get("image"):
-                result["image_url"] = f"/api/items/{sku}/image"
+                result["image_url"] = f"/api/items/{sku}/image.png"
             result.pop("image", None)
             stock = inventory_service.get_stock_summary(item["id"])
             result["stock"] = stock
@@ -149,7 +149,7 @@ def register_routes(mcp):
             result["purchase_orders"] = purchase_orders
             return _json(result)
     
-    @mcp.custom_route("/api/items/{sku}/image", methods=["GET", "OPTIONS"])
+    @mcp.custom_route("/api/items/{sku}/image.png", methods=["GET", "OPTIONS"])
     async def api_item_image(request):
         if request.method == "OPTIONS":
             return _cors_preflight(["GET"])

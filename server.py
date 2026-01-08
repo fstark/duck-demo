@@ -33,9 +33,6 @@ mcp = FastMCP(
     ),
 )
 
-# Ensure schema exists at startup
-init_db()
-
 # Register MCP tools (38 tools)
 register_tools(mcp)
 

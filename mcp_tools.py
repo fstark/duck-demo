@@ -157,11 +157,13 @@ def register_tools(mcp):
         """
         return catalog_service.get_item(sku)
     
-    @mcp.tool(name="catalog_search_items")
-    @log_tool("catalog_search_items")
+    @mcp.tool(name="catalog_search_items_basic")
+    @log_tool("catalog_search_items_basic")
     def search_items(words: List[str], limit: int = 10, min_score: int = 1) -> Dict[str, Any]:
         """
         Fuzzy search for items by keywords in SKU or name, ranked by relevance.
+        Returns items in nested structure: {"items": [{"item": {...}, "score": N}]}.
+        Item details include unit_price but must be extracted from nested structure.
         
         Parameters:
             words: List of search terms to match
@@ -169,7 +171,8 @@ def register_tools(mcp):
             min_score: Minimum match score (default: 1)
         
         Returns:
-            Dictionary with items array (each with item details, score, and matched_words) and query tokens
+            Dictionary with items array where each entry has: {"item": {full item details}, "score": N, "matched_words": [...]}
+            Item object includes: id, sku, name, type, unit_price, ui_url
         """
         return catalog_service.search_items(words, limit, min_score)
     
@@ -591,14 +594,14 @@ def register_tools(mcp):
     
     @mcp.tool(name="admin_reset_database")
     @log_tool("admin_reset_database")
-    def admin_reset_database(confirm: str) -> Dict[str, Any]:
+    def admin_reset_database(secret: str) -> Dict[str, Any]:
         """
         Reset database to initial demo state (drops all tables and reloads).
         
         Parameters:
-            confirm: Safety parameter - must be exactly "kondor" to execute
+            secret: Safety parameter - must be asked to the user
         
         Returns:
             Dictionary with status message and initial_time
         """
-        return admin_service.reset_database(confirm)
+        return admin_service.reset_database(secret)

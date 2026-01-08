@@ -3,6 +3,8 @@
 from pathlib import Path
 import sqlite3
 import os
+from io import BytesIO
+from PIL import Image
 
 from db import DB_PATH, init_db
 
@@ -69,6 +71,7 @@ def seed(from_admin=False):
             ("ITEM-COWBOY-20", "COWBOY-DUCK-20CM", "Cowboy Duck 20cm", "finished_good", 16.0, "ea", 0),
             ("ITEM-BALLERINA-12", "BALLERINA-DUCK-12CM", "Ballerina Duck 12cm", "finished_good", 11.0, "ea", 0),
             ("ITEM-GARDEN-GNOME-30", "GNOME-DUCK-30CM", "Garden Gnome Duck 30cm", "finished_good", 25.0, "ea", 0),
+            ("ITEM-PARROT-18", "PARROT-DUCK-18CM", "Parrot Duck 18cm", "finished_good", 16.5, "ea", 0),
             ("ITEM-PVC", "PVC-PELLETS", "PVC Pellets", "material", None, "kg", 0),
             ("ITEM-BLACK-DYE", "BLACK-DYE", "Black Dye", "material", None, "ml", 0),
             ("ITEM-YELLOW-DYE", "YELLOW-DYE", "Yellow Dye", "material", None, "ml", 0),
@@ -83,8 +86,13 @@ def seed(from_admin=False):
             image_data = None
             image_path = images_dir / f"{sku}.png"
             if image_path.exists():
-                with open(image_path, "rb") as f:
-                    image_data = f.read()
+                with Image.open(image_path) as img:
+                    # Resize to 256x256
+                    img_resized = img.resize((256, 256), Image.Resampling.LANCZOS)
+                    # Convert to PNG bytes
+                    buffer = BytesIO()
+                    img_resized.save(buffer, format='PNG')
+                    image_data = buffer.getvalue()
             
             conn.execute(
                 "INSERT INTO items (id, sku, name, type, unit_price, uom, reorder_qty, image) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",

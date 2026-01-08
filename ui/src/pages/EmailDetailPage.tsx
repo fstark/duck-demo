@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import ReactMarkdown from 'react-markdown'
 import { Card } from '../components/Card'
 import { Badge } from '../components/Badge'
 import { Email, EmailDetail } from '../types'
@@ -22,6 +23,7 @@ export function EmailDetailPage({ emailId }: EmailDetailPageProps) {
     const [loading, setLoading] = useState(true)
     const { listContext, setListContext, referrer, setReferrer } = useNavigation()
     const [error, setError] = useState<string | null>(null)
+    const [showRaw, setShowRaw] = useState(false)
 
     useEffect(() => {
         api.emailDetail(emailId)
@@ -194,7 +196,22 @@ export function EmailDetailPage({ emailId }: EmailDetailPageProps) {
             </Card>
 
             <Card title="Email Body">
-                <div className="text-sm text-slate-700 whitespace-pre-wrap">{email.body}</div>
+                <div className="mb-3">
+                    <button
+                        className="text-xs text-brand-600 hover:underline"
+                        onClick={() => setShowRaw(!showRaw)}
+                        type="button"
+                    >
+                        {showRaw ? 'Show Rendered' : 'Show Raw'}
+                    </button>
+                </div>
+                {showRaw ? (
+                    <pre className="text-sm text-slate-700 whitespace-pre-wrap font-mono">{email.body}</pre>
+                ) : (
+                    <div className="prose prose-slate prose-sm max-w-none">
+                        <ReactMarkdown>{email.body}</ReactMarkdown>
+                    </div>
+                )}
             </Card>
 
             {customer && (
