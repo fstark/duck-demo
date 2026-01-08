@@ -6,7 +6,7 @@ New chat:
 
 Show me the last order created.
 
-how many elvis duck are in stock?
+how many elvis ducks are in stock?
 
 at what price?
 

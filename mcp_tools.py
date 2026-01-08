@@ -197,7 +197,7 @@ def register_tools(mcp):
         if sku and not item_id:
             item = catalog_service.load_item(sku)
             if not item:
-                raise ValueError("Item not found")
+                raise ValueError(f"Item with SKU '{sku}' not found")
             item_id = item["id"]
         elif item_id and not sku:
             # Get SKU for UI link
