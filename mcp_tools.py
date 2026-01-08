@@ -124,7 +124,8 @@ def register_tools(mcp):
             city: City location
         
         Returns:
-            Dictionary with customer_id, customer details, and creation message
+            Dictionary with customer_id, customer details, and `message` field.
+            **Always relay the message verbatim to the user to confirm the action.**
         """
         return customer_service.create_customer(name, company, email, city)
     
@@ -267,7 +268,13 @@ def register_tools(mcp):
         lines: Optional[List[Dict[str, Any]]] = None,
         note: Optional[str] = None,
     ) -> Dict[str, Any]:
-        """Create a draft sales order with lines."""
+        """
+        Create a draft sales order with lines.
+        
+        Returns:
+            Dictionary with sales_order_id, status, lines, and `message` field.
+            **Always relay the message verbatim to the user to confirm the action.**
+        """
         return sales_service.create_order(customer_id, requested_delivery_date, ship_to, lines, note)
     
     @mcp.tool(name="sales_price_sales_order")
@@ -312,7 +319,13 @@ def register_tools(mcp):
     @mcp.tool(name="sales_link_shipment_to_sales_order")
     @log_tool("sales_link_shipment_to_sales_order")
     def link_shipment_to_sales_order(sales_order_id: str, shipment_id: str) -> Dict[str, Any]:
-        """Link an existing shipment to a sales order."""
+        """
+        Link an existing shipment to a sales order.
+        
+        Returns:
+            Dictionary with sales_order_id, shipment_id, and `message` field.
+            **Always relay the message verbatim to the user to confirm the action.**
+        """
         return sales_service.link_shipment(sales_order_id, shipment_id)
     
     @mcp.tool(name="logistics_create_shipment")
@@ -337,7 +350,8 @@ def register_tools(mcp):
             reference: Optional sales order reference {type: 'sales_order', id: 'SO-1000'}
         
         Returns:
-            Dictionary with shipment_id, status, planned dates, and ui_url
+            Dictionary with shipment_id, status, planned dates, ui_url, and `message` field.
+            **Always relay the message verbatim to the user to confirm the action.**
         """
         return logistics_service.create_shipment(ship_from, ship_to, planned_departure, planned_arrival, packages, reference)
     
@@ -403,6 +417,10 @@ def register_tools(mcp):
         Parameters:
             recipe_id: The recipe to execute (e.g., 'RCP-ELVIS-20')
             notes: Optional notes for the production order
+        
+        Returns:
+            Dictionary with production_order_id, status, eta dates, and `message` field.
+            **Always relay the message verbatim to the user to confirm the action.**
         """
         return production_service.create_order(recipe_id, notes)
     
@@ -415,6 +433,10 @@ def register_tools(mcp):
         
         Parameters:
             production_order_id: The production order ID (e.g., 'MO-1000')
+        
+        Returns:
+            Dictionary with production_order_id, status, current_operation, and `message` field.
+            **Always relay the message verbatim to the user to confirm the action.**
         """
         return production_service.start_order(production_order_id)
     
@@ -434,6 +456,10 @@ def register_tools(mcp):
             qty_produced: Actual quantity produced
             warehouse: Warehouse to add stock to (default: MAIN)
             location: Location within warehouse (default: FG-A)
+        
+        Returns:
+            Dictionary with production_order_id, qty_produced, stock_id, warehouse, location, and `message` field.
+            **Always relay the message verbatim to the user to confirm the action.**
         """
         return production_service.complete_order(production_order_id, qty_produced, warehouse, location)
     
@@ -471,6 +497,10 @@ def register_tools(mcp):
             item_sku: SKU of item to purchase (e.g., 'ITEM-PVC')
             qty: Quantity to order
             supplier_name: Optional supplier name (auto-selected if not provided)
+        
+        Returns:
+            Dictionary with purchase_order_id, item, supplier info, and `message` field.
+            **Always relay the message verbatim to the user to confirm the action.**
         """
         return purchase_service.create_order(item_sku, qty, supplier_name)
     
@@ -479,7 +509,10 @@ def register_tools(mcp):
     def purchase_restock_materials() -> Dict[str, Any]:
         """
         Check all raw materials and create purchase orders for items below reorder quantity.
-        Returns list of purchase orders created.
+        
+        Returns:
+            Dictionary with items_checked count, purchase_orders_created count, and purchase_orders array.
+            **Summarize the results for the user** (e.g., 'Created 3 purchase orders to restock 5 items').
         """
         return purchase_service.restock_materials()
     
@@ -495,7 +528,8 @@ def register_tools(mcp):
             location: Location within warehouse (default: RM-A for raw materials)
         
         Returns:
-            Dictionary with stock_id, quantities received, and warehouse location
+            Dictionary with stock_id, quantities received, warehouse location, and `message` field.
+            **Always relay the message verbatim to the user to confirm the action.**
         """
         return purchase_service.receive(purchase_order_id, warehouse, location)
     
@@ -544,6 +578,10 @@ def register_tools(mcp):
         Create a new email draft for a customer.
         Recipient details auto-populate from customer if not provided.
         If sales_order_id is provided, validates it belongs to the customer.
+        
+        Returns:
+            Dictionary with email_id, email details, and `message` field.
+            **Always relay the message verbatim to the user to confirm the action.**
         """
         return messaging_service.create_email(customer_id, subject, body, sales_order_id, recipient_email, recipient_name)
     
@@ -581,6 +619,10 @@ def register_tools(mcp):
         """
         Update email subject and/or body.
         Only draft emails can be updated.
+        
+        Returns:
+            Dictionary with email_id, updated fields, and `message` field.
+            **Always relay the message verbatim to the user to confirm the action.**
         """
         return messaging_service.update_email(email_id, subject, body)
     
@@ -590,6 +632,10 @@ def register_tools(mcp):
         """
         Mark email as sent (simulation only - no actual email sent).
         Only draft emails can be sent.
+        
+        Returns:
+            Dictionary with email_id, status, and `message` field.
+            **Always relay the message verbatim to the user to confirm the action.**
         """
         return messaging_service.send_email(email_id)
     
@@ -599,6 +645,10 @@ def register_tools(mcp):
         """
         Delete an email.
         Only draft emails can be deleted.
+        
+        Returns:
+            Dictionary with email_id and `message` field.
+            **Always relay the message verbatim to the user to confirm the action.**
         """
         return messaging_service.delete_email(email_id)
     
