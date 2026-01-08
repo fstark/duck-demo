@@ -77,7 +77,26 @@ def register_tools(mcp):
         city: Optional[str] = None,
         limit: int = 100,
     ) -> Dict[str, Any]:
-        """Get flexible statistics for any entity with optional grouping and filtering."""
+        """
+        Get flexible statistics for any entity with optional grouping and filtering.
+        
+        Args:
+            entity: The entity to query (customers, sales_orders, items, stock, production_orders, shipments)
+            metric: The metric to calculate (count, sum, avg, min, max)
+            group_by: Optional field to group by (status, type, city, warehouse, etc.)
+            field: Field name for sum/avg/min/max operations (qty, on_hand, unit_price, etc.)
+            status: Filter by status (for sales_orders, production_orders, shipments)
+            item_type: Filter by item type (for items)
+            warehouse: Filter by warehouse (for stock)
+            city: Filter by city (for customers)
+            limit: Maximum results for grouped queries
+        
+        Examples:
+            - Total customers: entity="customers", metric="count"
+            - Sales orders by status: entity="sales_orders", metric="count", group_by="status"
+            - Total stock by warehouse: entity="stock", metric="sum", field="on_hand", group_by="warehouse"
+            - Items by type: entity="items", metric="count", group_by="type"
+        """
         return stats_service.get_statistics(entity, metric, group_by, field, status, item_type, warehouse, city, limit)
     
     @mcp.tool(name="crm_find_customers")
@@ -95,7 +114,7 @@ def register_tools(mcp):
     @mcp.tool(name="crm_create_customer")
     @log_tool("crm_create_customer")
     def create_customer(name: str, company: Optional[str] = None, email: Optional[str] = None, city: Optional[str] = None) -> Dict[str, Any]:
-        """Create a new customer."""
+        """Create a new customer. After creating the customer, briefly inform the user (not the customer) with the customer ID and creation timestamp."""
         return customer_service.create_customer(name, company, email, city)
     
     @mcp.tool(name="crm_get_customer_details")
@@ -113,7 +132,7 @@ def register_tools(mcp):
     @mcp.tool(name="catalog_search_items")
     @log_tool("catalog_search_items")
     def search_items(words: List[str], limit: int = 10, min_score: int = 1) -> Dict[str, Any]:
-        """Fuzzy item search via containment on SKU/name tokens."""
+        """Fuzzy item search via containment on SKU/name tokens, ordered best to worst (demo-friendly)."""
         return catalog_service.search_items(words, limit, min_score)
     
     @mcp.tool(name="inventory_list_items")
@@ -147,7 +166,14 @@ def register_tools(mcp):
     @mcp.tool(name="inventory_check_availability")
     @log_tool("inventory_check_availability")
     def inventory_check_availability(item_sku: str, qty_required: float) -> Dict[str, Any]:
-        """Check if sufficient inventory is available for an item."""
+        """
+        Check if sufficient inventory is available for an item.
+        Returns availability status, on_hand total, and shortfall if any.
+        
+        Parameters:
+            item_sku: The SKU of the item to check
+            qty_required: The quantity needed
+        """
         return inventory_service.check_availability(item_sku, qty_required)
     
     @mcp.tool(name="sales_quote_options")
@@ -176,7 +202,7 @@ def register_tools(mcp):
     @mcp.tool(name="sales_price_sales_order")
     @log_tool("sales_price_sales_order")
     def price_sales_order(sales_order_id: str, pricelist: Optional[str] = None) -> Dict[str, Any]:
-        """Apply pricing logic."""
+        """Apply simple pricing logic (12 EUR each, 5% discount for 24+, free shipping over €300)."""
         return pricing_service.compute_pricing(sales_order_id)
     
     @mcp.tool(name="sales_search_sales_orders")
@@ -234,19 +260,43 @@ def register_tools(mcp):
     @mcp.tool(name="production_find_orders_by_date_range")
     @log_tool("production_find_orders_by_date_range")
     def find_production_orders_by_date_range(start_date: str, end_date: str, limit: int = 100) -> List[Dict[str, Any]]:
-        """Retrieve all production orders scheduled to finish within a specific date range."""
+        """
+        Retrieve all production orders scheduled to finish within a specific date range.
+        Useful for:
+        Determine the most produced items within a specific timeframe.
+        Analyze production scheduling and capacity utilization.
+        Identify trends in production focus or priorities.
+    Parameters:
+        Start Date: Beginning of the date range in YYYY-MM-DD format.
+        End Date: End of the date range in YYYY-MM-DD format.
+        Limit: Maximum number of production order records to return.
+        """
         return production_service.find_orders_by_date_range(start_date, end_date, limit)
     
     @mcp.tool(name="production_create_order")
     @log_tool("production_create_order")
     def production_create_order(recipe_id: str, notes: Optional[str] = None) -> Dict[str, Any]:
-        """Create a new production order to execute one batch of a recipe."""
+        """
+        Create a new production order to execute one batch of a recipe.
+        Checks ingredient availability and creates order with 'planned' status.
+        Creates production operations for each step in the recipe.
+        
+        Parameters:
+            recipe_id: The recipe to execute (e.g., 'RCP-ELVIS-20')
+            notes: Optional notes for the production order
+        """
         return production_service.create_order(recipe_id, notes)
     
     @mcp.tool(name="production_start_order")
     @log_tool("production_start_order")
     def production_start_order(production_order_id: str) -> Dict[str, Any]:
-        """Start a production order (change status from 'ready' to 'in_progress')."""
+        """
+        Start a production order (change status from 'ready' to 'in_progress').
+        Sets current_operation to the first operation in the recipe.
+        
+        Parameters:
+            production_order_id: The production order ID (e.g., 'MO-1000')
+        """
         return production_service.start_order(production_order_id)
     
     @mcp.tool(name="production_complete_order")
@@ -257,43 +307,85 @@ def register_tools(mcp):
         warehouse: str = "MAIN",
         location: str = "FG-A"
     ) -> Dict[str, Any]:
-        """Complete a production order and add produced goods to stock."""
+        """
+        Complete a production order and add produced goods to stock.
+        
+        Parameters:
+            production_order_id: The production order ID (e.g., 'MO-1000')
+            qty_produced: Actual quantity produced
+            warehouse: Warehouse to add stock to (default: MAIN)
+            location: Location within warehouse (default: FG-A)
+        """
         return production_service.complete_order(production_order_id, qty_produced, warehouse, location)
     
     @mcp.tool(name="recipe_list")
     @log_tool("recipe_list")
     def recipe_list(output_item_sku: Optional[str] = None, limit: int = 50) -> Dict[str, Any]:
-        """List recipes, optionally filtering by output item SKU."""
+        """
+        List recipes, optionally filtering by output item SKU.
+        
+        Parameters:
+            output_item_sku: Optional SKU to filter recipes that produce this item
+            limit: Maximum number of recipes to return
+        """
         return recipe_service.list_recipes(output_item_sku, limit)
     
     @mcp.tool(name="recipe_get")
     @log_tool("recipe_get")
     def recipe_get(recipe_id: str) -> Dict[str, Any]:
-        """Get detailed recipe information including ingredients and operations."""
+        """
+        Get detailed recipe information including ingredients and operations.
+        
+        Parameters:
+            recipe_id: The recipe ID (e.g., 'RCP-ELVIS-20')
+        """
         return recipe_service.get_recipe(recipe_id)
     
     @mcp.tool(name="purchase_create_order")
     @log_tool("purchase_create_order")
     def purchase_create_order(item_sku: str, qty: float, supplier_name: Optional[str] = None) -> Dict[str, Any]:
-        """Create a purchase order for raw materials or components."""
+        """
+        Create a purchase order for raw materials or components.
+        If supplier_name not provided, auto-selects based on item type.
+        
+        Parameters:
+            item_sku: SKU of item to purchase (e.g., 'ITEM-PVC')
+            qty: Quantity to order
+            supplier_name: Optional supplier name (auto-selected if not provided)
+        """
         return purchase_service.create_order(item_sku, qty, supplier_name)
     
     @mcp.tool(name="purchase_restock_materials")
     @log_tool("purchase_restock_materials")
     def purchase_restock_materials() -> Dict[str, Any]:
-        """Check all raw materials and create purchase orders for items below reorder quantity."""
+        """
+        Check all raw materials and create purchase orders for items below reorder quantity.
+        Returns list of purchase orders created.
+        """
         return purchase_service.restock_materials()
     
     @mcp.tool(name="purchase_receive")
     @log_tool("purchase_receive")
     def purchase_receive(purchase_order_id: str, warehouse: str = "MAIN", location: str = "RM-A") -> Dict[str, Any]:
-        """Receive a purchase order and add materials to stock."""
+        """
+        Receive a purchase order and add materials to stock.
+        
+        Parameters:
+            purchase_order_id: The purchase order ID (e.g., 'PO-1000')
+            warehouse: Warehouse to add stock to (default: MAIN)
+            location: Location within warehouse (default: RM-A for raw materials)
+        """
         return purchase_service.receive(purchase_order_id, warehouse, location)
     
     @mcp.tool(name="simulation_get_time")
     @log_tool("simulation_get_time")
     def simulation_get_time() -> Dict[str, Any]:
-        """Get the current simulated time."""
+        """
+        Get the current simulated time.
+        
+        Returns:
+            Dictionary with current_time (ISO format string)
+        """
         return {"current_time": simulation_service.get_current_time()}
     
     @mcp.tool(name="simulation_advance_time")
@@ -303,7 +395,17 @@ def register_tools(mcp):
         days: Optional[int] = None,
         to_time: Optional[str] = None
     ) -> Dict[str, Any]:
-        """Advance the simulated time forward."""
+        """
+        Advance the simulated time forward.
+        
+        Parameters:
+            hours: Number of hours to advance (e.g., 2.5)
+            days: Number of days to advance (e.g., 7)
+            to_time: ISO datetime to set time to (e.g., '2025-01-15 14:00:00')
+        
+        Returns:
+            Dictionary with old_time and new_time
+        """
         return simulation_service.advance_time(hours, days, to_time)
     
     @mcp.tool(name="messaging_create_email")
@@ -316,7 +418,11 @@ def register_tools(mcp):
         recipient_email: Optional[str] = None,
         recipient_name: Optional[str] = None
     ) -> Dict[str, Any]:
-        """Create a new email draft for a customer."""
+        """
+        Create a new email draft for a customer.
+        Recipient details auto-populate from customer if not provided.
+        If sales_order_id is provided, validates it belongs to the customer.
+        """
         return messaging_service.create_email(customer_id, subject, body, sales_order_id, recipient_email, recipient_name)
     
     @mcp.tool(name="messaging_list_emails")
@@ -327,7 +433,10 @@ def register_tools(mcp):
         status: Optional[str] = None,
         limit: int = 20
     ) -> Dict[str, Any]:
-        """List emails with optional filters."""
+        """
+        List emails with optional filters.
+        Results sorted by modified_at DESC (most recently modified first).
+        """
         return messaging_service.list_emails(customer_id, sales_order_id, status, limit)
     
     @mcp.tool(name="messaging_get_email")
@@ -339,23 +448,40 @@ def register_tools(mcp):
     @mcp.tool(name="messaging_update_email")
     @log_tool("messaging_update_email")
     def messaging_update_email(email_id: str, subject: Optional[str] = None, body: Optional[str] = None) -> Dict[str, Any]:
-        """Update email subject and/or body."""
+        """
+        Update email subject and/or body.
+        Only draft emails can be updated.
+        """
         return messaging_service.update_email(email_id, subject, body)
     
     @mcp.tool(name="messaging_send_email")
     @log_tool("messaging_send_email")
     def messaging_send_email(email_id: str) -> Dict[str, Any]:
-        """Mark email as sent (simulation only)."""
+        """
+        Mark email as sent (simulation only - no actual email sent).
+        Only draft emails can be sent.
+        """
         return messaging_service.send_email(email_id)
     
     @mcp.tool(name="messaging_delete_email")
     @log_tool("messaging_delete_email")
     def messaging_delete_email(email_id: str) -> Dict[str, Any]:
-        """Delete an email."""
+        """
+        Delete an email.
+        Only draft emails can be deleted.
+        """
         return messaging_service.delete_email(email_id)
     
     @mcp.tool(name="admin_reset_database")
     @log_tool("admin_reset_database")
     def admin_reset_database(confirm: str) -> Dict[str, Any]:
-        """Reset database to initial demo state."""
+        """
+        Reset database to initial demo state (drops all tables and reloads).
+        
+        Parameters:
+            confirm: Safety parameter (required)
+        
+        Returns:
+            Dictionary with status message
+        """
         return admin_service.reset_database(confirm)
