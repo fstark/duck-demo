@@ -147,13 +147,14 @@ def register_tools(mcp):
     @log_tool("catalog_get_item")
     def get_item(sku: str) -> Dict[str, Any]:
         """
-        Fetch an item by SKU.
+        Fetch complete item details by SKU.
+        Use this after search to get full details including image_url, uom, and reorder_qty.
         
         Parameters:
             sku: The item SKU (e.g., 'ELVIS-RED-20')
         
         Returns:
-            Item details including id, sku, name, type, unit_price, uom, and image_url
+            Complete item details: id, sku, name, type, unit_price, uom, reorder_qty, image_url
         """
         return catalog_service.get_item(sku)
     
@@ -162,8 +163,8 @@ def register_tools(mcp):
     def search_items(words: List[str], limit: int = 10, min_score: int = 1) -> Dict[str, Any]:
         """
         Fuzzy search for items by keywords in SKU or name, ranked by relevance.
-        Returns items in nested structure: {"items": [{"item": {...}, "score": N}]}.
-        Item details include unit_price but must be extracted from nested structure.
+        Returns MINIMAL fields only for efficient browsing.
+        Use catalog_get_item(sku) to get complete details including image_url.
         
         Parameters:
             words: List of search terms to match
@@ -171,8 +172,8 @@ def register_tools(mcp):
             min_score: Minimum match score (default: 1)
         
         Returns:
-            Dictionary with items array where each entry has: {"item": {full item details}, "score": N, "matched_words": [...]}
-            Item object includes: id, sku, name, type, unit_price, ui_url
+            Nested structure: {"items": [{"item": {...}, "score": N, "matched_words": [...]}]}
+            Item object includes ONLY: id, sku, name, type, unit_price, ui_url
         """
         return catalog_service.search_items(words, limit, min_score)
     
@@ -181,15 +182,24 @@ def register_tools(mcp):
     def inventory_list_items(in_stock_only: bool = False, limit: int = 50) -> Dict[str, Any]:
         """
         List all catalog items with their current stock levels.
+        Returns MINIMAL fields only for efficient browsing.
+        Use catalog_get_item(sku) to get complete details including image_url, uom, reorder_qty.
         
         Parameters:
             in_stock_only: If True, only return items with available stock (default: False)
             limit: Maximum number of items to return (default: 50)
         
         Returns:
-            Dictionary with items array including sku, name, type, unit_price, on_hand_total, and available_total
+            Dictionary with items array including ONLY:
+            id, sku, name, type, unit_price, on_hand_total, available_total, ui_url
         """
-        return catalog_service.list_items(in_stock_only, limit)
+        result = catalog_service.list_items(in_stock_only, limit)
+        # Strip extra fields to keep response minimal for LLMs
+        for item in result.get("items", []):
+            item.pop("image_url", None)
+            item.pop("uom", None)
+            item.pop("reorder_qty", None)
+        return result
     
     @mcp.tool(name="inventory_get_stock_summary")
     @log_tool("inventory_get_stock_summary")
