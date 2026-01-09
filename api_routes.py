@@ -1,6 +1,7 @@
 """REST API route definitions - thin wrappers around business logic services."""
 
 import base64
+import logging
 from typing import Any, Dict, Optional
 
 from starlette.responses import JSONResponse, Response
@@ -20,6 +21,9 @@ from services import (
     messaging_service,
 )
 from utils import ui_href
+import config
+
+logger = logging.getLogger("duck-demo")
 
 
 DEMO_CORS_HEADERS = {
@@ -123,7 +127,7 @@ def register_routes(mcp):
             result = dict(item)
             result["ui_url"] = ui_href("items", sku)
             if result.get("image"):
-                result["image_url"] = f"/api/items/{sku}/image.png"
+                result["image_url"] = f"{config.API_BASE}/api/items/{sku}/image.png"
             result.pop("image", None)
             stock = inventory_service.get_stock_summary(item["id"])
             result["stock"] = stock

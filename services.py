@@ -265,7 +265,7 @@ class CatalogService:
             raise ValueError("Item not found")
         result = dict(item)
         if result.get("image"):
-            result["image_url"] = f"/api/items/{sku}/image.png"
+            result["image_url"] = f"{config.API_BASE}/api/items/{sku}/image.png"
         result.pop("image", None)
         return result
     
@@ -323,7 +323,7 @@ class CatalogService:
             for row in rows:
                 row["ui_url"] = ui_href("items", row["sku"])
                 if row.get("image"):
-                    row["image_url"] = f"/api/items/{row['sku']}/image.png"
+                    row["image_url"] = f"{config.API_BASE}/api/items/{row['sku']}/image.png"
                 row.pop("image", None)
             return {"items": rows}
 
