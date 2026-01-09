@@ -2,9 +2,10 @@
 
 import base64
 import logging
+import os
 from typing import Any, Dict, Optional
 
-from starlette.responses import JSONResponse, Response
+from starlette.responses import JSONResponse, Response, FileResponse
 
 from db import dict_rows
 from services import (
@@ -415,3 +416,20 @@ def register_routes(mcp):
             return _json(result)
         except Exception as exc:
             return _json({"error": str(exc)}, status_code=404)
+    
+    @mcp.custom_route("/api/charts/{filename}", methods=["GET", "OPTIONS"])
+    async def api_chart_image(request):
+        if request.method == "OPTIONS":
+            return _cors_preflight(["GET"])
+        filename = request.path_params.get("filename")
+        charts_dir = os.path.join(os.path.dirname(__file__), "tmp", "charts")
+        file_path = os.path.join(charts_dir, filename)
+        
+        if not os.path.exists(file_path):
+            return _json({"error": "Chart not found"}, status_code=404)
+        
+        return FileResponse(
+            file_path,
+            media_type="image/png",
+            headers=DEMO_CORS_HEADERS
+        )

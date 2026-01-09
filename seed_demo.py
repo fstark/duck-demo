@@ -99,17 +99,26 @@ def seed(from_admin=False):
                 (item_id, sku, name, item_type, unit_price, uom, reorder_qty, image_data)
             )
 
-        # Stock
+        # Stock - diverse levels for interesting bar chart
         conn.executemany(
             "INSERT INTO stock (id, item_id, warehouse, location, on_hand) VALUES (?, ?, ?, ?, ?)",
             [
-                ("STK-0001", "ITEM-ELVIS-20", "WH-LYON", "FG/BIN-12", 12),
-                ("STK-0002", "ITEM-MARILYN-20", "WH-LYON", "FG/BIN-14", 12),
-                ("STK-0003", "ITEM-CLASSIC-10", "WH-LYON", "FG/BIN-02", 100),
-                ("STK-0004", "ITEM-PVC", "WH-LYON", "RM/BULK-01", 1000),
-                ("STK-0005", "ITEM-BLACK-DYE", "WH-LYON", "RM/SHELF-01", 50),
-                ("STK-0006", "ITEM-YELLOW-DYE", "WH-LYON", "RM/SHELF-02", 50),
-                ("STK-0007", "ITEM-BOX-SMALL", "WH-LYON", "PK/BIN-01", 200),
+                # Finished goods - varied stock levels
+                ("STK-0001", "ITEM-ELVIS-20", "WH-LYON", "FG/BIN-12", 127),
+                ("STK-0002", "ITEM-ELVIS-20", "WH-LYON", "FG/BIN-13", 79),  # Total: 206 (medium)
+                ("STK-0003", "ITEM-MARILYN-20", "WH-LYON", "FG/BIN-14", 18),
+                ("STK-0004", "ITEM-CLASSIC-10", "WH-LYON", "FG/BIN-02", 571),
+                ("STK-0005", "ITEM-CLASSIC-10", "WH-LYON", "FG/BIN-03", 412),  # Total: 983 (high stock)
+                ("STK-0006", "ITEM-ROBOT-25", "WH-LYON", "FG/BIN-05", 47),  # Low stock
+                ("STK-0007", "ITEM-PIRATE-15", "WH-LYON", "FG/BIN-06", 94),  # Medium
+                ("STK-0008", "ITEM-NINJA-12", "WH-LYON", "FG/BIN-07", 8),  # Critical low
+                ("STK-0009", "ITEM-UNICORN-25", "WH-LYON", "FG/BIN-08", 53),  # Low
+                
+                # Raw materials
+                ("STK-0010", "ITEM-PVC", "WH-LYON", "RM/BULK-01", 987),
+                ("STK-0011", "ITEM-BLACK-DYE", "WH-LYON", "RM/SHELF-01", 43),
+                ("STK-0012", "ITEM-YELLOW-DYE", "WH-LYON", "RM/SHELF-02", 56),
+                ("STK-0013", "ITEM-BOX-SMALL", "WH-LYON", "PK/BIN-01", 218),
             ],
         )
 
@@ -362,14 +371,81 @@ def seed(from_admin=False):
 
 # Production orders (one per batch) with their operations
         production_orders = [
-            ("MO-1001", "RCP-ELVIS-20", "ITEM-ELVIS-20", "completed", "2025-12-19T08:00", "2025-12-19T11:30", "2025-12-20", "2025-12-21"),
-            ("MO-1002", "RCP-ELVIS-20", "ITEM-ELVIS-20", "in_progress", "2025-12-24T09:00", None, "2025-12-25", "2025-12-26"),
+            # Completed orders (37 total) - dates span Nov 15 - Dec 23 for trend analysis
+            # Mid-November (ramping up)
+            ("MO-1101", "RCP-CLASSIC-10", "ITEM-CLASSIC-10", "completed", "2025-11-15T09:00", "2025-11-15T11:30", "2025-11-16", "2025-11-17"),
+            ("MO-1102", "RCP-ELVIS-20", "ITEM-ELVIS-20", "completed", "2025-11-17T10:00", "2025-11-17T13:30", "2025-11-18", "2025-11-19"),
+            ("MO-1103", "RCP-NINJA-12", "ITEM-NINJA-12", "completed", "2025-11-19T08:00", "2025-11-19T10:30", "2025-11-20", "2025-11-21"),
+            ("MO-1104", "RCP-PIRATE-15", "ITEM-PIRATE-15", "completed", "2025-11-21T09:00", "2025-11-21T15:00", "2025-11-22", "2025-11-23"),
+            ("MO-1105", "RCP-CLASSIC-10", "ITEM-CLASSIC-10", "completed", "2025-11-22T14:00", "2025-11-22T16:30", "2025-11-23", "2025-11-24"),
+            ("MO-1106", "RCP-ROBOT-25", "ITEM-ROBOT-25", "completed", "2025-11-25T08:00", "2025-11-25T14:30", "2025-11-26", "2025-11-27"),
+            ("MO-1107", "RCP-ELVIS-20", "ITEM-ELVIS-20", "completed", "2025-11-26T10:00", "2025-11-26T13:30", "2025-11-27", "2025-11-28"),
+            ("MO-1108", "RCP-UNICORN-25", "ITEM-UNICORN-25", "completed", "2025-11-28T09:00", "2025-11-28T15:00", "2025-11-29", "2025-11-30"),
+            
+            # Early December (steady pace)
+            ("MO-1109", "RCP-NINJA-12", "ITEM-NINJA-12", "completed", "2025-12-01T08:00", "2025-12-01T10:30", "2025-12-02", "2025-12-03"),
+            ("MO-1110", "RCP-CLASSIC-10", "ITEM-CLASSIC-10", "completed", "2025-12-02T10:00", "2025-12-02T12:30", "2025-12-03", "2025-12-04"),
+            ("MO-1111", "RCP-PIRATE-15", "ITEM-PIRATE-15", "completed", "2025-12-03T09:00", "2025-12-03T15:00", "2025-12-04", "2025-12-05"),
+            ("MO-1112", "RCP-ELVIS-20", "ITEM-ELVIS-20", "completed", "2025-12-04T13:00", "2025-12-04T16:30", "2025-12-05", "2025-12-06"),
+            ("MO-1011", "RCP-ELVIS-20", "ITEM-ELVIS-20", "completed", "2025-12-05T10:00", "2025-12-05T13:30", "2025-12-06", "2025-12-07"),
+            ("MO-1113", "RCP-ROBOT-25", "ITEM-ROBOT-25", "completed", "2025-12-06T09:00", "2025-12-06T15:30", "2025-12-07", "2025-12-08"),
+            ("MO-1010", "RCP-CLASSIC-10", "ITEM-CLASSIC-10", "completed", "2025-12-08T14:00", "2025-12-08T16:30", "2025-12-09", "2025-12-10"),
+            ("MO-1017", "RCP-UNICORN-25", "ITEM-UNICORN-25", "completed", "2025-12-09T10:00", "2025-12-09T16:00", "2025-12-10", "2025-12-11"),
+            
+            # Mid December (increasing volume)
+            ("MO-1009", "RCP-NINJA-12", "ITEM-NINJA-12", "completed", "2025-12-10T09:00", "2025-12-10T11:30", "2025-12-11", "2025-12-12"),
+            ("MO-1015", "RCP-NINJA-12", "ITEM-NINJA-12", "completed", "2025-12-11T08:00", "2025-12-11T10:30", "2025-12-12", "2025-12-13"),
+            ("MO-1012", "RCP-PIRATE-15", "ITEM-PIRATE-15", "completed", "2025-12-12T08:00", "2025-12-12T14:00", "2025-12-13", "2025-12-14"),
+            ("MO-1114", "RCP-ELVIS-20", "ITEM-ELVIS-20", "completed", "2025-12-13T10:00", "2025-12-13T13:30", "2025-12-14", "2025-12-15"),
             ("MO-1003", "RCP-CLASSIC-10", "ITEM-CLASSIC-10", "completed", "2025-12-14T10:00", "2025-12-14T12:30", "2025-12-15", "2025-12-16"),
-            ("MO-1004", "RCP-CLASSIC-10", "ITEM-CLASSIC-10", "ready", None, None, "2026-01-10", "2026-01-11"),
-            ("MO-1005", "RCP-ROBOT-25", "ITEM-ROBOT-25", "in_progress", "2025-12-23T14:00", None, "2025-12-29", "2025-12-30"),
+            ("MO-1013", "RCP-ROBOT-25", "ITEM-ROBOT-25", "completed", "2025-12-15T09:00", "2025-12-15T15:30", "2025-12-16", "2025-12-17"),
+            ("MO-1115", "RCP-CLASSIC-10", "ITEM-CLASSIC-10", "completed", "2025-12-16T08:00", "2025-12-16T10:30", "2025-12-17", "2025-12-18"),
             ("MO-1006", "RCP-PIRATE-15", "ITEM-PIRATE-15", "completed", "2025-12-17T08:00", "2025-12-17T14:00", "2025-12-18", "2025-12-19"),
-            ("MO-1007", "RCP-NINJA-12", "ITEM-NINJA-12", "planned", None, None, "2026-01-05", "2026-01-06"),
+            ("MO-1016", "RCP-ELVIS-20", "ITEM-ELVIS-20", "completed", "2025-12-18T13:00", "2025-12-18T16:30", "2025-12-19", "2025-12-20"),
+            ("MO-1001", "RCP-ELVIS-20", "ITEM-ELVIS-20", "completed", "2025-12-19T08:00", "2025-12-19T11:30", "2025-12-20", "2025-12-21"),
+            ("MO-1116", "RCP-NINJA-12", "ITEM-NINJA-12", "completed", "2025-12-19T14:00", "2025-12-19T16:30", "2025-12-20", "2025-12-21"),
+            ("MO-1014", "RCP-CLASSIC-10", "ITEM-CLASSIC-10", "completed", "2025-12-20T11:00", "2025-12-20T13:30", "2025-12-21", "2025-12-22"),
+            ("MO-1117", "RCP-ROBOT-25", "ITEM-ROBOT-25", "completed", "2025-12-21T09:00", "2025-12-21T15:30", "2025-12-22", "2025-12-23"),
+            ("MO-1118", "RCP-PIRATE-15", "ITEM-PIRATE-15", "completed", "2025-12-22T08:00", "2025-12-22T14:00", "2025-12-23", "2025-12-24"),
+            ("MO-1119", "RCP-CLASSIC-10", "ITEM-CLASSIC-10", "completed", "2025-12-22T14:00", "2025-12-22T16:30", "2025-12-23", "2025-12-24"),
+            ("MO-1120", "RCP-UNICORN-25", "ITEM-UNICORN-25", "completed", "2025-12-23T09:00", "2025-12-23T15:00", "2025-12-24", "2025-12-25"),
+            ("MO-1121", "RCP-ELVIS-20", "ITEM-ELVIS-20", "completed", "2025-12-23T13:00", "2025-12-23T16:30", "2025-12-24", "2025-12-25"),
+            ("MO-1122", "RCP-NINJA-12", "ITEM-NINJA-12", "completed", "2025-12-23T10:00", "2025-12-23T12:30", "2025-12-24", "2025-12-25"),
+            ("MO-1123", "RCP-ROBOT-25", "ITEM-ROBOT-25", "completed", "2025-12-23T15:00", "2025-12-23T21:30", "2025-12-24", "2025-12-25"),
+            ("MO-1124", "RCP-PIRATE-15", "ITEM-PIRATE-15", "completed", "2025-12-23T09:00", "2025-12-23T15:00", "2025-12-24", "2025-12-25"),
+            
+            # In progress orders (5 total - ~17%)
+            ("MO-1002", "RCP-ELVIS-20", "ITEM-ELVIS-20", "in_progress", "2025-12-24T09:00", None, "2025-12-25", "2025-12-26"),
+            ("MO-1005", "RCP-ROBOT-25", "ITEM-ROBOT-25", "in_progress", "2025-12-23T14:00", None, "2025-12-29", "2025-12-30"),
+            ("MO-1018", "RCP-CLASSIC-10", "ITEM-CLASSIC-10", "in_progress", "2025-12-24T08:00", None, "2025-12-25", "2025-12-26"),
+            ("MO-1019", "RCP-PIRATE-15", "ITEM-PIRATE-15", "in_progress", "2025-12-23T10:00", None, "2025-12-24", "2025-12-25"),
+            ("MO-1020", "RCP-NINJA-12", "ITEM-NINJA-12", "in_progress", "2025-12-24T13:00", None, "2025-12-25", "2025-12-26"),
+            
+            # Ready orders (4 total - ~13%)
+            ("MO-1004", "RCP-CLASSIC-10", "ITEM-CLASSIC-10", "ready", None, None, "2026-01-10", "2026-01-11"),
+            ("MO-1021", "RCP-ELVIS-20", "ITEM-ELVIS-20", "ready", None, None, "2026-01-08", "2026-01-09"),
+            ("MO-1022", "RCP-ROBOT-25", "ITEM-ROBOT-25", "ready", None, None, "2026-01-12", "2026-01-13"),
+            ("MO-1023", "RCP-UNICORN-25", "ITEM-UNICORN-25", "ready", None, None, "2026-01-15", "2026-01-16"),
+            
+            # Waiting orders (5 total - ~17%, blocked on materials)
             ("MO-1008", "RCP-UNICORN-25", "ITEM-UNICORN-25", "waiting", None, None, "2026-02-01", "2026-02-02"),
+            ("MO-1024", "RCP-ROBOT-25", "ITEM-ROBOT-25", "waiting", None, None, "2026-01-20", "2026-01-21"),
+            ("MO-1025", "RCP-PIRATE-15", "ITEM-PIRATE-15", "waiting", None, None, "2026-01-18", "2026-01-19"),
+            ("MO-1026", "RCP-UNICORN-25", "ITEM-UNICORN-25", "waiting", None, None, "2026-01-25", "2026-01-26"),
+            ("MO-1027", "RCP-NINJA-12", "ITEM-NINJA-12", "waiting", None, None, "2026-01-22", "2026-01-23"),
+            
+            # Planned orders (7 total, future orders)
+            ("MO-1007", "RCP-NINJA-12", "ITEM-NINJA-12", "planned", None, None, "2026-01-05", "2026-01-06"),
+            ("MO-1028", "RCP-ELVIS-20", "ITEM-ELVIS-20", "planned", None, None, "2026-02-10", "2026-02-11"),
+            ("MO-1029", "RCP-CLASSIC-10", "ITEM-CLASSIC-10", "planned", None, None, "2026-02-15", "2026-02-16"),
+            ("MO-1030", "RCP-ROBOT-25", "ITEM-ROBOT-25", "planned", None, None, "2026-02-20", "2026-02-21"),
+            ("MO-1031", "RCP-PIRATE-15", "ITEM-PIRATE-15", "planned", None, None, "2026-02-25", "2026-02-26"),
+            ("MO-1032", "RCP-UNICORN-25", "ITEM-UNICORN-25", "planned", None, None, "2026-03-01", "2026-03-02"),
+            ("MO-1033", "RCP-NINJA-12", "ITEM-NINJA-12", "ready", None, None, "2026-01-20", "2026-01-21"),
+            ("MO-1034", "RCP-PIRATE-15", "ITEM-PIRATE-15", "ready", None, None, "2026-01-25", "2026-01-26"),
+            ("MO-1035", "RCP-UNICORN-25", "ITEM-UNICORN-25", "in_progress", "2025-12-24T10:00", None, "2025-12-26", "2025-12-27"),
+            ("MO-1036", "RCP-ELVIS-20", "ITEM-ELVIS-20", "waiting", None, None, "2026-02-05", "2026-02-06"),
+            ("MO-1037", "RCP-CLASSIC-10", "ITEM-CLASSIC-10", "waiting", None, None, "2026-02-08", "2026-02-09"),
         ]
         conn.executemany(
             "INSERT INTO production_orders (id, recipe_id, item_id, status, started_at, completed_at, eta_finish, eta_ship) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",

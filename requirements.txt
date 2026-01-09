@@ -1,2 +1,3 @@
 mcp
 Pillow
+matplotlib

@@ -1,9 +1,16 @@
 """Business logic services for the duck-demo application."""
 
+import os
 import re
 import sqlite3
+import uuid
 from contextlib import contextmanager
+from datetime import datetime
 from typing import Any, Dict, Iterator, List, Optional
+
+import matplotlib
+matplotlib.use('Agg')  # Use non-interactive backend
+import matplotlib.pyplot as plt
 
 from db import dict_rows, generate_id, get_connection
 from utils import ui_href, eta_from_days, parse_date
@@ -668,9 +675,9 @@ class ProductionService:
         with db_conn() as conn:
             total_production = conn.execute("SELECT COUNT(*) as count FROM production_orders").fetchone()["count"]
             status_rows = dict_rows(conn.execute("SELECT status, COUNT(*) as count FROM production_orders GROUP BY status ORDER BY count DESC"))
-            total_qty = conn.execute("SELECT SUM(qty) as total FROM production_orders").fetchone()["total"] or 0
-            top_items = dict_rows(conn.execute("SELECT i.sku, i.name, SUM(po.qty) as total_qty, COUNT(*) as order_count FROM production_orders po JOIN items i ON po.item_id = i.id GROUP BY i.id, i.sku, i.name ORDER BY total_qty DESC LIMIT 10"))
-            upcoming = dict_rows(conn.execute("SELECT i.sku, i.name, po.qty, po.eta_finish, po.status FROM production_orders po JOIN items i ON po.item_id = i.id WHERE po.eta_finish >= date('now') AND po.eta_finish <= date('now', '+60 days') ORDER BY po.eta_finish LIMIT 20"))
+            total_qty = conn.execute("SELECT SUM(r.output_qty) as total FROM production_orders po JOIN recipes r ON po.recipe_id = r.id").fetchone()["total"] or 0
+            top_items = dict_rows(conn.execute("SELECT i.sku, i.name, SUM(r.output_qty) as total_qty, COUNT(*) as order_count FROM production_orders po JOIN recipes r ON po.recipe_id = r.id JOIN items i ON po.item_id = i.id GROUP BY i.id, i.sku, i.name ORDER BY total_qty DESC LIMIT 10"))
+            upcoming = dict_rows(conn.execute("SELECT i.sku, i.name, r.output_qty as qty, po.eta_finish, po.status FROM production_orders po JOIN recipes r ON po.recipe_id = r.id JOIN items i ON po.item_id = i.id WHERE po.eta_finish >= date('now') AND po.eta_finish <= date('now', '+60 days') ORDER BY po.eta_finish LIMIT 20"))
             return {"total_production_orders": total_production, "production_orders_by_status": status_rows, "total_quantity_in_production": total_qty, "top_items_in_production": top_items, "upcoming_production": upcoming}
     
     @staticmethod
@@ -1052,6 +1059,220 @@ class AdminService:
         return {"status": "Database reset complete", "initial_time": "2025-12-24 08:30:00"}
 
 
+class ChartService:
+    """Service for generating chart images."""
+    
+    @staticmethod
+    def generate_chart(
+        chart_type: str,
+        labels: List[str],
+        values: Optional[List[float]] = None,
+        series: Optional[List[Dict[str, Any]]] = None,
+        title: Optional[str] = None
+    ) -> Dict[str, str]:
+        """
+        Generate a chart image and return the filename.
+        
+        Args:
+            chart_type: Type of chart - pie, bar, bar_horizontal, line, scatter, area, stacked_area, stacked_bar, waterfall
+            labels: List of labels for x-axis or pie slices
+            values: List of numeric values (for backward compatibility, single series)
+            series: List of series dicts: [{"name": "Q1", "values": [10, 20, 30]}, ...]
+            title: Optional chart title
+            
+        Returns:
+            Dictionary with filename and full_path
+        """
+        valid_types = ["pie", "bar", "bar_horizontal", "line", "scatter", "area", "stacked_area", "stacked_bar", "waterfall"]
+        if chart_type not in valid_types:
+            raise ValueError(f"Unsupported chart type: {chart_type}. Valid: {', '.join(valid_types)}")
+        
+        # Convert single values to series format for uniform handling
+        if values is not None:
+            series = [{"name": "", "values": values}]
+        elif series is None:
+            raise ValueError("Must provide either 'values' or 'series'")
+        
+        # Validate data
+        for s in series:
+            if len(s["values"]) != len(labels):
+                raise ValueError(f"Series '{s.get('name', '')}' values length must match labels length")
+        
+        # Generate filename: {YYYYMMDD_HHMMSS}_{uuid}.png
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        file_uuid = str(uuid.uuid4())
+        filename = f"{timestamp}_{file_uuid}.png"
+        
+        # Ensure tmp/charts directory exists
+        charts_dir = os.path.join(os.path.dirname(__file__), "tmp", "charts")
+        os.makedirs(charts_dir, exist_ok=True)
+        
+        full_path = os.path.join(charts_dir, filename)
+        
+        # Create chart based on type
+        fig, ax = plt.subplots(figsize=(10, 6))
+        
+        if chart_type == "pie":
+            # Pie charts only support single series
+            values_list = series[0]["values"]
+            
+            def make_autopct(values):
+                def autopct(pct):
+                    total = sum(values)
+                    val = int(round(pct * total / 100.0))
+                    return f'{val}\n({pct:.1f}%)'
+                return autopct
+            
+            ax.pie(values_list, labels=labels, autopct=make_autopct(values_list), startangle=90)
+            ax.axis('equal')
+        
+        elif chart_type == "bar":
+            x = range(len(labels))
+            width = 0.8 / len(series) if len(series) > 1 else 0.6
+            
+            for idx, s in enumerate(series):
+                offset = (idx - len(series) / 2 + 0.5) * width
+                bars = ax.bar([i + offset for i in x], s["values"], width, label=s["name"])
+                # Add value labels on bars
+                for bar in bars:
+                    height = bar.get_height()
+                    ax.text(bar.get_x() + bar.get_width()/2., height,
+                           f'{int(height)}', ha='center', va='bottom', fontsize=8)
+            
+            ax.set_xticks(x)
+            ax.set_xticklabels(labels, rotation=45, ha='right')
+            if len(series) > 1 or series[0]["name"]:
+                ax.legend()
+        
+        elif chart_type == "bar_horizontal":
+            y = range(len(labels))
+            height = 0.8 / len(series) if len(series) > 1 else 0.6
+            
+            for idx, s in enumerate(series):
+                offset = (idx - len(series) / 2 + 0.5) * height
+                bars = ax.barh([i + offset for i in y], s["values"], height, label=s["name"])
+                # Add value labels on bars
+                for bar in bars:
+                    width = bar.get_width()
+                    ax.text(width, bar.get_y() + bar.get_height()/2.,
+                           f'{int(width)}', ha='left', va='center', fontsize=8)
+            
+            ax.set_yticks(y)
+            ax.set_yticklabels(labels)
+            if len(series) > 1 or series[0]["name"]:
+                ax.legend()
+        
+        elif chart_type == "line":
+            x = range(len(labels))
+            
+            for s in series:
+                ax.plot(x, s["values"], marker='o', label=s["name"], linewidth=2)
+                # Add value labels on points
+                for i, val in enumerate(s["values"]):
+                    ax.text(i, val, f'{int(val)}', ha='center', va='bottom', fontsize=8)
+            
+            ax.set_xticks(x)
+            ax.set_xticklabels(labels, rotation=45, ha='right')
+            ax.grid(True, alpha=0.3)
+            if len(series) > 1 or series[0]["name"]:
+                ax.legend()
+        
+        elif chart_type == "scatter":
+            for s in series:
+                ax.scatter(range(len(labels)), s["values"], label=s["name"], s=100, alpha=0.6)
+            
+            ax.set_xticks(range(len(labels)))
+            ax.set_xticklabels(labels, rotation=45, ha='right')
+            ax.grid(True, alpha=0.3)
+            if len(series) > 1 or series[0]["name"]:
+                ax.legend()
+        
+        elif chart_type == "area":
+            x = range(len(labels))
+            
+            for s in series:
+                ax.fill_between(x, s["values"], alpha=0.4, label=s["name"])
+                ax.plot(x, s["values"], linewidth=2)
+            
+            ax.set_xticks(x)
+            ax.set_xticklabels(labels, rotation=45, ha='right')
+            ax.grid(True, alpha=0.3)
+            if len(series) > 1 or series[0]["name"]:
+                ax.legend()
+        
+        elif chart_type == "stacked_area":
+            x = range(len(labels))
+            
+            # Stack the areas
+            cumulative = [0] * len(labels)
+            for s in series:
+                new_cumulative = [cumulative[i] + s["values"][i] for i in range(len(labels))]
+                ax.fill_between(x, cumulative, new_cumulative, alpha=0.6, label=s["name"])
+                cumulative = new_cumulative
+            
+            ax.set_xticks(x)
+            ax.set_xticklabels(labels, rotation=45, ha='right')
+            ax.grid(True, alpha=0.3)
+            ax.legend()
+        
+        elif chart_type == "stacked_bar":
+            x = range(len(labels))
+            width = 0.6
+            
+            # Stack the bars
+            cumulative = [0] * len(labels)
+            for s in series:
+                ax.bar(x, s["values"], width, bottom=cumulative, label=s["name"])
+                cumulative = [cumulative[i] + s["values"][i] for i in range(len(labels))]
+            
+            ax.set_xticks(x)
+            ax.set_xticklabels(labels, rotation=45, ha='right')
+            ax.legend()
+        
+        elif chart_type == "waterfall":
+            # Waterfall chart shows cumulative effect of sequential values
+            values_list = series[0]["values"]
+            cumulative = 0
+            cumulative_values = []
+            colors = []
+            
+            for val in values_list:
+                cumulative_values.append(cumulative)
+                cumulative += val
+                colors.append('green' if val >= 0 else 'red')
+            
+            # Draw bars from cumulative base
+            bars = ax.bar(range(len(labels)), values_list, bottom=cumulative_values, color=colors, alpha=0.7)
+            
+            # Add value labels
+            for i, (bar, val) in enumerate(zip(bars, values_list)):
+                height = cumulative_values[i] + val
+                ax.text(bar.get_x() + bar.get_width()/2., height,
+                       f'{int(val):+d}', ha='center', va='bottom' if val >= 0 else 'top', fontsize=8)
+            
+            # Draw connecting lines
+            for i in range(len(labels) - 1):
+                ax.plot([i + 0.4, i + 0.6], 
+                       [cumulative_values[i] + values_list[i], cumulative_values[i] + values_list[i]], 
+                       'k--', linewidth=0.5, alpha=0.5)
+            
+            ax.set_xticks(range(len(labels)))
+            ax.set_xticklabels(labels, rotation=45, ha='right')
+            ax.axhline(y=0, color='black', linewidth=0.8)
+        
+        if title:
+            ax.set_title(title)
+        
+        plt.tight_layout()
+        plt.savefig(full_path, dpi=100, bbox_inches='tight')
+        plt.close(fig)
+        
+        return {
+            "filename": filename,
+            "full_path": full_path
+        }
+
+
 # Create singleton instances
 simulation_service = SimulationService()
 customer_service = CustomerService()
@@ -1066,3 +1287,4 @@ purchase_service = PurchaseService()
 messaging_service = MessagingService()
 stats_service = StatsService()
 admin_service = AdminService()
+chart_service = ChartService()
