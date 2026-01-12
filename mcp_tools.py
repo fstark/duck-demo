@@ -3,7 +3,7 @@
 import functools
 import json
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 import config
 from services import (
@@ -71,35 +71,71 @@ def register_tools(mcp):
     def get_statistics(
         entity: str,
         metric: str = "count",
-        group_by: Optional[str] = None,
+        group_by: Optional[Union[str, List[str]]] = None,
         field: Optional[str] = None,
         status: Optional[str] = None,
         item_type: Optional[str] = None,
         warehouse: Optional[str] = None,
         city: Optional[str] = None,
         limit: int = 100,
+        return_chart: Optional[str] = None,
+        chart_title: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
-        Get flexible statistics for any entity with optional grouping and filtering.
+        Get flexible statistics for any entity with optional grouping, filtering, and chart generation.
+        ⚠️ USE THIS TOOL for any aggregation of >10 records. Never manually count from large datasets.
         
         Args:
-            entity: The entity to query (customers, sales_orders, items, stock, production_orders, shipments)
+            entity: The entity to query (see Entity Types below)
             metric: The metric to calculate (count, sum, avg, min, max)
-            group_by: Optional field to group by (status, type, city, warehouse, etc.)
-            field: Field name for sum/avg/min/max operations (qty, on_hand, unit_price, etc.)
-            status: Filter by status (for sales_orders, production_orders, shipments)
+            group_by: Field(s) to group by - string for single dimension, list for multi-dimensional (e.g., ["item_id", "status"])
+            field: Field name for sum/avg/min/max operations (see Valid Fields below)
+            status: Filter by status (for sales_orders, production_orders, shipments, purchase_orders)
             item_type: Filter by item type (for items)
             warehouse: Filter by warehouse (for stock)
             city: Filter by city (for customers)
-            limit: Maximum results for grouped queries
+            limit: Maximum results for grouped queries (default: 100)
+            return_chart: Optional chart type to generate directly (pie, bar, line, stacked_bar, etc.)
+            chart_title: Optional title for generated chart
+        
+        Entity Types and Valid Fields:
+            - customers: fields=[id], groups=[city, company], dates=[created_at]
+            - sales_orders: fields=[id], groups=[status, customer_id], dates=[created_at, requested_delivery_date]
+            - sales_order_lines: fields=[qty], groups=[sales_order_id, item_id] 📦 Use for order quantities
+            - items: fields=[unit_price], groups=[type]
+            - stock: fields=[on_hand], groups=[warehouse, location, item_id]
+            - production_orders: fields=[id, qty], groups=[status, item_id], dates=[started_at, completed_at, eta_finish, eta_ship] 🏭 qty via join with recipes
+            - shipments: fields=[id], groups=[status], dates=[planned_departure, planned_arrival]
+            - shipment_lines: fields=[qty], groups=[shipment_id, item_id], dates=[planned_departure, planned_arrival] 📦 Use for shipment quantities with dates via join
+            - purchase_orders: fields=[qty], groups=[status, item_id, supplier_id], dates=[ordered_at, expected_delivery, received_at]
+        
+        💡 Key Schema Pattern:
+            - Header tables (sales_orders, shipments): Have status/dates but NO quantities
+            - Line tables (sales_order_lines, shipment_lines): Have quantities but NO status/dates
+            - For quantity analysis by date: Count header records OR sum line quantities (separate queries)
+        
+        Group By Options:
+            Single dimension: "status", "type", "city", "warehouse", "item_id", etc.
+            Date grouping: "date:field_name", "month:field_name", "year:field_name"
+            Multi-dimensional: ["item_id", "status"] - for stacked charts, pivot tables
+        
+        Chart Generation:
+            - When return_chart is specified, generates chart directly from query results
+            - Single dimension: All chart types supported (pie, bar, line, etc.)
+            - Multi-dimensional: Automatically pivots for stacked charts (first field = labels, second field = series)
+            - Returns both chart URL and raw data
         
         Examples:
-            - Total customers: entity="customers", metric="count"
-            - Sales orders by status: entity="sales_orders", metric="count", group_by="status"
-            - Total stock by warehouse: entity="stock", metric="sum", field="on_hand", group_by="warehouse"
-            - Items by type: entity="items", metric="count", group_by="type"
+            Single dimension with chart:
+                entity="production_orders", metric="count", group_by="date:completed_at", return_chart="line"
+            
+            Multi-dimensional for stacked chart:
+                entity="production_orders", metric="count", group_by=["status", "item_id"], return_chart="stacked_bar"
+            
+            Without chart (raw data only):
+                entity="shipment_lines", metric="sum", field="qty", group_by="item_id"
         """
-        return stats_service.get_statistics(entity, metric, group_by, field, status, item_type, warehouse, city, limit)
+        return stats_service.get_statistics(entity, metric, group_by, field, status, item_type, warehouse, city, limit, return_chart, chart_title)
     
     @mcp.tool(name="crm_find_customers")
     @log_tool("crm_find_customers")
@@ -182,7 +218,7 @@ def register_tools(mcp):
     
     @mcp.tool(name="inventory_list_items")
     @log_tool("inventory_list_items")
-    def inventory_list_items(in_stock_only: bool = False, limit: int = 50) -> Dict[str, Any]:
+    def inventory_list_items(in_stock_only: bool = False, item_type: Optional[str] = "finished_good", limit: int = 50) -> Dict[str, Any]:
         """
         List all catalog items with their current stock levels.
         Returns MINIMAL fields only for efficient browsing.
@@ -190,13 +226,14 @@ def register_tools(mcp):
         
         Parameters:
             in_stock_only: If True, only return items with available stock (default: False)
+            item_type: Filter by item type - 'finished_good' (default, duck products), 'raw_material', 'component', or None for all types
             limit: Maximum number of items to return (default: 50)
         
         Returns:
             Dictionary with items array including ONLY:
             id, sku, name, type, unit_price, on_hand_total, available_total, ui_url
         """
-        result = catalog_service.list_items(in_stock_only, limit)
+        result = catalog_service.list_items(in_stock_only, item_type, limit)
         # Strip extra fields to keep response minimal for LLMs
         for item in result.get("items", []):
             item.pop("image_url", None)
@@ -598,6 +635,9 @@ def register_tools(mcp):
         """
         List emails with optional filters.
         Results sorted by modified_at DESC (most recently modified first).
+        
+        Note: To view a specific email by its ID (e.g., EMAIL-0006), use messaging_get_email instead.
+        This tool is for listing/searching multiple emails with filters.
         """
         return messaging_service.list_emails(customer_id, sales_order_id, status, limit)
     
@@ -606,9 +646,10 @@ def register_tools(mcp):
     def messaging_get_email(email_id: str) -> Dict[str, Any]:
         """
         Get detailed email information including related customer and sales order.
+        Use this to retrieve a specific email by its ID (e.g., EMAIL-0006).
         
         Parameters:
-            email_id: The email ID (e.g., 'EMAIL-1000')
+            email_id: The email ID (e.g., 'EMAIL-1000', 'EMAIL-0006')
         
         Returns:
             Dictionary with email details, customer info, and optional sales_order details
@@ -667,7 +708,7 @@ def register_tools(mcp):
         Generate a chart image and return a URL to access it.
         
         Parameters:
-            chart_type: Type of chart - pie, bar, bar_horizontal, line, scatter, area, stacked_area, stacked_bar, waterfall
+            chart_type: Type of chart - pie, bar, bar_horizontal, line, scatter, area, stacked_area, stacked_bar, waterfall, treemap
             labels: List of labels for x-axis or pie slices
             values: List of numeric values (single series, for backward compatibility)
             series: List of series dicts for multi-series charts: [{"name": "Q1", "values": [10, 20, 30]}, {"name": "Q2", "values": [15, 25, 35]}]
@@ -702,9 +743,7 @@ def register_tools(mcp):
             Chart files are stored with timestamp-first filenames for easy date-based sorting and cleanup.
         """
         result = chart_service.generate_chart(chart_type, labels, values, series, title)
-        filename = result["filename"]
-        url = f"{config.API_BASE}/api/charts/{filename}"
-        return {"url": url, "filename": filename}
+        return {"url": result["url"], "filename": result["filename"]}
     
     @mcp.tool(name="admin_reset_database")
     @log_tool("admin_reset_database")

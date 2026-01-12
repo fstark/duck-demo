@@ -87,4 +87,52 @@ When you can, format information as markdown table.
 - Multiply fields together
 → For value calculations, fetch data and calculate manually
 
+## Chart Generation Guidelines
+
+**MANDATORY: Use get_statistics() for aggregation of >10 records. Never manually count.**
+
+**Chart generation options:**
+1. **Single-call (RECOMMENDED)**: Use `return_chart` parameter in get_statistics() to generate chart directly
+2. **Two-step**: Use get_statistics() for data, then chart_generate() only if you need custom formatting
+
+**Before generating charts:**
+1. Determine if data needs aggregation (counting, grouping, summing)
+2. For >10 records: Use get_statistics() with appropriate group_by
+3. For time-series: Use date grouping ("date:field_name", "month:field_name")
+4. For multi-dimensional (stacked charts): Use list for group_by (e.g., ["item_id", "status"])
+5. For small datasets (<10 records): Can use inventory_list_items() or similar, then chart_generate()
+
+**Example workflows:**
+
+**Daily production completions (single-call with chart):**
+```
+get_statistics(entity="production_orders", metric="count", 
+               group_by="date:completed_at", status="completed", 
+               return_chart="line", chart_title="Daily Production Completions")
+```
+
+**Production pipeline by product (multi-dimensional stacked chart):**
+```
+get_statistics(entity="production_orders", metric="count",
+               group_by=["item_id", "status"],
+               return_chart="stacked_bar", 
+               chart_title="Production Pipeline by Product")
+```
+
+**Production orders by status (single-call pie chart):**
+```
+get_statistics(entity="production_orders", metric="count",
+               group_by="status",
+               return_chart="pie",
+               chart_title="Production Orders by Status")
+```
+
+**Stock levels by product (small dataset, two-step):**
+```
+1. inventory_list_items() - returns ~7 items with prices and quantities
+2. Extract labels: [item["sku"] for item in items]
+3. Extract values: [item["on_hand_total"] for item in items]
+4. chart_generate("bar", labels=labels, values=values, title="Stock Levels")
+```
+
 (if you are missing an API, say so, we are still in development mode)

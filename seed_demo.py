@@ -104,21 +104,22 @@ def seed(from_admin=False):
             "INSERT INTO stock (id, item_id, warehouse, location, on_hand) VALUES (?, ?, ?, ?, ?)",
             [
                 # Finished goods - varied stock levels
-                ("STK-0001", "ITEM-ELVIS-20", "WH-LYON", "FG/BIN-12", 127),
-                ("STK-0002", "ITEM-ELVIS-20", "WH-LYON", "FG/BIN-13", 79),  # Total: 206 (medium)
-                ("STK-0003", "ITEM-MARILYN-20", "WH-LYON", "FG/BIN-14", 18),
-                ("STK-0004", "ITEM-CLASSIC-10", "WH-LYON", "FG/BIN-02", 571),
-                ("STK-0005", "ITEM-CLASSIC-10", "WH-LYON", "FG/BIN-03", 412),  # Total: 983 (high stock)
-                ("STK-0006", "ITEM-ROBOT-25", "WH-LYON", "FG/BIN-05", 47),  # Low stock
-                ("STK-0007", "ITEM-PIRATE-15", "WH-LYON", "FG/BIN-06", 94),  # Medium
+                ("STK-0001", "ITEM-ELVIS-20", "WH-LYON", "FG/BIN-12", 12),  # Total: 12 (critical low)
+                ("STK-0002", "ITEM-MARILYN-20", "WH-LYON", "FG/BIN-14", 18),
+                ("STK-0003", "ITEM-CLASSIC-10", "WH-LYON", "FG/BIN-02", 571),
+                ("STK-0004", "ITEM-CLASSIC-10", "WH-LYON", "FG/BIN-03", 412),  # Total: 983 (high stock)
+                ("STK-0005", "ITEM-ROBOT-25", "WH-LYON", "FG/BIN-05", 47),  # Low stock
+                ("STK-0006", "ITEM-PIRATE-15", "WH-LYON", "FG/BIN-06", 94),  # Medium
+                ("STK-0007", "ITEM-PIRATE-15", "WH-LYON", "FG/BIN-10", 100),  # Additional stock to compensate
                 ("STK-0008", "ITEM-NINJA-12", "WH-LYON", "FG/BIN-07", 8),  # Critical low
                 ("STK-0009", "ITEM-UNICORN-25", "WH-LYON", "FG/BIN-08", 53),  # Low
+                ("STK-0010", "ITEM-UNICORN-25", "WH-LYON", "FG/BIN-09", 94),  # Additional stock to compensate
                 
                 # Raw materials
-                ("STK-0010", "ITEM-PVC", "WH-LYON", "RM/BULK-01", 987),
-                ("STK-0011", "ITEM-BLACK-DYE", "WH-LYON", "RM/SHELF-01", 43),
-                ("STK-0012", "ITEM-YELLOW-DYE", "WH-LYON", "RM/SHELF-02", 56),
-                ("STK-0013", "ITEM-BOX-SMALL", "WH-LYON", "PK/BIN-01", 218),
+                ("STK-0011", "ITEM-PVC", "WH-LYON", "RM/BULK-01", 987),
+                ("STK-0012", "ITEM-BLACK-DYE", "WH-LYON", "RM/SHELF-01", 43),
+                ("STK-0013", "ITEM-YELLOW-DYE", "WH-LYON", "RM/SHELF-02", 56),
+                ("STK-0014", "ITEM-BOX-SMALL", "WH-LYON", "PK/BIN-01", 218),
             ],
         )
 
@@ -371,48 +372,54 @@ def seed(from_admin=False):
 
 # Production orders (one per batch) with their operations
         production_orders = [
-            # Completed orders (37 total) - dates span Nov 15 - Dec 23 for trend analysis
-            # Mid-November (ramping up)
-            ("MO-1101", "RCP-CLASSIC-10", "ITEM-CLASSIC-10", "completed", "2025-11-15T09:00", "2025-11-15T11:30", "2025-11-16", "2025-11-17"),
-            ("MO-1102", "RCP-ELVIS-20", "ITEM-ELVIS-20", "completed", "2025-11-17T10:00", "2025-11-17T13:30", "2025-11-18", "2025-11-19"),
-            ("MO-1103", "RCP-NINJA-12", "ITEM-NINJA-12", "completed", "2025-11-19T08:00", "2025-11-19T10:30", "2025-11-20", "2025-11-21"),
-            ("MO-1104", "RCP-PIRATE-15", "ITEM-PIRATE-15", "completed", "2025-11-21T09:00", "2025-11-21T15:00", "2025-11-22", "2025-11-23"),
-            ("MO-1105", "RCP-CLASSIC-10", "ITEM-CLASSIC-10", "completed", "2025-11-22T14:00", "2025-11-22T16:30", "2025-11-23", "2025-11-24"),
-            ("MO-1106", "RCP-ROBOT-25", "ITEM-ROBOT-25", "completed", "2025-11-25T08:00", "2025-11-25T14:30", "2025-11-26", "2025-11-27"),
-            ("MO-1107", "RCP-ELVIS-20", "ITEM-ELVIS-20", "completed", "2025-11-26T10:00", "2025-11-26T13:30", "2025-11-27", "2025-11-28"),
-            ("MO-1108", "RCP-UNICORN-25", "ITEM-UNICORN-25", "completed", "2025-11-28T09:00", "2025-11-28T15:00", "2025-11-29", "2025-11-30"),
+            # Completed orders (37 total) - varied durations to show correlation with operation complexity
+            # CLASSIC (4 ops, ~2.5h base): 2-3 hour durations
+            ("MO-1101", "RCP-CLASSIC-10", "ITEM-CLASSIC-10", "completed", "2025-11-15T09:00", "2025-11-15T11:15", "2025-11-16", "2025-11-17"),  # 2.25h
+            ("MO-1105", "RCP-CLASSIC-10", "ITEM-CLASSIC-10", "completed", "2025-11-22T14:00", "2025-11-22T16:40", "2025-11-23", "2025-11-24"),  # 2.67h
+            ("MO-1110", "RCP-CLASSIC-10", "ITEM-CLASSIC-10", "completed", "2025-12-02T10:00", "2025-12-02T12:20", "2025-12-03", "2025-12-04"),  # 2.33h
+            ("MO-1010", "RCP-CLASSIC-10", "ITEM-CLASSIC-10", "completed", "2025-12-08T14:00", "2025-12-08T16:50", "2025-12-09", "2025-12-10"),  # 2.83h
+            ("MO-1003", "RCP-CLASSIC-10", "ITEM-CLASSIC-10", "completed", "2025-12-14T10:00", "2025-12-14T12:30", "2025-12-15", "2025-12-16"),  # 2.5h
+            ("MO-1115", "RCP-CLASSIC-10", "ITEM-CLASSIC-10", "completed", "2025-12-16T08:00", "2025-12-16T10:10", "2025-12-17", "2025-12-18"),  # 2.17h
+            ("MO-1014", "RCP-CLASSIC-10", "ITEM-CLASSIC-10", "completed", "2025-12-20T11:00", "2025-12-20T13:40", "2025-12-21", "2025-12-22"),  # 2.67h
+            ("MO-1119", "RCP-CLASSIC-10", "ITEM-CLASSIC-10", "completed", "2025-12-22T14:00", "2025-12-22T16:15", "2025-12-23", "2025-12-24"),  # 2.25h
             
-            # Early December (steady pace)
-            ("MO-1109", "RCP-NINJA-12", "ITEM-NINJA-12", "completed", "2025-12-01T08:00", "2025-12-01T10:30", "2025-12-02", "2025-12-03"),
-            ("MO-1110", "RCP-CLASSIC-10", "ITEM-CLASSIC-10", "completed", "2025-12-02T10:00", "2025-12-02T12:30", "2025-12-03", "2025-12-04"),
-            ("MO-1111", "RCP-PIRATE-15", "ITEM-PIRATE-15", "completed", "2025-12-03T09:00", "2025-12-03T15:00", "2025-12-04", "2025-12-05"),
-            ("MO-1112", "RCP-ELVIS-20", "ITEM-ELVIS-20", "completed", "2025-12-04T13:00", "2025-12-04T16:30", "2025-12-05", "2025-12-06"),
-            ("MO-1011", "RCP-ELVIS-20", "ITEM-ELVIS-20", "completed", "2025-12-05T10:00", "2025-12-05T13:30", "2025-12-06", "2025-12-07"),
-            ("MO-1113", "RCP-ROBOT-25", "ITEM-ROBOT-25", "completed", "2025-12-06T09:00", "2025-12-06T15:30", "2025-12-07", "2025-12-08"),
-            ("MO-1010", "RCP-CLASSIC-10", "ITEM-CLASSIC-10", "completed", "2025-12-08T14:00", "2025-12-08T16:30", "2025-12-09", "2025-12-10"),
-            ("MO-1017", "RCP-UNICORN-25", "ITEM-UNICORN-25", "completed", "2025-12-09T10:00", "2025-12-09T16:00", "2025-12-10", "2025-12-11"),
+            # ELVIS (5 ops, ~3.5h base): 3-4 hour durations
+            ("MO-1102", "RCP-ELVIS-20", "ITEM-ELVIS-20", "completed", "2025-11-17T10:00", "2025-11-17T13:45", "2025-11-18", "2025-11-19"),  # 3.75h
+            ("MO-1107", "RCP-ELVIS-20", "ITEM-ELVIS-20", "completed", "2025-11-26T10:00", "2025-11-26T13:20", "2025-11-27", "2025-11-28"),  # 3.33h
+            ("MO-1112", "RCP-ELVIS-20", "ITEM-ELVIS-20", "completed", "2025-12-04T13:00", "2025-12-04T16:50", "2025-12-05", "2025-12-06"),  # 3.83h
+            ("MO-1011", "RCP-ELVIS-20", "ITEM-ELVIS-20", "completed", "2025-12-05T10:00", "2025-12-05T13:40", "2025-12-06", "2025-12-07"),  # 3.67h
+            ("MO-1114", "RCP-ELVIS-20", "ITEM-ELVIS-20", "completed", "2025-12-13T10:00", "2025-12-13T13:15", "2025-12-14", "2025-12-15"),  # 3.25h
+            ("MO-1016", "RCP-ELVIS-20", "ITEM-ELVIS-20", "completed", "2025-12-18T13:00", "2025-12-18T17:00", "2025-12-19", "2025-12-20"),  # 4h
+            ("MO-1001", "RCP-ELVIS-20", "ITEM-ELVIS-20", "completed", "2025-12-19T08:00", "2025-12-19T11:50", "2025-12-20", "2025-12-21"),  # 3.83h
+            ("MO-1121", "RCP-ELVIS-20", "ITEM-ELVIS-20", "completed", "2025-12-23T13:00", "2025-12-23T16:15", "2025-12-24", "2025-12-25"),  # 3.25h
             
-            # Mid December (increasing volume)
-            ("MO-1009", "RCP-NINJA-12", "ITEM-NINJA-12", "completed", "2025-12-10T09:00", "2025-12-10T11:30", "2025-12-11", "2025-12-12"),
-            ("MO-1015", "RCP-NINJA-12", "ITEM-NINJA-12", "completed", "2025-12-11T08:00", "2025-12-11T10:30", "2025-12-12", "2025-12-13"),
-            ("MO-1012", "RCP-PIRATE-15", "ITEM-PIRATE-15", "completed", "2025-12-12T08:00", "2025-12-12T14:00", "2025-12-13", "2025-12-14"),
-            ("MO-1114", "RCP-ELVIS-20", "ITEM-ELVIS-20", "completed", "2025-12-13T10:00", "2025-12-13T13:30", "2025-12-14", "2025-12-15"),
-            ("MO-1003", "RCP-CLASSIC-10", "ITEM-CLASSIC-10", "completed", "2025-12-14T10:00", "2025-12-14T12:30", "2025-12-15", "2025-12-16"),
-            ("MO-1013", "RCP-ROBOT-25", "ITEM-ROBOT-25", "completed", "2025-12-15T09:00", "2025-12-15T15:30", "2025-12-16", "2025-12-17"),
-            ("MO-1115", "RCP-CLASSIC-10", "ITEM-CLASSIC-10", "completed", "2025-12-16T08:00", "2025-12-16T10:30", "2025-12-17", "2025-12-18"),
-            ("MO-1006", "RCP-PIRATE-15", "ITEM-PIRATE-15", "completed", "2025-12-17T08:00", "2025-12-17T14:00", "2025-12-18", "2025-12-19"),
-            ("MO-1016", "RCP-ELVIS-20", "ITEM-ELVIS-20", "completed", "2025-12-18T13:00", "2025-12-18T16:30", "2025-12-19", "2025-12-20"),
-            ("MO-1001", "RCP-ELVIS-20", "ITEM-ELVIS-20", "completed", "2025-12-19T08:00", "2025-12-19T11:30", "2025-12-20", "2025-12-21"),
-            ("MO-1116", "RCP-NINJA-12", "ITEM-NINJA-12", "completed", "2025-12-19T14:00", "2025-12-19T16:30", "2025-12-20", "2025-12-21"),
-            ("MO-1014", "RCP-CLASSIC-10", "ITEM-CLASSIC-10", "completed", "2025-12-20T11:00", "2025-12-20T13:30", "2025-12-21", "2025-12-22"),
-            ("MO-1117", "RCP-ROBOT-25", "ITEM-ROBOT-25", "completed", "2025-12-21T09:00", "2025-12-21T15:30", "2025-12-22", "2025-12-23"),
-            ("MO-1118", "RCP-PIRATE-15", "ITEM-PIRATE-15", "completed", "2025-12-22T08:00", "2025-12-22T14:00", "2025-12-23", "2025-12-24"),
-            ("MO-1119", "RCP-CLASSIC-10", "ITEM-CLASSIC-10", "completed", "2025-12-22T14:00", "2025-12-22T16:30", "2025-12-23", "2025-12-24"),
-            ("MO-1120", "RCP-UNICORN-25", "ITEM-UNICORN-25", "completed", "2025-12-23T09:00", "2025-12-23T15:00", "2025-12-24", "2025-12-25"),
-            ("MO-1121", "RCP-ELVIS-20", "ITEM-ELVIS-20", "completed", "2025-12-23T13:00", "2025-12-23T16:30", "2025-12-24", "2025-12-25"),
-            ("MO-1122", "RCP-NINJA-12", "ITEM-NINJA-12", "completed", "2025-12-23T10:00", "2025-12-23T12:30", "2025-12-24", "2025-12-25"),
-            ("MO-1123", "RCP-ROBOT-25", "ITEM-ROBOT-25", "completed", "2025-12-23T15:00", "2025-12-23T21:30", "2025-12-24", "2025-12-25"),
-            ("MO-1124", "RCP-PIRATE-15", "ITEM-PIRATE-15", "completed", "2025-12-23T09:00", "2025-12-23T15:00", "2025-12-24", "2025-12-25"),
+            # NINJA (5 ops, ~3.75h base): 3-4.5 hour durations
+            ("MO-1103", "RCP-NINJA-12", "ITEM-NINJA-12", "completed", "2025-11-19T08:00", "2025-11-19T11:50", "2025-11-20", "2025-11-21"),  # 3.83h
+            ("MO-1109", "RCP-NINJA-12", "ITEM-NINJA-12", "completed", "2025-12-01T08:00", "2025-12-01T11:15", "2025-12-02", "2025-12-03"),  # 3.25h
+            ("MO-1009", "RCP-NINJA-12", "ITEM-NINJA-12", "completed", "2025-12-10T09:00", "2025-12-10T13:00", "2025-12-11", "2025-12-12"),  # 4h
+            ("MO-1015", "RCP-NINJA-12", "ITEM-NINJA-12", "completed", "2025-12-11T08:00", "2025-12-11T11:40", "2025-12-12", "2025-12-13"),  # 3.67h
+            ("MO-1116", "RCP-NINJA-12", "ITEM-NINJA-12", "completed", "2025-12-19T14:00", "2025-12-19T18:20", "2025-12-20", "2025-12-21"),  # 4.33h
+            ("MO-1122", "RCP-NINJA-12", "ITEM-NINJA-12", "completed", "2025-12-23T10:00", "2025-12-23T13:45", "2025-12-24", "2025-12-25"),  # 3.75h
+            
+            # PIRATE (6 ops, ~4h base): 4-5 hour durations
+            ("MO-1104", "RCP-PIRATE-15", "ITEM-PIRATE-15", "completed", "2025-11-21T09:00", "2025-11-21T13:30", "2025-11-22", "2025-11-23"),  # 4.5h
+            ("MO-1111", "RCP-PIRATE-15", "ITEM-PIRATE-15", "completed", "2025-12-03T09:00", "2025-12-03T13:15", "2025-12-04", "2025-12-05"),  # 4.25h
+            ("MO-1012", "RCP-PIRATE-15", "ITEM-PIRATE-15", "completed", "2025-12-12T08:00", "2025-12-12T12:50", "2025-12-13", "2025-12-14"),  # 4.83h
+            ("MO-1006", "RCP-PIRATE-15", "ITEM-PIRATE-15", "completed", "2025-12-17T08:00", "2025-12-17T12:10", "2025-12-18", "2025-12-19"),  # 4.17h
+            ("MO-1118", "RCP-PIRATE-15", "ITEM-PIRATE-15", "completed", "2025-12-22T08:00", "2025-12-22T12:40", "2025-12-23", "2025-12-24"),  # 4.67h
+            ("MO-1124", "RCP-PIRATE-15", "ITEM-PIRATE-15", "completed", "2025-12-23T09:00", "2025-12-23T13:50", "2025-12-24", "2025-12-25"),  # 4.83h
+            
+            # UNICORN (6 ops, ~5h base): 4.5-6 hour durations
+            ("MO-1108", "RCP-UNICORN-25", "ITEM-UNICORN-25", "completed", "2025-11-28T09:00", "2025-11-28T14:20", "2025-11-29", "2025-11-30"),  # 5.33h
+            ("MO-1017", "RCP-UNICORN-25", "ITEM-UNICORN-25", "completed", "2025-12-09T10:00", "2025-12-09T15:50", "2025-12-10", "2025-12-11"),  # 5.83h
+            ("MO-1120", "RCP-UNICORN-25", "ITEM-UNICORN-25", "completed", "2025-12-23T09:00", "2025-12-23T13:30", "2025-12-24", "2025-12-25"),  # 4.5h
+            
+            # ROBOT (7 ops, ~6.5h base): 6-7.5 hour durations
+            ("MO-1106", "RCP-ROBOT-25", "ITEM-ROBOT-25", "completed", "2025-11-25T08:00", "2025-11-25T15:00", "2025-11-26", "2025-11-27"),  # 7h
+            ("MO-1113", "RCP-ROBOT-25", "ITEM-ROBOT-25", "completed", "2025-12-06T09:00", "2025-12-06T15:20", "2025-12-07", "2025-12-08"),  # 6.33h
+            ("MO-1013", "RCP-ROBOT-25", "ITEM-ROBOT-25", "completed", "2025-12-15T09:00", "2025-12-15T16:30", "2025-12-16", "2025-12-17"),  # 7.5h
+            ("MO-1117", "RCP-ROBOT-25", "ITEM-ROBOT-25", "completed", "2025-12-21T09:00", "2025-12-21T15:10", "2025-12-22", "2025-12-23"),  # 6.17h
+            ("MO-1123", "RCP-ROBOT-25", "ITEM-ROBOT-25", "completed", "2025-12-23T15:00", "2025-12-23T22:20", "2025-12-24", "2025-12-25"),  # 7.33h
             
             # In progress orders (5 total - ~17%)
             ("MO-1002", "RCP-ELVIS-20", "ITEM-ELVIS-20", "in_progress", "2025-12-24T09:00", None, "2025-12-25", "2025-12-26"),

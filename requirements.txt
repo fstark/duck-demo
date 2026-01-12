@@ -1,3 +1,4 @@
 mcp
 Pillow
 matplotlib
+squarify

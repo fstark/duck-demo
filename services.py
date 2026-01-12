@@ -6,7 +6,9 @@ import sqlite3
 import uuid
 from contextlib import contextmanager
 from datetime import datetime
-from typing import Any, Dict, Iterator, List, Optional
+from typing import Any, Dict, Iterator, List, Optional, Union
+
+import config
 
 import matplotlib
 matplotlib.use('Agg')  # Use non-interactive backend
@@ -312,13 +314,23 @@ class CatalogService:
             return {"items": scored[:limit], "query": query_tokens}
     
     @staticmethod
-    def list_items(in_stock_only: bool = False, limit: int = 50) -> Dict[str, Any]:
+    def list_items(in_stock_only: bool = False, item_type: Optional[str] = "finished_good", limit: int = 50) -> Dict[str, Any]:
         """List items, optionally only those with available stock."""
         with db_conn() as conn:
             base_sql = "SELECT id, sku, name, type, unit_price, image FROM items"
             params: List[Any] = []
+            filters = []
+            
+            if item_type:
+                filters.append("type = ?")
+                params.append(item_type)
+            
             if in_stock_only:
-                base_sql += " WHERE id IN (SELECT DISTINCT item_id FROM stock WHERE on_hand > 0)"
+                filters.append("id IN (SELECT DISTINCT item_id FROM stock WHERE on_hand > 0)")
+            
+            if filters:
+                base_sql += " WHERE " + " AND ".join(filters)
+            
             base_sql += " ORDER BY sku LIMIT ?"
             params.append(limit)
             rows = dict_rows(conn.execute(base_sql, params))
@@ -989,56 +1001,285 @@ class StatsService:
     """Service for statistics operations."""
     
     @staticmethod
-    def get_statistics(entity: str, metric: str, group_by: Optional[str], field: Optional[str], status: Optional[str], item_type: Optional[str], warehouse: Optional[str], city: Optional[str], limit: int) -> Dict[str, Any]:
-        """Get flexible statistics for any entity."""
+    def get_statistics(
+        entity: str, 
+        metric: str, 
+        group_by: Optional[Union[str, List[str]]], 
+        field: Optional[str], 
+        status: Optional[str], 
+        item_type: Optional[str], 
+        warehouse: Optional[str], 
+        city: Optional[str], 
+        limit: int,
+        return_chart: Optional[str] = None,
+        chart_title: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """Get flexible statistics for any entity, optionally returning a chart.
+        
+        Args:
+            entity: Entity type to query
+            metric: Aggregation function (count, sum, avg, min, max)
+            group_by: Field(s) to group by - string or list for multi-dimensional grouping
+            field: Field to aggregate (required for sum/avg/min/max)
+            status, item_type, warehouse, city: Optional filters
+            limit: Max number of results
+            return_chart: Optional chart type (pie, bar, line, stacked_bar, etc.)
+            chart_title: Optional chart title
+            
+        Returns:
+            If return_chart: {"chart_url": "...", "data": [...], ...}
+            Otherwise: {"entity": "...", "results": [...], ...}
+        """
         entity_config = {
-            "customers": {"table": "customers", "valid_fields": ["id"], "valid_groups": ["city", "company"]},
-            "sales_orders": {"table": "sales_orders", "valid_fields": ["id"], "valid_groups": ["status", "customer_id"]},
-            "items": {"table": "items", "valid_fields": ["unit_price"], "valid_groups": ["type"]},
-            "stock": {"table": "stock", "valid_fields": ["on_hand"], "valid_groups": ["warehouse", "location", "item_id"]},
-            "production_orders": {"table": "production_orders", "valid_fields": ["qty"], "valid_groups": ["status", "item_id"]},
-            "shipments": {"table": "shipments", "valid_fields": ["id"], "valid_groups": ["status"]},
+            "customers": {"table": "customers", "join": None, "field_mapping": {}, "date_field_table": None, "valid_fields": ["id"], "valid_groups": ["city", "company"], "date_fields": ["created_at"]},
+            "sales_orders": {"table": "sales_orders", "join": None, "field_mapping": {}, "date_field_table": None, "valid_fields": ["id"], "valid_groups": ["status", "customer_id"], "date_fields": ["created_at", "requested_delivery_date"]},
+            "sales_order_lines": {"table": "sales_order_lines", "join": None, "field_mapping": {}, "date_field_table": None, "valid_fields": ["qty"], "valid_groups": ["sales_order_id", "item_id"], "date_fields": []},
+            "items": {"table": "items", "join": None, "field_mapping": {}, "date_field_table": None, "valid_fields": ["unit_price"], "valid_groups": ["type"], "date_fields": []},
+            "stock": {"table": "stock", "join": None, "field_mapping": {}, "date_field_table": None, "valid_fields": ["on_hand"], "valid_groups": ["warehouse", "location", "item_id"], "date_fields": []},
+            "production_orders": {"table": "production_orders", "join": "LEFT JOIN recipes ON production_orders.recipe_id = recipes.id", "field_mapping": {"qty": "recipes.output_qty"}, "date_field_table": None, "valid_fields": ["id", "qty"], "valid_groups": ["status", "item_id"], "date_fields": ["started_at", "completed_at", "eta_finish", "eta_ship"]},
+            "shipments": {"table": "shipments", "join": None, "field_mapping": {}, "date_field_table": None, "valid_fields": ["id"], "valid_groups": ["status"], "date_fields": ["planned_departure", "planned_arrival"]},
+            "shipment_lines": {"table": "shipment_lines", "join": "LEFT JOIN shipments ON shipment_lines.shipment_id = shipments.id", "field_mapping": {}, "date_field_table": "shipments", "valid_fields": ["qty"], "valid_groups": ["shipment_id", "item_id"], "date_fields": ["planned_departure", "planned_arrival"]},
+            "purchase_orders": {"table": "purchase_orders", "join": None, "field_mapping": {}, "date_field_table": None, "valid_fields": ["qty"], "valid_groups": ["status", "item_id", "supplier_id"], "date_fields": ["ordered_at", "expected_delivery", "received_at"]},
         }
         if entity not in entity_config:
             return {"error": f"Invalid entity: {entity}. Valid options: {', '.join(entity_config.keys())}"}
-        table = entity_config[entity]["table"]
+        
+        config = entity_config[entity]
+        table = config["table"]
+        join_clause = config["join"] or ""
+        field_mapping = config["field_mapping"]
+        
         if metric == "count":
             select_clause = "COUNT(*) as value"
         elif metric in ["sum", "avg", "min", "max"]:
             if not field:
                 return {"error": f"Field is required for {metric} operation"}
-            if field not in entity_config[entity]["valid_fields"]:
-                return {"error": f"Invalid field '{field}' for entity '{entity}'. Valid: {entity_config[entity]['valid_fields']}"}
-            select_clause = f"{metric.upper()}({field}) as value"
+            if field not in config["valid_fields"]:
+                # Provide helpful guidance for common mistakes
+                if field == "qty" and entity == "sales_orders":
+                    return {
+                        "error": f"sales_orders has no qty field (quantities are in sales_order_lines). "
+                                f"For quantity analysis:\n"
+                                f"  - Total quantity: entity='sales_order_lines', metric='sum', field='qty'\n"
+                                f"  - By item: add group_by='item_id'\n"
+                                f"  - By order: add group_by='sales_order_id'"
+                    }
+                elif field == "qty" and entity == "shipments":
+                    return {
+                        "error": f"shipments has no qty field (quantities are in shipment_lines). "
+                                f"For quantity analysis:\n"
+                                f"  - Total quantity: entity='shipment_lines', metric='sum', field='qty'\n"
+                                f"  - By item: add group_by='item_id'\n"
+                                f"  - By shipment: add group_by='shipment_id'"
+                    }
+                else:
+                    return {"error": f"Invalid field '{field}' for entity '{entity}'. Valid: {config['valid_fields']}"}
+            actual_field = field_mapping.get(field, field)
+            select_clause = f"{metric.upper()}({actual_field}) as value"
         else:
             return {"error": f"Invalid metric: {metric}. Valid options: count, sum, avg, min, max"}
         filters = []
         params: List[Any] = []
         if status:
-            filters.append("status = ?")
+            filters.append(f"{table}.status = ?")
             params.append(status)
         if item_type:
-            filters.append("type = ?")
+            filters.append(f"{table}.type = ?")
             params.append(item_type)
         if warehouse:
-            filters.append("warehouse = ?")
+            filters.append(f"{table}.warehouse = ?")
             params.append(warehouse)
         if city:
-            filters.append("city = ?")
+            filters.append(f"{table}.city = ?")
             params.append(city)
         where_clause = f"WHERE {' AND '.join(filters)}" if filters else ""
         with db_conn() as conn:
             if group_by:
-                if group_by not in entity_config[entity]["valid_groups"]:
-                    return {"error": f"Invalid group_by '{group_by}' for entity '{entity}'. Valid: {entity_config[entity]['valid_groups']}"}
-                sql = f"SELECT {group_by}, {select_clause} FROM {table} {where_clause} GROUP BY {group_by} ORDER BY value DESC LIMIT ?"
-                params.append(limit)
-                rows = dict_rows(conn.execute(sql, params))
-                return {"entity": entity, "metric": metric, "group_by": group_by, "results": rows}
+                # Handle multi-dimensional grouping (list of fields)
+                if isinstance(group_by, list):
+                    # Validate all fields
+                    for gb_field in group_by:
+                        if gb_field not in config["valid_groups"]:
+                            return {"error": f"Invalid group_by field '{gb_field}' for entity '{entity}'. Valid: {config['valid_groups']}"}
+                    
+                    # Build multi-dimensional GROUP BY
+                    select_fields = ", ".join([f"{table}.{gb_field}" for gb_field in group_by])
+                    group_fields = ", ".join([f"{table}.{gb_field}" for gb_field in group_by])
+                    sql = f"SELECT {select_fields}, {select_clause} FROM {table} {join_clause} {where_clause} GROUP BY {group_fields} ORDER BY value DESC LIMIT ?"
+                    params.append(limit)
+                    rows = dict_rows(conn.execute(sql, params))
+                    
+                    result = {"entity": entity, "metric": metric, "group_by": group_by, "results": rows}
+                    
+                    # If chart requested, generate it
+                    if return_chart:
+                        chart_result = StatsService._generate_chart_from_results(
+                            return_chart, rows, group_by, chart_title, entity, metric
+                        )
+                        if "error" in chart_result:
+                            return chart_result
+                        result["chart_url"] = chart_result["chart_url"]
+                        result["chart_filename"] = chart_result["chart_filename"]
+                    
+                    return result
+                
+                # Single group_by field (string)
+                # Check for date grouping syntax: "date:field_name" or "month:field_name"
+                if ":" in group_by:
+                    period, field_name = group_by.split(":", 1)
+                    if field_name not in config["date_fields"]:
+                        # Special guidance for stock table
+                        if entity == "stock":
+                            return {
+                                "error": f"stock table has no date fields (it's a current snapshot, not historical data). "
+                                        f"For inventory changes over time, use transaction tables:\n"
+                                        f"  - Production: entity='production_orders', metric='sum', field='qty', group_by='date:completed_at'\n"
+                                        f"  - Shipments: entity='shipment_lines', metric='sum', field='qty', group_by='date:planned_departure'\n"
+                                        f"  - Purchases: entity='purchase_orders', metric='sum', field='qty', group_by='date:received_at'"
+                            }
+                        return {"error": f"Invalid date field '{field_name}' for entity '{entity}'. Valid: {config['date_fields']}"}
+                    
+                    # Use date_field_table if specified (for joined tables), otherwise use main table
+                    date_table = config.get("date_field_table") or table
+                    
+                    if period == "date":
+                        group_expr = f"DATE({date_table}.{field_name})"
+                        group_label = "date"
+                    elif period == "month":
+                        group_expr = f"strftime('%Y-%m', {date_table}.{field_name})"
+                        group_label = "month"
+                    elif period == "year":
+                        group_expr = f"strftime('%Y', {date_table}.{field_name})"
+                        group_label = "year"
+                    else:
+                        return {"error": f"Invalid time period '{period}'. Valid: date, month, year"}
+                    
+                    sql = f"SELECT {group_expr} as {group_label}, {select_clause} FROM {table} {join_clause} {where_clause} GROUP BY {group_expr} ORDER BY {group_label} LIMIT ?"
+                    params.append(limit)
+                    rows = dict_rows(conn.execute(sql, params))
+                    
+                    result = {"entity": entity, "metric": metric, "group_by": group_by, "results": rows}
+                    
+                    # If chart requested, generate it
+                    if return_chart:
+                        chart_result = StatsService._generate_chart_from_results(
+                            return_chart, rows, group_by, chart_title, entity, metric
+                        )
+                        if "error" in chart_result:
+                            return chart_result
+                        result["chart_url"] = chart_result["chart_url"]
+                        result["chart_filename"] = chart_result["chart_filename"]
+                    
+                    return result
+                else:
+                    # Regular field grouping
+                    if group_by not in config["valid_groups"]:
+                        return {"error": f"Invalid group_by '{group_by}' for entity '{entity}'. Valid: {config['valid_groups']}"}
+                    sql = f"SELECT {table}.{group_by}, {select_clause} FROM {table} {join_clause} {where_clause} GROUP BY {table}.{group_by} ORDER BY value DESC LIMIT ?"
+                    params.append(limit)
+                    rows = dict_rows(conn.execute(sql, params))
+                    
+                    result = {"entity": entity, "metric": metric, "group_by": group_by, "results": rows}
+                    
+                    # If chart requested, generate it
+                    if return_chart:
+                        chart_result = StatsService._generate_chart_from_results(
+                            return_chart, rows, group_by, chart_title, entity, metric
+                        )
+                        if "error" in chart_result:
+                            return chart_result
+                        result["chart_url"] = chart_result["chart_url"]
+                        result["chart_filename"] = chart_result["chart_filename"]
+                    
+                    return result
             else:
-                sql = f"SELECT {select_clause} FROM {table} {where_clause}"
+                sql = f"SELECT {select_clause} FROM {table} {join_clause} {where_clause}"
                 result = conn.execute(sql, params).fetchone()
                 return {"entity": entity, "metric": metric, "value": result["value"] if result["value"] is not None else 0}
+    
+    @staticmethod
+    def _generate_chart_from_results(
+        chart_type: str,
+        rows: List[Dict[str, Any]],
+        group_by: Union[str, List[str]],
+        chart_title: Optional[str],
+        entity: str,
+        metric: str
+    ) -> Dict[str, Any]:
+        """Generate chart from query results."""
+        if not rows:
+            return {"error": "No data to chart"}
+        
+        # Multi-dimensional grouping (for stacked charts)
+        if isinstance(group_by, list):
+            if len(group_by) != 2:
+                return {"error": "Multi-dimensional charting requires exactly 2 group_by fields"}
+            
+            # Pivot data: first field becomes labels, second becomes series
+            label_field = group_by[0]
+            series_field = group_by[1]
+            
+            # Extract unique values for labels and series
+            labels_set = set()
+            series_set = set()
+            for row in rows:
+                labels_set.add(str(row[label_field]))
+                series_set.add(str(row[series_field]))
+            
+            labels = sorted(list(labels_set))
+            series_names = sorted(list(series_set))
+            
+            # Build series data
+            series_data = []
+            for series_name in series_names:
+                values = []
+                for label in labels:
+                    # Find matching row
+                    value = 0
+                    for row in rows:
+                        if str(row[label_field]) == label and str(row[series_field]) == series_name:
+                            value = row.get("value", 0)
+                            break
+                    values.append(value)
+                series_data.append({"name": series_name, "values": values})
+            
+            # Generate chart
+            title = chart_title or f"{entity.replace('_', ' ').title()} by {label_field} and {series_field}"
+            chart_result = chart_service.generate_chart(
+                chart_type=chart_type,
+                labels=labels,
+                series=series_data,
+                title=title
+            )
+            return {
+                "chart_url": chart_result["url"],
+                "chart_filename": chart_result["filename"]
+            }
+        
+        # Single-dimensional grouping
+        else:
+            # Extract label field name
+            if ":" in group_by:
+                # Date grouping: "date:field_name" -> label is "date", "month", or "year"
+                period = group_by.split(":", 1)[0]
+                label_field = period
+            else:
+                label_field = group_by
+            
+            labels = [str(row[label_field]) for row in rows]
+            values = [row.get("value", 0) for row in rows]
+            
+            title = chart_title or f"{entity.replace('_', ' ').title()} by {label_field}"
+            chart_result = chart_service.generate_chart(
+                chart_type=chart_type,
+                labels=labels,
+                values=values,
+                title=title
+            )
+            return {
+                "chart_url": chart_result["url"],
+                "chart_filename": chart_result["filename"]
+            }
 
 
 class AdminService:
@@ -1074,7 +1315,7 @@ class ChartService:
         Generate a chart image and return the filename.
         
         Args:
-            chart_type: Type of chart - pie, bar, bar_horizontal, line, scatter, area, stacked_area, stacked_bar, waterfall
+            chart_type: Type of chart - pie, bar, bar_horizontal, line, scatter, area, stacked_area, stacked_bar, waterfall, treemap
             labels: List of labels for x-axis or pie slices
             values: List of numeric values (for backward compatibility, single series)
             series: List of series dicts: [{"name": "Q1", "values": [10, 20, 30]}, ...]
@@ -1083,7 +1324,7 @@ class ChartService:
         Returns:
             Dictionary with filename and full_path
         """
-        valid_types = ["pie", "bar", "bar_horizontal", "line", "scatter", "area", "stacked_area", "stacked_bar", "waterfall"]
+        valid_types = ["pie", "bar", "bar_horizontal", "line", "scatter", "area", "stacked_area", "stacked_bar", "waterfall", "treemap"]
         if chart_type not in valid_types:
             raise ValueError(f"Unsupported chart type: {chart_type}. Valid: {', '.join(valid_types)}")
         
@@ -1260,6 +1501,30 @@ class ChartService:
             ax.set_xticklabels(labels, rotation=45, ha='right')
             ax.axhline(y=0, color='black', linewidth=0.8)
         
+        elif chart_type == "treemap":
+            import squarify
+            
+            # Treemaps only support single series
+            values_list = series[0]["values"]
+            
+            # Filter out zero and negative values (squarify can't handle them)
+            filtered_data = [(label, val) for label, val in zip(labels, values_list) if val > 0]
+            
+            if not filtered_data:
+                raise ValueError("Treemap requires at least one positive value")
+            
+            filtered_labels, filtered_values = zip(*filtered_data)
+            
+            # Generate colors
+            colors = plt.cm.Set3(range(len(filtered_labels)))
+            
+            # Create labels with values
+            labels_with_values = [f"{label}\n{int(val)}" for label, val in zip(filtered_labels, filtered_values)]
+            
+            # Create treemap
+            squarify.plot(sizes=filtered_values, label=labels_with_values, alpha=0.8, color=colors, text_kwargs={'fontsize': 9})
+            ax.axis('off')
+        
         if title:
             ax.set_title(title)
         
@@ -1269,7 +1534,8 @@ class ChartService:
         
         return {
             "filename": filename,
-            "full_path": full_path
+            "full_path": full_path,
+            "url": f"{config.API_BASE}/api/charts/{filename}"
         }
 
 
