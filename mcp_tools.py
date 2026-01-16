@@ -53,9 +53,15 @@ def log_tool(name: str):
 
 
 def register_tools(mcp):
-    """Register all MCP tools with the FastMCP instance."""
+    """Register all MCP tools with the FastMCP instance.
     
-    @mcp.tool(name="get_current_user")
+    Tools are tagged for client-side filtering:
+    - 'shared': Available to both sales and production agents
+    - 'sales': Sales agent only (CRM, orders, shipping, emails)
+    - 'production': Production agent only (manufacturing, recipes, materials)
+    """
+    
+    @mcp.tool(name="get_current_user", meta={"tags": ["shared"]})
     @log_tool("get_current_user")
     def get_current_user() -> Dict[str, Any]:
         """Get current user information including first name, last name, role, and email."""
@@ -66,7 +72,7 @@ def register_tools(mcp):
             "email": "fred.stark@rubberducks.ia"
         }
     
-    @mcp.tool(name="get_statistics")
+    @mcp.tool(name="get_statistics", meta={"tags": ["shared"]})
     @log_tool("get_statistics")
     def get_statistics(
         entity: str,
@@ -137,7 +143,7 @@ def register_tools(mcp):
         """
         return stats_service.get_statistics(entity, metric, group_by, field, status, item_type, warehouse, city, limit, return_chart, chart_title)
     
-    @mcp.tool(name="crm_find_customers")
+    @mcp.tool(name="crm_find_customers", meta={"tags": ["sales"]})
     @log_tool("crm_find_customers")
     def find_customers(
         name: Optional[str] = None,
@@ -149,7 +155,7 @@ def register_tools(mcp):
         """Find matching customers. Any provided field is used as a case-insensitive contains filter."""
         return customer_service.find_customers(name, email, company, city, limit)
     
-    @mcp.tool(name="crm_create_customer")
+    @mcp.tool(name="crm_create_customer", meta={"tags": ["sales"]})
     @log_tool("crm_create_customer")
     def create_customer(name: str, company: Optional[str] = None, email: Optional[str] = None, city: Optional[str] = None) -> Dict[str, Any]:
         """
@@ -167,7 +173,7 @@ def register_tools(mcp):
         """
         return customer_service.create_customer(name, company, email, city)
     
-    @mcp.tool(name="crm_get_customer_details")
+    @mcp.tool(name="crm_get_customer_details", meta={"tags": ["sales"]})
     @log_tool("crm_get_customer_details")
     def get_customer_details(customer_id: str, include_orders: bool = True) -> Dict[str, Any]:
         """
@@ -182,7 +188,7 @@ def register_tools(mcp):
         """
         return customer_service.get_customer_details(customer_id, include_orders)
     
-    @mcp.tool(name="catalog_get_item")
+    @mcp.tool(name="catalog_get_item", meta={"tags": ["shared"]})
     @log_tool("catalog_get_item")
     def get_item(sku: str) -> Dict[str, Any]:
         """
@@ -197,7 +203,7 @@ def register_tools(mcp):
         """
         return catalog_service.get_item(sku)
     
-    @mcp.tool(name="catalog_search_items_basic")
+    @mcp.tool(name="catalog_search_items_basic", meta={"tags": ["shared"]})
     @log_tool("catalog_search_items_basic")
     def search_items(words: List[str], limit: int = 10, min_score: int = 1) -> Dict[str, Any]:
         """
@@ -216,7 +222,7 @@ def register_tools(mcp):
         """
         return catalog_service.search_items(words, limit, min_score)
     
-    @mcp.tool(name="inventory_list_items")
+    @mcp.tool(name="inventory_list_items", meta={"tags": ["shared"]})
     @log_tool("inventory_list_items")
     def inventory_list_items(in_stock_only: bool = False, item_type: Optional[str] = "finished_good", limit: int = 50) -> Dict[str, Any]:
         """
@@ -241,7 +247,7 @@ def register_tools(mcp):
             item.pop("reorder_qty", None)
         return result
     
-    @mcp.tool(name="inventory_get_stock_summary")
+    @mcp.tool(name="inventory_get_stock_summary", meta={"tags": ["shared"]})
     @log_tool("inventory_get_stock_summary")
     def get_stock_summary(item_id: Optional[str] = None, sku: Optional[str] = None) -> Dict[str, Any]:
         """Return on-hand and available by location for an item."""
@@ -263,7 +269,7 @@ def register_tools(mcp):
         summary["ui_url"] = ui_href("items", sku or item_id)
         return summary
     
-    @mcp.tool(name="inventory_check_availability")
+    @mcp.tool(name="inventory_check_availability", meta={"tags": ["shared"]})
     @log_tool("inventory_check_availability")
     def inventory_check_availability(item_sku: str, quantity: float) -> Dict[str, Any]:
         """
@@ -276,7 +282,7 @@ def register_tools(mcp):
         """
         return inventory_service.check_availability(item_sku, quantity)
     
-    @mcp.tool(name="sales_quote_options")
+    @mcp.tool(name="sales_quote_options", meta={"tags": ["sales"]})
     @log_tool("sales_quote_options")
     def sales_quote_options(
         sku: str,
@@ -298,7 +304,7 @@ def register_tools(mcp):
         """
         return pricing_service.calculate_quote_options(sku, qty, delivery_date, allowed_substitutions or [])
     
-    @mcp.tool(name="sales_create_sales_order")
+    @mcp.tool(name="sales_create_sales_order", meta={"tags": ["sales"]})
     @log_tool("sales_create_sales_order")
     def create_sales_order(
         customer_id: str,
@@ -316,13 +322,13 @@ def register_tools(mcp):
         """
         return sales_service.create_order(customer_id, requested_delivery_date, ship_to, lines, note)
     
-    @mcp.tool(name="sales_price_sales_order")
+    @mcp.tool(name="sales_price_sales_order", meta={"tags": ["sales"]})
     @log_tool("sales_price_sales_order")
     def price_sales_order(sales_order_id: str, pricelist: Optional[str] = None) -> Dict[str, Any]:
         """Apply simple pricing logic (12 EUR each, 5% discount for 24+, free shipping over €300)."""
         return pricing_service.compute_pricing(sales_order_id)
     
-    @mcp.tool(name="sales_search_sales_orders")
+    @mcp.tool(name="sales_search_sales_orders", meta={"tags": ["sales"]})
     @log_tool("sales_search_sales_orders")
     def search_sales_orders(customer_id: Optional[str] = None, limit: int = 5, sort: str = "most_recent") -> Dict[str, Any]:
         """
@@ -338,7 +344,7 @@ def register_tools(mcp):
         """
         return sales_service.search_orders(customer_id, limit, sort)
     
-    @mcp.tool(name="sales_get_sales_order")
+    @mcp.tool(name="sales_get_sales_order", meta={"tags": ["sales"]})
     @log_tool("sales_get_sales_order")
     def get_sales_order(sales_order_id: str) -> Dict[str, Any]:
         """
@@ -355,7 +361,7 @@ def register_tools(mcp):
             raise ValueError("Sales order not found")
         return detail
     
-    @mcp.tool(name="sales_link_shipment_to_sales_order")
+    @mcp.tool(name="sales_link_shipment_to_sales_order", meta={"tags": ["sales"]})
     @log_tool("sales_link_shipment_to_sales_order")
     def link_shipment_to_sales_order(sales_order_id: str, shipment_id: str) -> Dict[str, Any]:
         """
@@ -367,7 +373,7 @@ def register_tools(mcp):
         """
         return sales_service.link_shipment(sales_order_id, shipment_id)
     
-    @mcp.tool(name="logistics_create_shipment")
+    @mcp.tool(name="logistics_create_shipment", meta={"tags": ["sales"]})
     @log_tool("logistics_create_shipment")
     def create_shipment(
         ship_from: Optional[Dict[str, Any]] = None,
@@ -394,7 +400,7 @@ def register_tools(mcp):
         """
         return logistics_service.create_shipment(ship_from, ship_to, planned_departure, planned_arrival, packages, reference)
     
-    @mcp.tool(name="logistics_get_shipment_status")
+    @mcp.tool(name="logistics_get_shipment_status", meta={"tags": ["sales"]})
     @log_tool("logistics_get_shipment_status")
     def get_shipment_status(shipment_id: str) -> Dict[str, Any]:
         """
@@ -408,13 +414,13 @@ def register_tools(mcp):
         """
         return logistics_service.get_shipment_status(shipment_id)
     
-    @mcp.tool(name="production_get_statistics")
+    @mcp.tool(name="production_get_statistics", meta={"tags": ["production"]})
     @log_tool("production_get_statistics")
     def get_production_statistics() -> Dict[str, Any]:
         """Get production statistics including total production orders and breakdown by status."""
         return production_service.get_statistics()
     
-    @mcp.tool(name="production_get_production_order_status")
+    @mcp.tool(name="production_get_production_order_status", meta={"tags": ["production"]})
     @log_tool("production_get_production_order_status")
     def get_production_order_status(production_order_id: str) -> Dict[str, Any]:
         """
@@ -428,7 +434,7 @@ def register_tools(mcp):
         """
         return production_service.get_order_status(production_order_id)
     
-    @mcp.tool(name="production_find_orders_by_date_range")
+    @mcp.tool(name="production_find_orders_by_date_range", meta={"tags": ["production"]})
     @log_tool("production_find_orders_by_date_range")
     def find_production_orders_by_date_range(start_date: str, end_date: str, limit: int = 100) -> List[Dict[str, Any]]:
         """
@@ -445,7 +451,7 @@ def register_tools(mcp):
         """
         return production_service.find_orders_by_date_range(start_date, end_date, limit)
     
-    @mcp.tool(name="production_create_order")
+    @mcp.tool(name="production_create_order", meta={"tags": ["production"]})
     @log_tool("production_create_order")
     def production_create_order(recipe_id: str, notes: Optional[str] = None) -> Dict[str, Any]:
         """
@@ -463,7 +469,7 @@ def register_tools(mcp):
         """
         return production_service.create_order(recipe_id, notes)
     
-    @mcp.tool(name="production_start_order")
+    @mcp.tool(name="production_start_order", meta={"tags": ["production"]})
     @log_tool("production_start_order")
     def production_start_order(production_order_id: str) -> Dict[str, Any]:
         """
@@ -479,7 +485,7 @@ def register_tools(mcp):
         """
         return production_service.start_order(production_order_id)
     
-    @mcp.tool(name="production_complete_order")
+    @mcp.tool(name="production_complete_order", meta={"tags": ["production"]})
     @log_tool("production_complete_order")
     def production_complete_order(
         production_order_id: str,
@@ -502,7 +508,7 @@ def register_tools(mcp):
         """
         return production_service.complete_order(production_order_id, qty_produced, warehouse, location)
     
-    @mcp.tool(name="recipe_list")
+    @mcp.tool(name="recipe_list", meta={"tags": ["production"]})
     @log_tool("recipe_list")
     def recipe_list(output_item_sku: Optional[str] = None, limit: int = 50) -> Dict[str, Any]:
         """
@@ -514,7 +520,7 @@ def register_tools(mcp):
         """
         return recipe_service.list_recipes(output_item_sku, limit)
     
-    @mcp.tool(name="recipe_get")
+    @mcp.tool(name="recipe_get", meta={"tags": ["production"]})
     @log_tool("recipe_get")
     def recipe_get(recipe_id: str) -> Dict[str, Any]:
         """
@@ -525,7 +531,7 @@ def register_tools(mcp):
         """
         return recipe_service.get_recipe(recipe_id)
     
-    @mcp.tool(name="purchase_create_order")
+    @mcp.tool(name="purchase_create_order", meta={"tags": ["production"]})
     @log_tool("purchase_create_order")
     def purchase_create_order(item_sku: str, qty: float, supplier_name: Optional[str] = None) -> Dict[str, Any]:
         """
@@ -543,7 +549,7 @@ def register_tools(mcp):
         """
         return purchase_service.create_order(item_sku, qty, supplier_name)
     
-    @mcp.tool(name="purchase_restock_materials")
+    @mcp.tool(name="purchase_restock_materials", meta={"tags": ["production"]})
     @log_tool("purchase_restock_materials")
     def purchase_restock_materials() -> Dict[str, Any]:
         """
@@ -555,7 +561,7 @@ def register_tools(mcp):
         """
         return purchase_service.restock_materials()
     
-    @mcp.tool(name="purchase_receive_order")
+    @mcp.tool(name="purchase_receive_order", meta={"tags": ["production"]})
     @log_tool("purchase_receive_order")
     def purchase_receive_order(purchase_order_id: str, warehouse: str = "MAIN", location: str = "RM-A") -> Dict[str, Any]:
         """
@@ -572,7 +578,7 @@ def register_tools(mcp):
         """
         return purchase_service.receive(purchase_order_id, warehouse, location)
     
-    @mcp.tool(name="simulation_get_time")
+    @mcp.tool(name="simulation_get_time", meta={"tags": ["shared"]})
     @log_tool("simulation_get_time")
     def simulation_get_time() -> Dict[str, Any]:
         """
@@ -583,7 +589,7 @@ def register_tools(mcp):
         """
         return {"current_time": simulation_service.get_current_time()}
     
-    @mcp.tool(name="simulation_advance_time")
+    @mcp.tool(name="simulation_advance_time", meta={"tags": ["shared"]})
     @log_tool("simulation_advance_time")
     def simulation_advance_time(
         hours: Optional[float] = None,
@@ -603,7 +609,7 @@ def register_tools(mcp):
         """
         return simulation_service.advance_time(hours, days, to_time)
     
-    @mcp.tool(name="messaging_create_email")
+    @mcp.tool(name="messaging_create_email", meta={"tags": ["sales"]})
     @log_tool("messaging_create_email")
     def messaging_create_email(
         customer_id: str,
@@ -624,7 +630,7 @@ def register_tools(mcp):
         """
         return messaging_service.create_email(customer_id, subject, body, sales_order_id, recipient_email, recipient_name)
     
-    @mcp.tool(name="messaging_list_emails")
+    @mcp.tool(name="messaging_list_emails", meta={"tags": ["sales"]})
     @log_tool("messaging_list_emails")
     def messaging_list_emails(
         customer_id: Optional[str] = None,
@@ -641,7 +647,7 @@ def register_tools(mcp):
         """
         return messaging_service.list_emails(customer_id, sales_order_id, status, limit)
     
-    @mcp.tool(name="messaging_get_email")
+    @mcp.tool(name="messaging_get_email", meta={"tags": ["sales"]})
     @log_tool("messaging_get_email")
     def messaging_get_email(email_id: str) -> Dict[str, Any]:
         """
@@ -656,7 +662,7 @@ def register_tools(mcp):
         """
         return messaging_service.get_email(email_id)
     
-    @mcp.tool(name="messaging_update_email")
+    @mcp.tool(name="messaging_update_email", meta={"tags": ["sales"]})
     @log_tool("messaging_update_email")
     def messaging_update_email(email_id: str, subject: Optional[str] = None, body: Optional[str] = None) -> Dict[str, Any]:
         """
@@ -669,7 +675,7 @@ def register_tools(mcp):
         """
         return messaging_service.update_email(email_id, subject, body)
     
-    @mcp.tool(name="messaging_send_email")
+    @mcp.tool(name="messaging_send_email", meta={"tags": ["sales"]})
     @log_tool("messaging_send_email")
     def messaging_send_email(email_id: str) -> Dict[str, Any]:
         """
@@ -682,7 +688,7 @@ def register_tools(mcp):
         """
         return messaging_service.send_email(email_id)
     
-    @mcp.tool(name="messaging_delete_email")
+    @mcp.tool(name="messaging_delete_email", meta={"tags": ["sales"]})
     @log_tool("messaging_delete_email")
     def messaging_delete_email(email_id: str) -> Dict[str, Any]:
         """
@@ -695,7 +701,7 @@ def register_tools(mcp):
         """
         return messaging_service.delete_email(email_id)
     
-    @mcp.tool(name="chart_generate")
+    @mcp.tool(name="chart_generate", meta={"tags": ["shared"]})
     @log_tool("chart_generate")
     def chart_generate(
         chart_type: str,
@@ -745,7 +751,7 @@ def register_tools(mcp):
         result = chart_service.generate_chart(chart_type, labels, values, series, title)
         return {"url": result["url"], "filename": result["filename"]}
     
-    @mcp.tool(name="admin_reset_database")
+    @mcp.tool(name="admin_reset_database", meta={"tags": ["shared"]})
     @log_tool("admin_reset_database")
     def admin_reset_database(secret: str) -> Dict[str, Any]:
         """

@@ -1,61 +1,53 @@
-# Duck Demo Project - Context Summary
+# Agent Tool Filtering
 
-## Project Overview
-Manufacturing simulation demo for rubber duck production with:
-- **Backend**: Python FastAPI server + FastMCP (MCP tools)
-- **Frontend**: React + TypeScript + Vite
-- **Database**: SQLite with comprehensive manufacturing schema
-- **Domain**: Customer orders → Sales orders → Production orders → Production operations → Stock → Shipments
+This server exposes **43 MCP tools** organized by tags for client-side filtering.
 
-## Key Components
+## Architecture
 
-### Database Schema
-- `simulation_state`: Single-row table (id=1) tracking simulated time
-- `items`: Products (finished goods, components, raw materials)
-- `recipes`: Bill of materials with `recipe_ingredients` (sequence_order, input_qty, input_uom)
-- `production_orders`: Manufacturing orders with status tracking
-- `production_operations`: Individual manufacturing steps with start/complete times and duration_hours
-- `sales_orders`, `shipments`, `purchase_orders`, `customers`, `stock`
+**Single Server** → All tools with tags → **Client Filters** → Specialized Agent
 
-### Simulation Framework (Current Focus)
-**Purpose**: "Build a robust framework to simulate production"
+## Tool Organization
 
-**Implemented**:
-- `simulation_state` table with `sim_time` column (TEXT, format: 'YYYY-MM-DD HH:MM:SS')
-- Initial time: **2025-12-24 08:30:00** (fixed for reproducibility)
-- MCP tools:
-  - `simulation_get_time()`: Returns current simulation time
-  - `simulation_advance_time(hours/days/to_time)`: Advances or sets time
-- REST API: `/api/simulation/time`
-- UI: Layout component displays "Simulation Time: 12/24/2025, 8:30:00 AM" in dark header
+### Shared Tools (13 tools) - tag: `shared`
+Available to both agents:
+- `get_current_user`, `get_statistics`
+- `catalog_*`: get_item, search_items_basic
+- `inventory_*`: list_items, get_stock_summary, check_availability
+- `simulation_*`: get_time, advance_time
+- `chart_generate`
+- `admin_reset_database`
 
-### Production Model
-- Single-batch operations: Each production_operation has `actual_quantity` (not qty_per_batch)
-- Operations track: start_time, complete_time, duration_hours, status
-- Item detail page shows related production_orders and purchase_orders
+### Sales Tools (18 tools) - tag: `sales`
+Customer relationship and order management:
+- `crm_*`: find_customers, create_customer, get_customer_details
+- `sales_*`: quote_options, create/price/search/get_sales_order, link_shipment
+- `logistics_*`: create_shipment, get_shipment_status
+- `messaging_*`: create/list/get/update/send/delete_email
 
-## User Preferences
-- **Fixed times** for reproducibility (no `datetime('now')`)
-- **No defensive code** that masks design issues
-- **Terse commit messages**
+### Production Tools (12 tools) - tag: `production`
+Manufacturing and materials management:
+- `production_*`: get_statistics, get/find/create/start/complete_order
+- `recipe_*`: list, get
+- `purchase_*`: create_order, restock_materials, receive_order
 
-## File Locations
-- schema.sql: Database structure
-- seed_demo.py: Populate demo data with fixed starting time
-- server.py: FastAPI routes + MCP tools (simulation_get_time, simulation_advance_time)
-- Layout.tsx: Displays simulation time
-- api.ts: API client with simulationTime() method
-- Scripts: backend.sh, frontend.sh, tunnel.sh
+## Client-Side Filtering
 
-## Next Steps (Likely)
-- Advance simulation time and complete production operations based on duration
-- Auto-update production order statuses when operations finish
-- Simulate purchase order arrivals after lead time
-- Add UI controls for time advancement
-- Trigger time-based events in the simulation
+Clients should:
+1. Call `list_tools` to get all 43 tools
+2. Filter by tags based on agent type:
+   - **Sales agent**: `tags=['shared', 'sales']` → 31 tools
+   - **Production agent**: `tags=['shared', 'production']` → 25 tools
+3. Only expose filtered tools to the LLM
+4. Validate tool calls match the allowed tag set
 
-## Technical Notes
-- SQLite datetime format: 'YYYY-MM-DD HH:MM:SS'
-- JS Date parsing: Convert space to 'T' for ISO format
-- Database path: demo.db in project root
-- Virtual env: python -m venv venv
+## Agent Prompts
+
+- **Prompt_sales.md**: Instructions for sales agent (CRM, orders, shipping, emails)
+- **Prompt_production.md**: Instructions for production agent (manufacturing, recipes, materials)
+
+Both prompts should guide the LLM to use appropriate tools, with client-side filtering as the enforcement layer.
+
+## File Structure
+
+- `server.py`: Main server (registers all 43 tools)
+- `mcp_tools.py`: All tool definitions with tags
