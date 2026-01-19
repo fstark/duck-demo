@@ -121,7 +121,7 @@ class CustomerService:
             params.append(f"%{city.lower()}%")
 
         where_clause = f"WHERE {' AND '.join(filters)}" if filters else ""
-        sql = f"SELECT id, name, company, email, city FROM customers {where_clause} ORDER BY id LIMIT ?"
+        sql = f"SELECT id, name, company, email, city, created_at FROM customers {where_clause} ORDER BY id LIMIT ?"
         params.append(limit)
 
         with db_conn() as conn:
