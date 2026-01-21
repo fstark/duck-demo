@@ -21,27 +21,14 @@ from api_routes import register_routes
 import config
 
 
-# Logging setup - console and file
-log_format = logging.Formatter(
-    fmt="%(asctime)s %(levelname)s %(message)s",
+# Basic logging setup with timestamps
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(message)s",
     datefmt="%Y-%m-%dT%H:%M:%S",
 )
 
-# Console handler
-console_handler = logging.StreamHandler()
-console_handler.setFormatter(log_format)
-
-# File handler
-file_handler = logging.FileHandler(config.LOG_FILE)
-file_handler.setFormatter(log_format)
-
-# Configure root logger
-logging.basicConfig(
-    level=logging.INFO,
-    handlers=[console_handler, file_handler],
-)
 logger = logging.getLogger("duck-demo")
-logger.info(f"Logging to console and {config.LOG_FILE}")
 
 
 # Single MCP server with ALL tools
@@ -74,5 +61,13 @@ logger.info("  - Production agent (Prompt_production.md): tags=['shared', 'produ
 
 
 if __name__ == "__main__":
-    # Run as HTTP server using the streamable-http transport
+    import uvicorn
+    from uvicorn.config import LOGGING_CONFIG as UVICORN_DEFAULT_CONFIG
+    
+    # Add timestamps to uvicorn's log formats
+    UVICORN_DEFAULT_CONFIG["formatters"]["default"]["fmt"] = "%(asctime)s %(levelname)s %(message)s"
+    UVICORN_DEFAULT_CONFIG["formatters"]["default"]["datefmt"] = "%Y-%m-%dT%H:%M:%S"
+    UVICORN_DEFAULT_CONFIG["formatters"]["access"]["fmt"] = '%(asctime)s %(levelname)s %(client_addr)s - "%(request_line)s" %(status_code)s'
+    UVICORN_DEFAULT_CONFIG["formatters"]["access"]["datefmt"] = "%Y-%m-%dT%H:%M:%S"
+    
     mcp.run(transport="streamable-http")
