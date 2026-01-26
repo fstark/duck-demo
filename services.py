@@ -256,25 +256,26 @@ class CatalogService:
     """Service for item/catalog operations."""
     
     @staticmethod
-    def load_item(sku: str) -> Optional[Dict[str, Any]]:
-        """Load item by SKU."""
+    def load_item(sku_or_id: str) -> Optional[Dict[str, Any]]:
+        """Load item by SKU or item_id."""
         with db_conn() as conn:
             cur = conn.execute(
-                "SELECT id, sku, name, type, unit_price, uom, reorder_qty, image FROM items WHERE sku = ?",
-                (sku,)
+                "SELECT id, sku, name, type, unit_price, uom, reorder_qty, image FROM items WHERE sku = ? OR id = ?",
+                (sku_or_id, sku_or_id)
             )
             row = cur.fetchone()
             return dict(row) if row else None
     
     @staticmethod
-    def get_item(sku: str) -> Dict[str, Any]:
-        """Fetch an item by SKU."""
-        item = CatalogService.load_item(sku)
+    def get_item(sku_or_id: str) -> Dict[str, Any]:
+        """Fetch an item by SKU or item_id."""
+        item = CatalogService.load_item(sku_or_id)
         if not item:
             raise ValueError("Item not found")
         result = dict(item)
         if result.get("image"):
-            result["image_url"] = f"{config.API_BASE}/api/items/{sku}/image.png"
+            # Use the actual sku from the result for image URL
+            result["image_url"] = f"{config.API_BASE}/api/items/{result['sku']}/image.png"
         result.pop("image", None)
         return result
     

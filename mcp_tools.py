@@ -192,11 +192,12 @@ def register_tools(mcp):
     @log_tool("catalog_get_item")
     def get_item(sku: str) -> Dict[str, Any]:
         """
-        Fetch complete item details by SKU.
+        Fetch complete item details by SKU or item_id.
         Use this after search to get full details including image_url, uom, and reorder_qty.
+        Accepts either SKU (e.g., 'ELVIS-RED-20') or item_id (e.g., 'ITEM-ELVIS-20').
         
         Parameters:
-            sku: The item SKU (e.g., 'ELVIS-RED-20')
+            sku: The item SKU or item_id
         
         Returns:
             Complete item details: id, sku, name, type, unit_price, uom, reorder_qty, image_url

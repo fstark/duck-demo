@@ -1,18 +1,23 @@
+# Demo 1
+
 please reset the data using the password "kondor"
 
 https://mft-ai-chat-myforterro-ui.fcs-dev.eks.forterro.com/home
 
-New chat:
+
+hello, who are you?
+
+# Demo 2
 
 Show me the last order created.
 
-how many elvis ducks are in stock?
+how many elvis duck are in stock?
 
 at what price?
 
 any other fun ducks in stock?
 
-
+# Demo 3
 
 Manage that email:
 
@@ -24,7 +29,7 @@ Can you confirm availability and send a quote?
 Thanks,
 John
 
-
+# Demo 4
 
 **From:** Sarah Martin [sarah@martin-retail.example](mailto:sarah@martin-retail.example)
 **Subject:** Order status?
@@ -36,13 +41,20 @@ Sarah
 
 can you give the dates of the shipment too?
 
+# Demoe 5
 
 
+Draft a response to this email:
+
+From: dean.forbes@forterro.duck
+Hi, I am Dean Forbes, and I would love to buy a sample of your rubber ducks. what is the prices if I take one item of everything you havre in stock?
 
 
+Manage this other email:
+From: dean.forbes@forterro.duck
 
 
-
+# Demo 5
 
 what ducks are going to be produced in january 2026?
 
@@ -60,12 +72,6 @@ in which cities do we have customers?
 
 reset the data using the password "kondor"
 
+Show me a graph of the breakdown of our production orders by status
 
-Draft a response to this email:
-
-From: dean.forbes@forterro.duck
-Hi, I am Dean Forbes, and I would love to buy a sample of your rubber ducks. what is the prices if I take one item of everything you havre in stock?
-
-
-Manage this other email:
-From: dean.forbes@forterro.duck
+Show me a treemap of our current stock levels by product.
