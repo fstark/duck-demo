@@ -20,5 +20,7 @@ PRODUCTION_LEAD_DAYS_BY_TYPE = {"finished_good": 30}
 # Logging configuration
 LOG_FILE = os.getenv("LOG_FILE", "duck-demo.log")
 
-# API Base URL for absolute URLs (e.g., image URLs in MCP responses)
+# Base URL for all absolute URLs (API resources, UI deep links)
+# Override with API_BASE environment variable for production/tunnel deployments
+# Examples: http://localhost:5173, https://yourdomain.com, https://abc123.ngrok.io
 API_BASE = os.getenv("API_BASE", "http://127.0.0.1:5173")

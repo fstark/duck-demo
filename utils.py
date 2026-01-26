@@ -3,10 +3,7 @@
 from datetime import datetime, timedelta
 from typing import Optional
 from urllib.parse import quote
-import os
-
-
-UI_BASE = os.getenv("UI_BASE", "http://127.0.0.1:5173")
+import config
 
 
 def parse_date(value: Optional[str]) -> Optional[datetime]:
@@ -27,4 +24,4 @@ def eta_from_days(days: int) -> str:
 def ui_href(page: str, identifier: str) -> str:
     """Generate UI deep link URL."""
     safe_id = quote(str(identifier), safe="")
-    return f"{UI_BASE}#/{page}/{safe_id}"
+    return f"{config.API_BASE}#/{page}/{safe_id}"
