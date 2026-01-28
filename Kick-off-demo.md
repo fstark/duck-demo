@@ -2,7 +2,7 @@ Kick-off-demo
 
 # 00 - Pre-demo
 
-https://integration-myforterro-ui.fcs-dev.eks.forterro.com/chat
+https://integration-myforterro-ui.fcs-dev.eks.forterro.com/
 
 ```
 please reset the data using the password "kondor"
