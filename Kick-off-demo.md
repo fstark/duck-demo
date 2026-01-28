@@ -2,7 +2,7 @@ Kick-off-demo
 
 # 00 - Pre-demo
 
-https://mft-ai-chat-myforterro-ui.fcs-dev.eks.forterro.com/home
+https://integration-myforterro-ui.fcs-dev.eks.forterro.com/chat
 
 ```
 please reset the data using the password "kondor"
@@ -89,10 +89,6 @@ Hi, can you tell me the status of my last two orders?
 One was small ducks, the other Elvis ducks.
 Thanks,
 Sarah
-```
-
-```
-yes. add the shipment dates too?
 ```
 
 ```
