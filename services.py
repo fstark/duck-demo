@@ -1540,6 +1540,201 @@ class ChartService:
         }
 
 
+class PendingActionService:
+    """Human-in-the-loop confirmation gate for all mutations.
+    
+    Every mutating MCP tool creates a pending action instead of executing directly.
+    The action stores the intent (type + params + human-readable summary).
+    Execution only happens when the user explicitly confirms via action_confirm.
+    
+    Compound actions (e.g. create_sales_order with a new_customer embedded)
+    are handled by typed executors that know the internal dependency recipe.
+    """
+    
+    # Map action_type -> executor function.
+    # Each executor receives params dict + a shared db connection (for transaction safety)
+    # and returns the result dict that would normally come from the service.
+    _executors: Dict[str, Any] = {}
+
+    @staticmethod
+    def _register_executors():
+        """Wire up the dispatch table. Called once at module load."""
+        
+        def _exec_create_customer(params, conn):
+            return CustomerService.create_customer(**params)
+        
+        def _exec_create_sales_order(params, conn):
+            # Compound: if new_customer is embedded, create it first
+            p = dict(params)
+            new_customer = p.pop("new_customer", None)
+            if new_customer and not p.get("customer_id"):
+                cust_result = CustomerService.create_customer(**new_customer)
+                p["customer_id"] = cust_result["customer_id"]
+            return SalesService.create_order(
+                p["customer_id"],
+                p.get("requested_delivery_date"),
+                p.get("ship_to"),
+                p.get("lines"),
+                p.get("note"),
+            )
+        
+        def _exec_link_shipment(params, conn):
+            return SalesService.link_shipment(params["sales_order_id"], params["shipment_id"])
+        
+        def _exec_create_shipment(params, conn):
+            return LogisticsService.create_shipment(
+                params.get("ship_from"), params.get("ship_to"),
+                params.get("planned_departure"), params.get("planned_arrival"),
+                params.get("packages"), params.get("reference"),
+            )
+        
+        def _exec_create_production_order(params, conn):
+            return ProductionService.create_order(params["recipe_id"], params.get("notes"))
+        
+        def _exec_start_production(params, conn):
+            return ProductionService.start_order(params["production_order_id"])
+        
+        def _exec_complete_production(params, conn):
+            return ProductionService.complete_order(
+                params["production_order_id"], params["qty_produced"],
+                params.get("warehouse", "MAIN"), params.get("location", "FG-A"),
+            )
+        
+        def _exec_create_purchase_order(params, conn):
+            return PurchaseService.create_order(
+                params["item_sku"], params["qty"], params.get("supplier_name"),
+            )
+        
+        def _exec_restock_materials(params, conn):
+            return PurchaseService.restock_materials()
+        
+        def _exec_receive_purchase_order(params, conn):
+            return PurchaseService.receive(
+                params["purchase_order_id"],
+                params.get("warehouse", "MAIN"), params.get("location", "RM-A"),
+            )
+        
+        PendingActionService._executors = {
+            "create_customer": _exec_create_customer,
+            "create_sales_order": _exec_create_sales_order,
+            "link_shipment": _exec_link_shipment,
+            "create_shipment": _exec_create_shipment,
+            "create_production_order": _exec_create_production_order,
+            "start_production": _exec_start_production,
+            "complete_production": _exec_complete_production,
+            "create_purchase_order": _exec_create_purchase_order,
+            "restock_materials": _exec_restock_materials,
+            "receive_purchase_order": _exec_receive_purchase_order,
+        }
+    
+    @staticmethod
+    def create(action_type: str, params: Dict[str, Any], summary: str) -> Dict[str, Any]:
+        """Create a pending action and return it for the LLM to present."""
+        import json as _json
+        if action_type not in PendingActionService._executors:
+            raise ValueError(f"Unknown action type: {action_type}")
+        with db_conn() as conn:
+            action_id = generate_id(conn, "ACT", "pending_actions")
+            sim_time = SimulationService.get_current_time()
+            conn.execute(
+                "INSERT INTO pending_actions (id, action_type, params, summary, status, created_at) VALUES (?, ?, ?, ?, 'pending', ?)",
+                (action_id, action_type, _json.dumps(params, default=str), summary, sim_time),
+            )
+            conn.commit()
+            return {
+                "action_id": action_id,
+                "action_type": action_type,
+                "summary": summary,
+                "params": params,
+                "status": "pending",
+                "message": f"⏳ Pending action {action_id}: {summary}. Waiting for user confirmation.",
+            }
+    
+    @staticmethod
+    def confirm(action_id: str) -> Dict[str, Any]:
+        """Execute a pending action inside a transaction. Returns the real service result."""
+        import json as _json
+        with db_conn() as conn:
+            row = conn.execute("SELECT * FROM pending_actions WHERE id = ?", (action_id,)).fetchone()
+            if not row:
+                raise ValueError(f"Action {action_id} not found")
+            if row["status"] != "pending":
+                raise ValueError(f"Action {action_id} is already {row['status']}")
+            
+            action_type = row["action_type"]
+            params = _json.loads(row["params"])
+            executor = PendingActionService._executors.get(action_type)
+            if not executor:
+                raise ValueError(f"No executor for action type: {action_type}")
+            
+            # Execute — the service methods manage their own db connections,
+            # so we just call them and record the outcome.
+            try:
+                result = executor(params, conn)
+                sim_time = SimulationService.get_current_time()
+                conn.execute(
+                    "UPDATE pending_actions SET status = 'confirmed', result = ?, resolved_at = ? WHERE id = ?",
+                    (_json.dumps(result, default=str), sim_time, action_id),
+                )
+                conn.commit()
+                result["action_id"] = action_id
+                result["action_status"] = "confirmed"
+                return result
+            except Exception as exc:
+                conn.execute(
+                    "UPDATE pending_actions SET status = 'rejected', result = ?, resolved_at = ? WHERE id = ?",
+                    (_json.dumps({"error": str(exc)}, default=str), SimulationService.get_current_time(), action_id),
+                )
+                conn.commit()
+                raise
+    
+    @staticmethod
+    def reject(action_id: str) -> Dict[str, Any]:
+        """Reject (cancel) a pending action."""
+        with db_conn() as conn:
+            row = conn.execute("SELECT * FROM pending_actions WHERE id = ?", (action_id,)).fetchone()
+            if not row:
+                raise ValueError(f"Action {action_id} not found")
+            if row["status"] != "pending":
+                raise ValueError(f"Action {action_id} is already {row['status']}")
+            sim_time = SimulationService.get_current_time()
+            conn.execute(
+                "UPDATE pending_actions SET status = 'rejected', resolved_at = ? WHERE id = ?",
+                (sim_time, action_id),
+            )
+            conn.commit()
+            return {
+                "action_id": action_id,
+                "status": "rejected",
+                "message": f"❌ Action {action_id} rejected and will not be executed.",
+            }
+    
+    @staticmethod
+    def list_pending() -> Dict[str, Any]:
+        """List all pending actions."""
+        import json as _json
+        with db_conn() as conn:
+            rows = dict_rows(
+                conn.execute(
+                    "SELECT id, action_type, summary, status, created_at, resolved_at FROM pending_actions ORDER BY created_at DESC"
+                )
+            )
+            return {"actions": rows}
+    
+    @staticmethod
+    def get(action_id: str) -> Dict[str, Any]:
+        """Get full details of a pending action."""
+        import json as _json
+        with db_conn() as conn:
+            row = conn.execute("SELECT * FROM pending_actions WHERE id = ?", (action_id,)).fetchone()
+            if not row:
+                raise ValueError(f"Action {action_id} not found")
+            result = dict(row)
+            result["params"] = _json.loads(result["params"]) if result["params"] else {}
+            result["result"] = _json.loads(result["result"]) if result["result"] else None
+            return result
+
+
 # Create singleton instances
 simulation_service = SimulationService()
 customer_service = CustomerService()
@@ -1555,3 +1750,5 @@ messaging_service = MessagingService()
 stats_service = StatsService()
 admin_service = AdminService()
 chart_service = ChartService()
+pending_action_service = PendingActionService()
+PendingActionService._register_executors()

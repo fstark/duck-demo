@@ -115,3 +115,4 @@ Show me a graph of the breakdown of our production orders by status
 ```
 Show me a treemap of our current stock levels by product.
 ```
+ 
