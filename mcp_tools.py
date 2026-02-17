@@ -62,8 +62,8 @@ def register_tools(mcp):
     - 'production': Production agent only (manufacturing, recipes, materials)
     """
     
-    @mcp.tool(name="get_current_user", meta={"tags": ["shared"]})
-    @log_tool("get_current_user")
+    @mcp.tool(name="user_get_current", meta={"tags": ["shared"]})
+    @log_tool("user_get_current")
     def get_current_user() -> Dict[str, Any]:
         """Get current user information including first name, last name, role, and email."""
         return {
@@ -73,8 +73,8 @@ def register_tools(mcp):
             "email": "fred.stark@rubberducks.ia"
         }
     
-    @mcp.tool(name="get_statistics", meta={"tags": ["shared"]})
-    @log_tool("get_statistics")
+    @mcp.tool(name="stats_get_summary", meta={"tags": ["shared"]})
+    @log_tool("stats_get_summary")
     def get_statistics(
         entity: str,
         metric: str = "count",
@@ -144,8 +144,8 @@ def register_tools(mcp):
         """
         return stats_service.get_statistics(entity, metric, group_by, field, status, item_type, warehouse, city, limit, return_chart, chart_title)
     
-    @mcp.tool(name="crm_find_customers", meta={"tags": ["sales"]})
-    @log_tool("crm_find_customers")
+    @mcp.tool(name="crm_search_customers", meta={"tags": ["sales"]})
+    @log_tool("crm_search_customers")
     def find_customers(
         name: Optional[str] = None,
         email: Optional[str] = None,
@@ -178,8 +178,8 @@ def register_tools(mcp):
         summary = f"Create customer {' '.join(parts)}"
         return pending_action_service.create("create_customer", {"name": name, "company": company, "email": email, "city": city}, summary)
     
-    @mcp.tool(name="crm_get_customer_details", meta={"tags": ["sales"]})
-    @log_tool("crm_get_customer_details")
+    @mcp.tool(name="crm_get_customer", meta={"tags": ["sales"]})
+    @log_tool("crm_get_customer")
     def get_customer_details(customer_id: str, include_orders: bool = True) -> Dict[str, Any]:
         """
         Get customer data plus up to 10 most recent sales orders.
@@ -209,14 +209,14 @@ def register_tools(mcp):
         """
         return catalog_service.get_item(sku)
     
-    @mcp.tool(name="catalog_search_items_basic", meta={"tags": ["shared"]})
-    @log_tool("catalog_search_items_basic")
+    @mcp.tool(name="catalog_search_items", meta={"tags": ["shared"]})
+    @log_tool("catalog_search_items")
     def search_items(words: List[str], limit: int = 10, min_score: int = 1) -> Dict[str, Any]:
         """
         Fuzzy search for items by keywords in SKU or name, ranked by relevance.
         Returns MINIMAL fields only for efficient browsing.
         Use catalog_get_item(sku) to get complete details including image_url.
-        
+
         Parameters:
             words: List of search terms to match
             limit: Maximum results to return (default: 10)
@@ -253,8 +253,8 @@ def register_tools(mcp):
             item.pop("reorder_qty", None)
         return result
     
-    @mcp.tool(name="inventory_get_stock_summary", meta={"tags": ["shared"]})
-    @log_tool("inventory_get_stock_summary")
+    @mcp.tool(name="inventory_get_stock", meta={"tags": ["shared"]})
+    @log_tool("inventory_get_stock")
     def get_stock_summary(item_id: Optional[str] = None, sku: Optional[str] = None) -> Dict[str, Any]:
         """Return on-hand and available by location for an item."""
         if not item_id and not sku:
@@ -288,8 +288,8 @@ def register_tools(mcp):
         """
         return inventory_service.check_availability(item_sku, quantity)
     
-    @mcp.tool(name="sales_quote_options", meta={"tags": ["sales"]})
-    @log_tool("sales_quote_options")
+    @mcp.tool(name="sales_get_quote_options", meta={"tags": ["sales"]})
+    @log_tool("sales_get_quote_options")
     def sales_quote_options(
         sku: str,
         qty: int,
@@ -310,8 +310,8 @@ def register_tools(mcp):
         """
         return pricing_service.calculate_quote_options(sku, qty, delivery_date, allowed_substitutions or [])
     
-    @mcp.tool(name="sales_create_sales_order", meta={"tags": ["sales"]})
-    @log_tool("sales_create_sales_order")
+    @mcp.tool(name="sales_create_order", meta={"tags": ["sales"]})
+    @log_tool("sales_create_order")
     def create_sales_order(
         customer_id: Optional[str] = None,
         requested_delivery_date: Optional[str] = None,
@@ -350,14 +350,14 @@ def register_tools(mcp):
             params["new_customer"] = new_customer
         return pending_action_service.create("create_sales_order", params, summary)
     
-    @mcp.tool(name="sales_price_sales_order", meta={"tags": ["sales"]})
-    @log_tool("sales_price_sales_order")
+    @mcp.tool(name="sales_price_order", meta={"tags": ["sales"]})
+    @log_tool("sales_price_order")
     def price_sales_order(sales_order_id: str, pricelist: Optional[str] = None) -> Dict[str, Any]:
         """Apply simple pricing logic (12 EUR each, 5% discount for 24+, free shipping over €300)."""
         return pricing_service.compute_pricing(sales_order_id)
     
-    @mcp.tool(name="sales_search_sales_orders", meta={"tags": ["sales"]})
-    @log_tool("sales_search_sales_orders")
+    @mcp.tool(name="sales_search_orders", meta={"tags": ["sales"]})
+    @log_tool("sales_search_orders")
     def search_sales_orders(customer_id: Optional[str] = None, limit: int = 5, sort: str = "most_recent") -> Dict[str, Any]:
         """
         Search sales orders, optionally filtered by customer. Returns full order details including pricing and fulfillment state.
@@ -372,8 +372,8 @@ def register_tools(mcp):
         """
         return sales_service.search_orders(customer_id, limit, sort)
     
-    @mcp.tool(name="sales_get_sales_order", meta={"tags": ["sales"]})
-    @log_tool("sales_get_sales_order")
+    @mcp.tool(name="sales_get_order", meta={"tags": ["sales"]})
+    @log_tool("sales_get_order")
     def get_sales_order(sales_order_id: str) -> Dict[str, Any]:
         """
         Get complete sales order details including customer, lines, pricing, and linked shipments.
@@ -389,8 +389,8 @@ def register_tools(mcp):
             raise ValueError("Sales order not found")
         return detail
     
-    @mcp.tool(name="sales_link_shipment_to_sales_order", meta={"tags": ["sales"]})
-    @log_tool("sales_link_shipment_to_sales_order")
+    @mcp.tool(name="sales_link_shipment", meta={"tags": ["sales"]})
+    @log_tool("sales_link_shipment")
     def link_shipment_to_sales_order(sales_order_id: str, shipment_id: str) -> Dict[str, Any]:
         """
         Link an existing shipment to a sales order. Returns a pending action.
@@ -432,8 +432,8 @@ def register_tools(mcp):
         summary = f"Create shipment to {dest}{ref_str} (depart {planned_departure or '?'}, arrive {planned_arrival or '?'})"
         return pending_action_service.create("create_shipment", {"ship_from": ship_from, "ship_to": ship_to, "planned_departure": planned_departure, "planned_arrival": planned_arrival, "packages": packages, "reference": reference}, summary)
     
-    @mcp.tool(name="logistics_get_shipment_status", meta={"tags": ["sales"]})
-    @log_tool("logistics_get_shipment_status")
+    @mcp.tool(name="logistics_get_shipment", meta={"tags": ["sales"]})
+    @log_tool("logistics_get_shipment")
     def get_shipment_status(shipment_id: str) -> Dict[str, Any]:
         """
         Get shipment status including associated sales orders and customer details.
@@ -446,14 +446,14 @@ def register_tools(mcp):
         """
         return logistics_service.get_shipment_status(shipment_id)
     
-    @mcp.tool(name="production_get_statistics", meta={"tags": ["production"]})
-    @log_tool("production_get_statistics")
+    @mcp.tool(name="production_get_dashboard", meta={"tags": ["production"]})
+    @log_tool("production_get_dashboard")
     def get_production_statistics() -> Dict[str, Any]:
         """Get production statistics including total production orders and breakdown by status."""
         return production_service.get_statistics()
     
-    @mcp.tool(name="production_get_production_order_status", meta={"tags": ["production"]})
-    @log_tool("production_get_production_order_status")
+    @mcp.tool(name="production_get_order", meta={"tags": ["production"]})
+    @log_tool("production_get_order")
     def get_production_order_status(production_order_id: str) -> Dict[str, Any]:
         """
         Get detailed production order status including operations, recipe, and ingredients.
@@ -466,8 +466,8 @@ def register_tools(mcp):
         """
         return production_service.get_order_status(production_order_id)
     
-    @mcp.tool(name="production_find_orders_by_date_range", meta={"tags": ["production"]})
-    @log_tool("production_find_orders_by_date_range")
+    @mcp.tool(name="production_search_orders", meta={"tags": ["production"]})
+    @log_tool("production_search_orders")
     def find_production_orders_by_date_range(start_date: str, end_date: str, limit: int = 100) -> List[Dict[str, Any]]:
         """
         Retrieve production orders scheduled to finish within a date range.
@@ -540,8 +540,8 @@ def register_tools(mcp):
         summary = f"Complete production order {production_order_id} ({qty_produced} units → {warehouse}/{location})"
         return pending_action_service.create("complete_production", {"production_order_id": production_order_id, "qty_produced": qty_produced, "warehouse": warehouse, "location": location}, summary)
     
-    @mcp.tool(name="recipe_list", meta={"tags": ["production"]})
-    @log_tool("recipe_list")
+    @mcp.tool(name="catalog_list_recipes", meta={"tags": ["shared"]})
+    @log_tool("catalog_list_recipes")
     def recipe_list(output_item_sku: Optional[str] = None, limit: int = 50) -> Dict[str, Any]:
         """
         List recipes, optionally filtering by output item SKU.
@@ -552,8 +552,8 @@ def register_tools(mcp):
         """
         return recipe_service.list_recipes(output_item_sku, limit)
     
-    @mcp.tool(name="recipe_get", meta={"tags": ["production"]})
-    @log_tool("recipe_get")
+    @mcp.tool(name="catalog_get_recipe", meta={"tags": ["shared"]})
+    @log_tool("catalog_get_recipe")
     def recipe_get(recipe_id: str) -> Dict[str, Any]:
         """
         Get detailed recipe information including ingredients and operations.

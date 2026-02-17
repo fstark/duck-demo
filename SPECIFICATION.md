@@ -53,7 +53,7 @@ User pastes the email:
 
 **Sales Agent actions (MCP calls you’ll want):**
 
-1. `crm_find_customers(name="John Doe", company="DuckFan Paris")` (then `crm_create_customer(...)` if not found)
+1. `crm_search_customers(name="John Doe", company="DuckFan Paris")` (then `crm_create_customer(...)` if not found)
 2. `check_item_availability(item="ELVIS-DUCK-20CM", qty=24, date=Jan10)`
 3. `suggest_alternatives()` based on stock + lead time
 4. `draft_reply_email()` (important: give options)
@@ -101,10 +101,10 @@ That email is the “demo moment” because it shows reasoning grounded in stock
 
 **Sales Agent MCP actions**
 
-1. `create_sales_order(customer, lines=[...], requested_ship_date=Jan8/Jan9)`
+1. `sales_create_order(customer, lines=[...], requested_ship_date=Jan8/Jan9)`
 2. `reserve_stock(item, qty, location)` (or create pick request)
-3. `price_sales_order(sales_order_id, pricelist="Retail EU 2026")`
-4. `create_shipment_from_sales_order(sales_order_id, planned_departure=Jan8, planned_arrival=Jan10)`
+3. `sales_price_order(sales_order_id, pricelist="Retail EU 2026")`
+4. `logistics_create_shipment(sales_order_id, planned_departure=Jan8, planned_arrival=Jan10)`
 5. `draft_order_confirmation_email()`
 
 **Sales agent output should include**
@@ -138,12 +138,12 @@ Customer **Sarah Martin** has two orders:
 
 **Agent actions**
 
-1. `crm_find_customers(name="Sarah Martin")`
-2. `search_sales_orders(customer_id, last_n=2)`
+1. `crm_search_customers(name="Sarah Martin")`
+2. `sales_search_orders(customer_id, last_n=2)`
 3. For each order:
 
-   * if shipped: `get_shipment_status(shipment_id)`
-   * if in production: `get_production_order_status(production_order_id)` (progress by operations)
+   * if shipped: `logistics_get_shipment(shipment_id)`
+   * if in production: `production_get_order(production_order_id)` (progress by operations)
 4. `draft_reply_email()` summarizing in plain language
 
 **Draft reply example**
@@ -175,9 +175,9 @@ Even if it’s one server, it helps to present it as distinct tool sets:
 
 Additional CRM helpers
 
-* `crm_find_customers` returns possible matches
+* `crm_search_customers` returns possible matches
 * `crm_create_customer` explicitly creates a customer
-* `crm_get_customer_details` returns profile plus recent/pending orders
+* `crm_get_customer` returns profile plus recent/pending orders
 
 ### Inventory context tools
 
@@ -238,25 +238,25 @@ Assumptions (for realism + determinism):
 
 You can rename these, but the transcript assumes these capabilities exist:
 
-* `crm_find_customers`
+* `crm_search_customers`
 * `crm_create_customer`
-* `crm_get_customer_details`
+* `crm_get_customer`
 * `catalog_get_item`
 * `catalog_search_items`
 * `inventory_list_items`
-* `inventory_get_stock_summary`
-* `sales_quote_options`
-* `sales_create_sales_order`
-* `sales_price_sales_order`
+* `inventory_get_stock`
+* `sales_get_quote_options`
+* `sales_create_order`
+* `sales_price_order`
 * `inventory_reserve_stock`
 * `logistics_create_shipment`
-* `sales_link_shipment_to_sales_order`
+* `sales_link_shipment`
 * `sales_draft_email`
 * `sales_mark_email_sent`
 * `sales_list_email_drafts`
-* `sales_search_sales_orders`
-* `logistics_get_shipment_status`
-* `production_get_production_order_status`
+* `sales_search_orders`
+* `logistics_get_shipment`
+* `production_get_order`
 
 ---
 
@@ -278,7 +278,7 @@ John
 ### A1) Agent queries ERP state
 
 **Agent → MCP tool call 1**
-`crm_find_customers({ name: "John Doe", company: "DuckFan Paris", email: "john@duckfan-paris.example" })`
+`crm_search_customers({ name: "John Doe", company: "DuckFan Paris", email: "john@duckfan-paris.example" })`
 
 **MCP → Agent response**
 `{ customers: [] }`
@@ -296,7 +296,7 @@ John
 `{ item_id: "ITEM-ELVIS-20", sku: "ELVIS-DUCK-20CM", name: "Elvis Duck 20cm", type: "finished_good" }`
 
 **Agent → MCP tool call 4**
-`inventory_get_stock_summary({ item_id: "ITEM-ELVIS-20" })`
+`inventory_get_stock({ item_id: "ITEM-ELVIS-20" })`
 
 **MCP → Agent response**
 
@@ -321,7 +321,7 @@ John
 `{ item_id: "ITEM-MARILYN-20", sku: "MARILYN-DUCK-20CM", name: "Marilyn Duck 20cm", type: "finished_good" }`
 
 **Agent → MCP tool call 6**
-`inventory_get_stock_summary({ item_id: "ITEM-MARILYN-20" })`
+`inventory_get_stock({ item_id: "ITEM-MARILYN-20" })`
 
 **MCP → Agent response**
 
@@ -338,7 +338,7 @@ John
 ```
 
 **Agent → MCP tool call 7**
-`sales_quote_options({
+`sales_get_quote_options({
   sku: "ELVIS-DUCK-20CM",
   qty: 24,
   need_by: "2026-01-10",
@@ -443,7 +443,7 @@ John
 ### A2) Agent creates SalesOrder, reserves stock, creates Shipment, prices order, confirms
 
 **Agent → MCP tool call 10**
-`sales_create_sales_order({
+`sales_create_order({
   customer_id: "CUST-0102",
   requested_delivery_date: "2026-01-10",
   ship_to: { line1: "14 Rue Example", postal_code: "75011", city: "Paris", country: "FR" },
@@ -481,7 +481,7 @@ John
 `{ status: "reserved", reservation_id: "RSV-5001" }`
 
 **Agent → MCP tool call 12**
-`sales_price_sales_order({ sales_order_id: "SO-1042", pricelist: "Retail EU 2026" })`
+`sales_price_order({ sales_order_id: "SO-1042", pricelist: "Retail EU 2026" })`
 
 **MCP → Agent response**
 
@@ -519,7 +519,7 @@ John
 `{ shipment_id: "SHIP-900", status: "planned", planned_departure: "2026-01-08", planned_arrival: "2026-01-10" }`
 
 **Agent → MCP tool call 14**
-`sales_link_shipment_to_sales_order({ sales_order_id: "SO-1042", shipment_id: "SHIP-900" })`
+`sales_link_shipment({ sales_order_id: "SO-1042", shipment_id: "SHIP-900" })`
 
 **MCP → Agent response**
 `{ status: "linked" }`
@@ -571,13 +571,13 @@ Sarah
 ### B1) Agent finds customer, looks up last orders, returns shipment + production statuses
 
 **Agent → MCP tool call 17**
-`crm_find_customers({ name: "Sarah Martin", email: "sarah@martin-retail.example" })`
+`crm_search_customers({ name: "Sarah Martin", email: "sarah@martin-retail.example" })`
 
 **MCP → Agent response**
 `{ customers: [ { "id": "CUST-0044", "name": "Sarah Martin", "email": "sarah@martin-retail.example" } ] }`
 
 **Agent → MCP tool call 18**
-`sales_search_sales_orders({ customer_id: "CUST-0044", limit: 2, sort: "most_recent" })`
+`sales_search_orders({ customer_id: "CUST-0044", limit: 2, sort: "most_recent" })`
 
 **MCP → Agent response**
 
@@ -603,7 +603,7 @@ Sarah
 ```
 
 **Agent → MCP tool call 19**
-`production_get_production_order_status({ production_order_id: "MO-555" })`
+`production_get_order({ production_order_id: "MO-555" })`
 
 **MCP → Agent response**
 
@@ -620,7 +620,7 @@ Sarah
 ```
 
 **Agent → MCP tool call 20**
-`logistics_get_shipment_status({ shipment_id: "SHIP-870" })`
+`logistics_get_shipment({ shipment_id: "SHIP-870" })`
 
 **MCP → Agent response**
 
@@ -725,7 +725,7 @@ CREATE TABLE customers (
 
 Used by:
 
-* `crm_find_customers`, `crm_create_customer`, `crm_get_customer_details`
+* `crm_search_customers`, `crm_create_customer`, `crm_get_customer`
 * sales orders
 * email drafting
 
@@ -767,7 +767,7 @@ CREATE TABLE stock (
 
 Used by:
 
-* `get_stock_summary`
+* `inventory_get_stock`
 * availability checks
 * reservation logic
 
@@ -856,7 +856,7 @@ CREATE TABLE sales_order_pricing (
 
 Used by:
 
-* `price_sales_order`
+* `sales_price_order`
 * email confirmations
 
 ---
@@ -954,7 +954,7 @@ CREATE TABLE production_orders (
 
 Used only by:
 
-* `get_production_order_status`
+* `production_get_order`
 * order status demo for Sarah
 
 No execution logic needed.
