@@ -266,15 +266,37 @@ function AppContent() {
             <div>
               <h2 className="text-lg font-semibold text-slate-800 mb-3">Sales & CRM</h2>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                <Card title="Customers" onClick={() => setHash('customers')}>
+                <Card 
+                  title="Customers" 
+                  onClick={() => setHash('customers')}
+                  spotlight={[
+                    { label: 'Acme Corp', sublabel: '2h ago', href: '#/customers/CUST-001' },
+                    { label: 'TechStart Inc', sublabel: 'yesterday', href: '#/customers/CUST-002' },
+                    { label: 'Global Foods', sublabel: '3 days', href: '#/customers/CUST-003' },
+                  ]}
+                >
                   <div className="text-2xl font-semibold"><Quantity value={customersCount} className="text-left block" /></div>
                   <div className="text-sm text-slate-600">total customers</div>
                 </Card>
-                <Card title="Quotes" onClick={() => setHash('quotes')}>
+                <Card 
+                  title="Quotes" 
+                  onClick={() => setHash('quotes')}
+                  spotlight={[
+                    { label: 'Q-2024-047', sublabel: 'newest', href: '#/quotes/Q-2024-047' },
+                    { label: 'Q-2024-031', sublabel: 'expires in 2d', href: '#/quotes/Q-2024-031' },
+                  ]}
+                >
                   <div className="text-2xl font-semibold"><Quantity value={quotesCount} className="text-left block" /></div>
                   <div className="text-sm text-slate-600">{quotesPending} pending · {formatCurrency(totalQuotesAmount)}</div>
                 </Card>
-                <Card title="Sales Orders" onClick={() => setHash('orders')}>
+                <Card 
+                  title="Sales Orders" 
+                  onClick={() => setHash('orders')}
+                  spotlight={[
+                    { label: 'SO-2024-089', sublabel: '$12,450', href: '#/orders/SO-2024-089' },
+                    { label: 'SO-2024-092', sublabel: 'due today', href: '#/orders/SO-2024-092' },
+                  ]}
+                >
                   <div className="text-2xl font-semibold"><Quantity value={ordersCount} className="text-left block" /></div>
                   <div className="text-sm text-slate-600">orders · {formatCurrency(totalSalesAmount)}</div>
                 </Card>
@@ -282,7 +304,14 @@ function AppContent() {
                   <div className="text-2xl font-semibold"><Quantity value={shipmentsCount} className="text-left block" /></div>
                   <div className="text-sm text-slate-600">shipments</div>
                 </Card>
-                <Card title="Invoices" onClick={() => setHash('invoices')}>
+                <Card 
+                  title="Invoices" 
+                  onClick={() => setHash('invoices')}
+                  spotlight={[
+                    { label: 'INV-2024-018', sublabel: 'overdue', href: '#/invoices/INV-2024-018' },
+                    { label: 'INV-2024-022', sublabel: 'due in 3d', href: '#/invoices/INV-2024-022' },
+                  ]}
+                >
                   <div className="text-2xl font-semibold"><Quantity value={invoicesCount} className="text-left block" /></div>
                   <div className="text-sm text-slate-600">{invoicesOutstanding} outstanding</div>
                 </Card>
@@ -316,7 +345,14 @@ function AppContent() {
             <div>
               <h2 className="text-lg font-semibold text-slate-800 mb-3">Production & Supply Chain</h2>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                <Card title="Production Orders" onClick={() => setHash('production')}>
+                <Card 
+                  title="Production Orders" 
+                  onClick={() => setHash('production')}
+                  spotlight={[
+                    { label: 'PO-2024-015', sublabel: 'in progress', href: '#/production/PO-2024-015' },
+                    { label: 'PO-2024-017', sublabel: 'planned', href: '#/production/PO-2024-017' },
+                  ]}
+                >
                   <div className="text-2xl font-semibold"><Quantity value={productionCount} className="text-left block" /></div>
                   <div className="text-sm text-slate-600"><Quantity value={totalProductionQty} className="font-mono inline" /> items planned</div>
                 </Card>
