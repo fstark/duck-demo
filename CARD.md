@@ -1,5 +1,7 @@
 # Card Spotlight Design
 
+**Status: ✅ Implemented**
+
 Each overview card shows aggregate stats on the left and 2-3 "spotlight" items on the right for quick access to the most relevant records.
 
 ---

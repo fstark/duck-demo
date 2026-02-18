@@ -70,4 +70,15 @@ export const api = {
     return fetchJson<{ quotes: Quote[] }>(`/quotes${query ? `?${query}` : ''}`)
   },
   quoteDetail: (id: string) => fetchJson<QuoteDetail>(`/quotes/${encodeURIComponent(id)}`),
+  spotlight: () => fetchJson<{
+    customers: { label: string; sublabel: string; href: string }[]
+    quotes: { label: string; sublabel: string; href: string }[]
+    sales_orders: { label: string; sublabel: string; href: string }[]
+    shipments: { label: string; sublabel: string; href: string }[]
+    invoices: { label: string; sublabel: string; href: string }[]
+    emails: { label: string; sublabel: string; href: string }[]
+    stock: { label: string; sublabel: string; href: string }[]
+    production_orders: { label: string; sublabel: string; href: string }[]
+    purchase_orders: { label: string; sublabel: string; href: string }[]
+  }>(`/stats/spotlight`),
 }

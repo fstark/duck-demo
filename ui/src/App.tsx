@@ -110,6 +110,17 @@ function AppContent() {
   const [totalQuotesAmount, setTotalQuotesAmount] = useState(0)
   const [view, setView] = useState<ViewState>(() => parseHash())
   const [apiError, setApiError] = useState<string | null>(null)
+  const [spotlight, setSpotlight] = useState<{
+    customers?: { label: string; sublabel: string; href: string }[]
+    quotes?: { label: string; sublabel: string; href: string }[]
+    sales_orders?: { label: string; sublabel: string; href: string }[]
+    shipments?: { label: string; sublabel: string; href: string }[]
+    invoices?: { label: string; sublabel: string; href: string }[]
+    emails?: { label: string; sublabel: string; href: string }[]
+    stock?: { label: string; sublabel: string; href: string }[]
+    production_orders?: { label: string; sublabel: string; href: string }[]
+    purchase_orders?: { label: string; sublabel: string; href: string }[]
+  }>({})
 
   const { clearListContext } = useNavigation()
 
@@ -149,6 +160,7 @@ function AppContent() {
       const total = res.quotes?.reduce((sum, q) => sum + (q.total || 0), 0) || 0
       setTotalQuotesAmount(total)
     }).catch(handleApiError)
+    api.spotlight().then(setSpotlight).catch(handleApiError)
   }, [])
 
   useEffect(() => {
@@ -269,11 +281,7 @@ function AppContent() {
                 <Card 
                   title="Customers" 
                   onClick={() => setHash('customers')}
-                  spotlight={[
-                    { label: 'Acme Corp', sublabel: '2h ago', href: '#/customers/CUST-001' },
-                    { label: 'TechStart Inc', sublabel: 'yesterday', href: '#/customers/CUST-002' },
-                    { label: 'Global Foods', sublabel: '3 days', href: '#/customers/CUST-003' },
-                  ]}
+                  spotlight={spotlight.customers}
                 >
                   <div className="text-2xl font-semibold"><Quantity value={customersCount} className="text-left block" /></div>
                   <div className="text-sm text-slate-600">total customers</div>
@@ -281,10 +289,7 @@ function AppContent() {
                 <Card 
                   title="Quotes" 
                   onClick={() => setHash('quotes')}
-                  spotlight={[
-                    { label: 'Q-2024-047', sublabel: 'newest', href: '#/quotes/Q-2024-047' },
-                    { label: 'Q-2024-031', sublabel: 'expires in 2d', href: '#/quotes/Q-2024-031' },
-                  ]}
+                  spotlight={spotlight.quotes}
                 >
                   <div className="text-2xl font-semibold"><Quantity value={quotesCount} className="text-left block" /></div>
                   <div className="text-sm text-slate-600">{quotesPending} pending · {formatCurrency(totalQuotesAmount)}</div>
@@ -292,30 +297,32 @@ function AppContent() {
                 <Card 
                   title="Sales Orders" 
                   onClick={() => setHash('orders')}
-                  spotlight={[
-                    { label: 'SO-2024-089', sublabel: '$12,450', href: '#/orders/SO-2024-089' },
-                    { label: 'SO-2024-092', sublabel: 'due today', href: '#/orders/SO-2024-092' },
-                  ]}
+                  spotlight={spotlight.sales_orders}
                 >
                   <div className="text-2xl font-semibold"><Quantity value={ordersCount} className="text-left block" /></div>
                   <div className="text-sm text-slate-600">orders · {formatCurrency(totalSalesAmount)}</div>
                 </Card>
-                <Card title="Shipments" onClick={() => setHash('shipments')}>
+                <Card 
+                  title="Shipments" 
+                  onClick={() => setHash('shipments')}
+                  spotlight={spotlight.shipments}
+                >
                   <div className="text-2xl font-semibold"><Quantity value={shipmentsCount} className="text-left block" /></div>
                   <div className="text-sm text-slate-600">shipments</div>
                 </Card>
                 <Card 
                   title="Invoices" 
                   onClick={() => setHash('invoices')}
-                  spotlight={[
-                    { label: 'INV-2024-018', sublabel: 'overdue', href: '#/invoices/INV-2024-018' },
-                    { label: 'INV-2024-022', sublabel: 'due in 3d', href: '#/invoices/INV-2024-022' },
-                  ]}
+                  spotlight={spotlight.invoices}
                 >
                   <div className="text-2xl font-semibold"><Quantity value={invoicesCount} className="text-left block" /></div>
                   <div className="text-sm text-slate-600">{invoicesOutstanding} outstanding</div>
                 </Card>
-                <Card title="Emails" onClick={() => setHash('emails')}>
+                <Card 
+                  title="Emails" 
+                  onClick={() => setHash('emails')}
+                  spotlight={spotlight.emails}
+                >
                   <div className="text-2xl font-semibold"><Quantity value={draftsCount} className="text-left block" /></div>
                   <div className="text-sm text-slate-600">draft emails</div>
                 </Card>
@@ -330,7 +337,11 @@ function AppContent() {
                   <div className="text-2xl font-semibold"><Quantity value={itemsCount} className="text-left block" /></div>
                   <div className="text-sm text-slate-600">catalog items</div>
                 </Card>
-                <Card title="Stock" onClick={() => setHash('stock')}>
+                <Card 
+                  title="Stock" 
+                  onClick={() => setHash('stock')}
+                  spotlight={spotlight.stock}
+                >
                   <div className="text-2xl font-semibold"><Quantity value={stockCount} className="text-left block" /></div>
                   <div className="text-sm text-slate-600">stock records</div>
                 </Card>
@@ -348,10 +359,7 @@ function AppContent() {
                 <Card 
                   title="Production Orders" 
                   onClick={() => setHash('production')}
-                  spotlight={[
-                    { label: 'PO-2024-015', sublabel: 'in progress', href: '#/production/PO-2024-015' },
-                    { label: 'PO-2024-017', sublabel: 'planned', href: '#/production/PO-2024-017' },
-                  ]}
+                  spotlight={spotlight.production_orders}
                 >
                   <div className="text-2xl font-semibold"><Quantity value={productionCount} className="text-left block" /></div>
                   <div className="text-sm text-slate-600"><Quantity value={totalProductionQty} className="font-mono inline" /> items planned</div>
@@ -360,7 +368,11 @@ function AppContent() {
                   <div className="text-2xl font-semibold"><Quantity value={suppliersCount} className="text-left block" /></div>
                   <div className="text-sm text-slate-600">suppliers</div>
                 </Card>
-                <Card title="Purchase Orders" onClick={() => setHash('purchase-orders')}>
+                <Card 
+                  title="Purchase Orders" 
+                  onClick={() => setHash('purchase-orders')}
+                  spotlight={spotlight.purchase_orders}
+                >
                   <div className="text-2xl font-semibold"><Quantity value={activePurchasesCount} className="text-left block" /></div>
                   <div className="text-sm text-slate-600">active orders</div>
                 </Card>

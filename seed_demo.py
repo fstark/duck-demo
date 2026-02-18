@@ -501,12 +501,12 @@ def seed(from_admin=False):
         conn.executemany(
             "INSERT INTO emails (id, customer_id, sales_order_id, recipient_email, recipient_name, subject, body, status, created_at, modified_at, sent_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             [
-                ("EMAIL-0001", "CUST-0044", "SO-1041", "sarah@martin-retail.example", "Sarah Martin",
-                 "Order Confirmation - SO-1041",
-                 "Dear Sarah,\n\nThank you for your order SO-1041. We have received your request for 12 Small Yellow Rubber Ducks (8cm).\n\nYour order is currently being processed and we will keep you updated on its progress.\n\nBest regards,\nDuck Inc Sales Team",
+                ("EMAIL-0001", "CUST-0044", "SO-1030", "sarah@martin-retail.example", "Sarah Martin",
+                 "Order Confirmation - SO-1030",
+                 "Dear Sarah,\n\nThank you for your order SO-1030. We have received your request for 10 Classic Ducks.\n\nYour order is currently being processed and we will keep you updated on its progress.\n\nBest regards,\nDuck Inc Sales Team",
                  "sent", "2025-12-20 09:00:00", "2025-12-20 09:00:00", "2025-12-20 09:00:00"),
                 
-                ("EMAIL-0002", "CUST-0102", "SO-1042", "john@duckfan-paris.example", "John Doe",
+                ("EMAIL-0002", "CUST-0102", None, "john@duckfan-paris.example", "John Doe",
                  "Quote for Elvis Duck Order",
                  "Dear John,\n\nThank you for your interest in our Elvis Presley Rubber Ducks (20cm).\n\nFor an order of 24 units, we can offer:\n- Unit price: €12.00\n- Volume discount (5%): -€14.40\n- Subtotal: €273.60\n- Shipping: Free (order over €300 threshold)\n- Total: €273.60\n\nEstimated delivery: January 8, 2026\n\nPlease let us know if you would like to proceed.\n\nBest regards,\nDuck Inc Sales Team",
                  "draft", "2025-12-21 14:30:00", "2025-12-22 10:15:00", None),
@@ -546,6 +546,42 @@ def seed(from_admin=False):
                 ("PAY-3001", "INV-2001", 140.0, "bank_transfer", "2025-12-15",
                  "VIREMENT-2025-8834", "Payment received for classic ducks order",
                  "2025-12-15 14:30:00"),
+            ]
+        )
+
+        # Quotes
+        conn.executemany(
+            "INSERT INTO quotes (id, customer_id, revision_number, requested_delivery_date, ship_to_line1, ship_to_postal_code, ship_to_city, ship_to_country, note, subtotal, discount, shipping, tax, total, currency, valid_until, status, created_at, sent_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            [
+                # QT-0001: sent quote expiring soon
+                ("QT-0001", "CUST-0102", 1, "2026-01-15", "45 Rue Duck", "75001", "Paris", "FR",
+                 "Quote for Elvis Duck bulk order", 288.0, 14.40, 0.0, 0.0, 273.60, "EUR",
+                 "2025-12-28", "sent", "2025-12-20 10:00:00", "2025-12-20 11:00:00"),
+                # QT-0002: draft quote (newest)
+                ("QT-0002", "CUST-0103", 1, "2026-01-20", "12 Promenade des Anglais", "06000", "Nice", "FR",
+                 "Quote for mixed duck order", 450.0, 22.50, 15.0, 0.0, 442.50, "EUR",
+                 "2026-01-10", "draft", "2025-12-23 14:00:00", None),
+                # QT-0003: accepted quote
+                ("QT-0003", "CUST-0044", 1, "2025-12-30", "12 Rue Client", "75002", "Paris", "FR",
+                 "Quote for Classic Ducks", 100.0, 0.0, 10.0, 0.0, 110.0, "EUR",
+                 "2025-12-20", "accepted", "2025-12-10 09:00:00", "2025-12-10 10:00:00"),
+                # QT-0004: sent quote with longer validity
+                ("QT-0004", "CUST-0105", 1, "2026-02-01", "8 Place Wilson", "31000", "Toulouse", "FR",
+                 "Quote for Pirate Duck collection", 580.0, 29.0, 0.0, 0.0, 551.0, "EUR",
+                 "2026-01-15", "sent", "2025-12-22 16:00:00", "2025-12-22 17:00:00"),
+            ]
+        )
+
+        # Quote lines
+        conn.executemany(
+            "INSERT INTO quote_lines (id, quote_id, item_id, qty, unit_price, line_total) VALUES (?, ?, ?, ?, ?, ?)",
+            [
+                ("QL-0001-1", "QT-0001", "ITEM-ELVIS-20", 24, 12.0, 288.0),
+                ("QL-0002-1", "QT-0002", "ITEM-CLASSIC-10", 20, 10.0, 200.0),
+                ("QL-0002-2", "QT-0002", "ITEM-PIRATE-15", 10, 14.5, 145.0),
+                ("QL-0002-3", "QT-0002", "ITEM-NINJA-12", 8, 13.0, 104.0),
+                ("QL-0003-1", "QT-0003", "ITEM-CLASSIC-10", 10, 10.0, 100.0),
+                ("QL-0004-1", "QT-0004", "ITEM-PIRATE-15", 40, 14.5, 580.0),
             ]
         )
 
