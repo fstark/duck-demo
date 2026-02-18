@@ -20,6 +20,7 @@ from services import (
     production_service,
     recipe_service,
     messaging_service,
+    invoice_service,
     pending_action_service,
 )
 from utils import ui_href
@@ -414,6 +415,32 @@ def register_routes(mcp):
         email_id = request.path_params.get("email_id")
         try:
             result = messaging_service.get_email(email_id)
+            return _json(result)
+        except Exception as exc:
+            return _json({"error": str(exc)}, status_code=404)
+    
+    @mcp.custom_route("/api/invoices", methods=["GET", "OPTIONS"])
+    async def api_invoices(request):
+        if request.method == "OPTIONS":
+            return _cors_preflight(["GET"])
+        qp = request.query_params
+        limit = int(qp.get("limit", 50))
+        result = invoice_service.list_invoices(
+            customer_id=qp.get("customer_id"),
+            status=qp.get("status"),
+            limit=limit
+        )
+        return _json(result)
+    
+    @mcp.custom_route("/api/invoices/{invoice_id}", methods=["GET", "OPTIONS"])
+    async def api_invoice_detail(request):
+        if request.method == "OPTIONS":
+            return _cors_preflight(["GET"])
+        invoice_id = request.path_params.get("invoice_id")
+        try:
+            result = invoice_service.get_invoice(invoice_id)
+            if not result:
+                return _json({"error": "Invoice not found"}, status_code=404)
             return _json(result)
         except Exception as exc:
             return _json({"error": str(exc)}, status_code=404)

@@ -31,7 +31,7 @@ def dict_rows(rows: Iterable[sqlite3.Row]) -> list[dict]:
 
 
 def generate_id(conn: sqlite3.Connection, prefix: str, table: str, column: str = "id") -> str:
-    seed_defaults = {"CUST": 101, "SO": 1041, "SHIP": 899}
+    seed_defaults = {"CUST": 101, "SO": 1041, "SHIP": 899, "INV": 2000, "PAY": 3000}
     cur = conn.execute(f"SELECT {column} FROM {table} WHERE {column} LIKE ?", (f"{prefix}-%",))
     max_num = seed_defaults.get(prefix, 0)
     for row in cur.fetchall():

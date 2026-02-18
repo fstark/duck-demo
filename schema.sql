@@ -177,6 +177,38 @@ CREATE TABLE IF NOT EXISTS emails (
     sent_at TEXT
 );
 
+-- Invoices: generated from sales orders for billing
+-- Status: draft -> issued -> paid / overdue
+CREATE TABLE IF NOT EXISTS invoices (
+    id TEXT PRIMARY KEY,
+    sales_order_id TEXT NOT NULL,
+    customer_id TEXT NOT NULL,
+    invoice_date TEXT,
+    due_date TEXT,
+    subtotal REAL NOT NULL DEFAULT 0,
+    discount REAL NOT NULL DEFAULT 0,
+    shipping REAL NOT NULL DEFAULT 0,
+    tax REAL NOT NULL DEFAULT 0,
+    total REAL NOT NULL DEFAULT 0,
+    currency TEXT NOT NULL DEFAULT 'EUR',
+    status TEXT NOT NULL DEFAULT 'draft',
+    issued_at TEXT,
+    paid_at TEXT,
+    created_at TEXT NOT NULL
+);
+
+-- Payments: record money received against invoices
+CREATE TABLE IF NOT EXISTS payments (
+    id TEXT PRIMARY KEY,
+    invoice_id TEXT NOT NULL,
+    amount REAL NOT NULL,
+    payment_method TEXT NOT NULL DEFAULT 'bank_transfer',
+    payment_date TEXT NOT NULL,
+    reference TEXT,
+    notes TEXT,
+    created_at TEXT NOT NULL
+);
+
 -- Pending actions: human-in-the-loop confirmation gate for all mutations
 -- Status: pending -> confirmed / rejected
 CREATE TABLE IF NOT EXISTS pending_actions (

@@ -1,4 +1,4 @@
-import { Customer, Item, SalesOrder, SalesOrderDetail, Shipment, StockSummary, QuoteOption, ProductionOrder, Recipe, Supplier, PurchaseOrder, Email, EmailDetail } from './types'
+import { Customer, Item, SalesOrder, SalesOrderDetail, Shipment, StockSummary, QuoteOption, ProductionOrder, Recipe, Supplier, PurchaseOrder, Email, EmailDetail, Invoice, InvoiceDetail } from './types'
 
 const API_BASE = import.meta.env.VITE_API_BASE || '/api'
 
@@ -53,4 +53,12 @@ export const api = {
     return fetchJson<{ emails: Email[] }>(`/emails${query ? `?${query}` : ''}`)
   },
   emailDetail: (id: string) => fetchJson<EmailDetail>(`/emails/${encodeURIComponent(id)}`),
+  invoices: (q?: { customer_id?: string; status?: string }) => {
+    const params = new URLSearchParams()
+    if (q?.customer_id) params.set('customer_id', q.customer_id)
+    if (q?.status) params.set('status', q.status)
+    const query = params.toString()
+    return fetchJson<{ invoices: Invoice[] }>(`/invoices${query ? `?${query}` : ''}`)
+  },
+  invoiceDetail: (id: string) => fetchJson<InvoiceDetail>(`/invoices/${encodeURIComponent(id)}`),
 }

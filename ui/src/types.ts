@@ -235,3 +235,55 @@ export type QuoteOption = {
   can_arrive_by: string
   notes?: string
 }
+
+export type Invoice = {
+  id: string
+  sales_order_id: string
+  customer_id: string
+  customer_name?: string
+  customer_company?: string
+  invoice_date?: string
+  due_date?: string
+  subtotal: number
+  discount: number
+  shipping: number
+  tax: number
+  total: number
+  currency: string
+  status: 'draft' | 'issued' | 'paid' | 'overdue'
+  issued_at?: string
+  paid_at?: string
+  created_at: string
+  ui_url?: string
+}
+
+export type InvoiceDetail = {
+  invoice: Invoice
+  customer?: {
+    id: string
+    name: string
+    company?: string
+    email?: string
+    city?: string
+    ui_url?: string
+  }
+  sales_order?: {
+    id: string
+    status?: string
+    created_at?: string
+    ui_url?: string
+  }
+  lines: Array<{ sku: string; qty: number }>
+  payments: Array<{
+    id: string
+    invoice_id: string
+    amount: number
+    payment_method: string
+    payment_date: string
+    reference?: string
+    notes?: string
+    created_at: string
+  }>
+  amount_paid: number
+  balance_due: number
+}

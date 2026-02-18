@@ -18,6 +18,7 @@ from services import (
     recipe_service,
     purchase_service,
     messaging_service,
+    invoice_service,
     stats_service,
     admin_service,
     chart_service,
@@ -750,6 +751,102 @@ def register_tools(mcp):
             **Always relay the message verbatim to the user to confirm the action.**
         """
         return messaging_service.delete_email(email_id)
+    
+    # ── Invoice & Payment tools ──────────────────────────────────────────
+    
+    @mcp.tool(name="invoice_create", meta={"tags": ["sales"]})
+    @log_tool("invoice_create")
+    def invoice_create(sales_order_id: str) -> Dict[str, Any]:
+        """
+        Create a draft invoice from a sales order. Pricing is computed automatically.
+        Returns a pending action.
+        
+        Parameters:
+            sales_order_id: The sales order to invoice (e.g., 'SO-1041')
+        
+        Returns:
+            A pending action. **Present the summary to the user and wait for explicit confirmation
+            before calling action_confirm.**
+        """
+        summary = f"Create invoice for sales order {sales_order_id}"
+        return pending_action_service.create("create_invoice", {"sales_order_id": sales_order_id}, summary)
+    
+    @mcp.tool(name="invoice_get", meta={"tags": ["sales"]})
+    @log_tool("invoice_get")
+    def invoice_get(invoice_id: str) -> Dict[str, Any]:
+        """
+        Get full invoice details including customer, lines, pricing breakdown, and payments.
+        
+        Parameters:
+            invoice_id: The invoice ID (e.g., 'INV-2001')
+        
+        Returns:
+            Invoice details with customer, sales_order, lines, payments, amount_paid, and balance_due
+        """
+        result = invoice_service.get_invoice(invoice_id)
+        if not result:
+            raise ValueError(f"Invoice {invoice_id} not found")
+        return result
+    
+    @mcp.tool(name="invoice_list", meta={"tags": ["sales"]})
+    @log_tool("invoice_list")
+    def invoice_list(customer_id: Optional[str] = None, status: Optional[str] = None, limit: int = 50) -> Dict[str, Any]:
+        """
+        List invoices with optional filters.
+        
+        Parameters:
+            customer_id: Optional customer ID to filter by
+            status: Optional status filter (draft, issued, paid, overdue)
+            limit: Maximum results (default: 50)
+        
+        Returns:
+            Dictionary with invoices array
+        """
+        return invoice_service.list_invoices(customer_id, status, limit)
+    
+    @mcp.tool(name="invoice_issue", meta={"tags": ["sales"]})
+    @log_tool("invoice_issue")
+    def invoice_issue(invoice_id: str) -> Dict[str, Any]:
+        """
+        Issue a draft invoice to the customer. Sets the due date based on payment terms (30 days).
+        
+        Parameters:
+            invoice_id: The invoice ID to issue (e.g., 'INV-2001')
+        
+        Returns:
+            Dictionary with invoice_id, status, due_date, and message
+        """
+        return invoice_service.issue_invoice(invoice_id)
+    
+    @mcp.tool(name="invoice_record_payment", meta={"tags": ["sales"]})
+    @log_tool("invoice_record_payment")
+    def invoice_record_payment(
+        invoice_id: str,
+        amount: float,
+        payment_method: str = "bank_transfer",
+        reference: Optional[str] = None,
+        notes: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Record a payment against an invoice. Auto-marks invoice as 'paid' when fully covered.
+        Returns a pending action.
+        
+        Parameters:
+            invoice_id: The invoice to pay (e.g., 'INV-2001')
+            amount: Payment amount in invoice currency
+            payment_method: Payment method (bank_transfer, credit_card, cash, cheque)
+            reference: Optional payment reference (e.g., bank transaction ID)
+            notes: Optional notes
+        
+        Returns:
+            A pending action. **Present the summary to the user and wait for explicit confirmation
+            before calling action_confirm.**
+        """
+        summary = f"Record payment of {amount:.2f} on invoice {invoice_id} via {payment_method}"
+        return pending_action_service.create("record_payment", {
+            "invoice_id": invoice_id, "amount": amount,
+            "payment_method": payment_method, "reference": reference, "notes": notes,
+        }, summary)
     
     @mcp.tool(name="chart_generate", meta={"tags": ["shared"]})
     @log_tool("chart_generate")

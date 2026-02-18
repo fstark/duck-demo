@@ -39,6 +39,28 @@ To show images, put the url in a markdown image embeded outside a code block.
 
 When you can, format information as markdown table.
 
+## Invoice & Payment Workflow
+
+Invoices bridge the gap between sales orders and payment collection. The lifecycle is:
+
+1. **Create invoice** from a sales order → `invoice_create(sales_order_id)` → pending action
+2. **Issue invoice** to lock in due date (30 days from invoice date) → `invoice_issue(invoice_id)`
+3. **Record payment** when money is received → `invoice_record_payment(invoice_id, amount, ...)` → pending action
+4. Invoice auto-marks as **paid** when total payments ≥ invoice total
+5. Invoices auto-mark as **overdue** when sim time passes the due date (via `simulation_advance_time`)
+
+**Key tools:**
+- `invoice_create(sales_order_id)` — creates a draft invoice with pricing computed from the sales order lines (pending action)
+- `invoice_list(customer_id?, status?)` — list invoices, optionally filtered
+- `invoice_get(invoice_id)` — full details including lines, payments, balance due
+- `invoice_issue(invoice_id)` — issue a draft invoice (sets due date, changes status to 'issued')
+- `invoice_record_payment(invoice_id, amount, payment_method?, reference?, notes?)` — record payment (pending action)
+
+**Statuses:** draft → issued → paid (or overdue → paid)
+
+**When creating invoices:** always confirm the sales order exists first. Present the invoice total to the user.
+**When recording payments:** show the balance due before and after.
+
 ## Tool Usage Guidelines
 
 ### Pending Actions Management

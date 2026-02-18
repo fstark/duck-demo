@@ -523,6 +523,32 @@ def seed(from_admin=False):
             ]
         )
 
+        # Invoices
+        conn.executemany(
+            "INSERT INTO invoices (id, sales_order_id, customer_id, invoice_date, due_date, subtotal, discount, shipping, tax, total, currency, status, issued_at, paid_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            [
+                # INV-2001: paid invoice for SO-1030 (10 Classic ducks, €140 total)
+                ("INV-2001", "SO-1030", "CUST-0044", "2025-12-10", "2026-01-09",
+                 120.0, 0.0, 20.0, 0.0, 140.0, "EUR", "paid",
+                 "2025-12-10 10:00:00", "2025-12-15 14:30:00", "2025-12-10 10:00:00"),
+                # INV-2002: issued invoice for SO-1037 (50 Elvis ducks, €570 total)
+                ("INV-2002", "SO-1037", "CUST-0044", "2025-12-15", "2026-01-14",
+                 600.0, 30.0, 0.0, 0.0, 570.0, "EUR", "issued",
+                 "2025-12-15 11:00:00", None, "2025-12-15 11:00:00"),
+            ]
+        )
+
+        # Payments
+        conn.executemany(
+            "INSERT INTO payments (id, invoice_id, amount, payment_method, payment_date, reference, notes, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            [
+                # PAY-3001: full payment for INV-2001
+                ("PAY-3001", "INV-2001", 140.0, "bank_transfer", "2025-12-15",
+                 "VIREMENT-2025-8834", "Payment received for classic ducks order",
+                 "2025-12-15 14:30:00"),
+            ]
+        )
+
         conn.commit()
         print(f"Seeded demo database at {DB_PATH}")
     finally:

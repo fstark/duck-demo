@@ -87,10 +87,21 @@ class SimulationService:
                 "SELECT sim_time FROM simulation_state WHERE id = 1"
             ).fetchone()[0]
             
-            return {
+            # Auto-mark overdue invoices based on new sim time
+            overdue_count = conn.execute(
+                "UPDATE invoices SET status = 'overdue' "
+                "WHERE status = 'issued' AND due_date IS NOT NULL AND due_date < ?",
+                (new_time[:10],)
+            ).rowcount
+            conn.commit()
+            
+            result = {
                 "old_time": old_time,
                 "new_time": new_time
             }
+            if overdue_count > 0:
+                result["invoices_marked_overdue"] = overdue_count
+            return result
 
 
 class CustomerService:
@@ -998,6 +1009,228 @@ class MessagingService:
             return {"email_id": email_id, "message": f"Email {email_id} deleted"}
 
 
+class InvoiceService:
+    """Service for invoice and payment operations."""
+
+    @staticmethod
+    def create_invoice(sales_order_id: str) -> Dict[str, Any]:
+        """Create a draft invoice from a sales order, pulling pricing automatically."""
+        with db_conn() as conn:
+            # Validate the sales order exists
+            so = conn.execute("SELECT * FROM sales_orders WHERE id = ?", (sales_order_id,)).fetchone()
+            if not so:
+                raise ValueError(f"Sales order {sales_order_id} not found")
+
+            # Compute pricing from the sales order lines
+            pricing_result = PricingService.compute_pricing(sales_order_id)
+            p = pricing_result["pricing"]
+
+            sim_time = SimulationService.get_current_time()
+            inv_id = generate_id(conn, "INV", "invoices")
+
+            conn.execute(
+                "INSERT INTO invoices (id, sales_order_id, customer_id, invoice_date, due_date, subtotal, discount, shipping, tax, total, currency, status, created_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', ?)",
+                (
+                    inv_id,
+                    sales_order_id,
+                    so["customer_id"],
+                    sim_time[:10],  # invoice_date = today
+                    None,  # due_date set on issue
+                    p["subtotal"],
+                    p["discount"],
+                    p["shipping"],
+                    p.get("tax", 0.0),
+                    p["total"],
+                    p["currency"],
+                    sim_time,
+                ),
+            )
+            conn.commit()
+            return {
+                "invoice_id": inv_id,
+                "sales_order_id": sales_order_id,
+                "customer_id": so["customer_id"],
+                "total": p["total"],
+                "currency": p["currency"],
+                "status": "draft",
+                "ui_url": ui_href("invoices", inv_id),
+                "message": f"📄 Invoice {inv_id} created for order {sales_order_id} — {p['currency']} {p['total']:.2f}",
+            }
+
+    @staticmethod
+    def issue_invoice(invoice_id: str) -> Dict[str, Any]:
+        """Issue a draft invoice: sets due_date and status='issued'."""
+        with db_conn() as conn:
+            inv = conn.execute("SELECT * FROM invoices WHERE id = ?", (invoice_id,)).fetchone()
+            if not inv:
+                raise ValueError(f"Invoice {invoice_id} not found")
+            if inv["status"] != "draft":
+                raise ValueError(f"Invoice {invoice_id} is '{inv['status']}', must be 'draft' to issue")
+
+            sim_time = SimulationService.get_current_time()
+            # due_date = invoice_date + payment terms
+            from datetime import datetime, timedelta
+            invoice_date = datetime.fromisoformat(inv["invoice_date"])
+            due_date = (invoice_date + timedelta(days=config.INVOICE_PAYMENT_TERMS_DAYS)).strftime("%Y-%m-%d")
+
+            conn.execute(
+                "UPDATE invoices SET status = 'issued', due_date = ?, issued_at = ? WHERE id = ?",
+                (due_date, sim_time, invoice_id),
+            )
+            conn.commit()
+            return {
+                "invoice_id": invoice_id,
+                "status": "issued",
+                "due_date": due_date,
+                "ui_url": ui_href("invoices", invoice_id),
+                "message": f"📨 Invoice {invoice_id} issued — due {due_date}",
+            }
+
+    @staticmethod
+    def get_invoice(invoice_id: str) -> Optional[Dict[str, Any]]:
+        """Get full invoice details with customer, sales order lines, and payments."""
+        with db_conn() as conn:
+            inv = conn.execute("SELECT * FROM invoices WHERE id = ?", (invoice_id,)).fetchone()
+            if not inv:
+                return None
+            inv_dict = dict(inv)
+            inv_dict["ui_url"] = ui_href("invoices", invoice_id)
+
+            # Customer
+            customer = conn.execute("SELECT * FROM customers WHERE id = ?", (inv["customer_id"],)).fetchone()
+            customer_dict = dict(customer) if customer else None
+            if customer_dict:
+                customer_dict["ui_url"] = ui_href("customers", customer_dict["id"])
+
+            # Sales order lines (computed, not stored)
+            lines = dict_rows(conn.execute(
+                "SELECT i.sku, sol.qty FROM sales_order_lines sol "
+                "JOIN items i ON sol.item_id = i.id "
+                "WHERE sol.sales_order_id = ?",
+                (inv["sales_order_id"],),
+            ).fetchall())
+
+            # Sales order summary
+            so = conn.execute("SELECT id, status, created_at FROM sales_orders WHERE id = ?", (inv["sales_order_id"],)).fetchone()
+            so_dict = dict(so) if so else None
+            if so_dict:
+                so_dict["ui_url"] = ui_href("orders", so_dict["id"])
+
+            # Payments
+            payments = dict_rows(conn.execute(
+                "SELECT * FROM payments WHERE invoice_id = ? ORDER BY payment_date",
+                (invoice_id,),
+            ).fetchall())
+            amount_paid = sum(p["amount"] for p in payments)
+
+            return {
+                "invoice": inv_dict,
+                "customer": customer_dict,
+                "sales_order": so_dict,
+                "lines": lines,
+                "payments": payments,
+                "amount_paid": amount_paid,
+                "balance_due": inv_dict["total"] - amount_paid,
+            }
+
+    @staticmethod
+    def list_invoices(
+        customer_id: Optional[str] = None,
+        status: Optional[str] = None,
+        limit: int = 50,
+    ) -> Dict[str, Any]:
+        """List invoices with optional filters."""
+        filters: List[str] = []
+        params: List[Any] = []
+        if customer_id:
+            filters.append("inv.customer_id = ?")
+            params.append(customer_id)
+        if status:
+            filters.append("inv.status = ?")
+            params.append(status)
+        where_clause = f"WHERE {' AND '.join(filters)}" if filters else ""
+        sql = (
+            f"SELECT inv.*, c.name as customer_name, c.company as customer_company "
+            f"FROM invoices inv LEFT JOIN customers c ON inv.customer_id = c.id "
+            f"{where_clause} ORDER BY inv.created_at DESC LIMIT ?"
+        )
+        params.append(limit)
+        with db_conn() as conn:
+            rows = dict_rows(conn.execute(sql, params))
+            for row in rows:
+                row["ui_url"] = ui_href("invoices", row["id"])
+            return {"invoices": rows}
+
+    @staticmethod
+    def record_payment(
+        invoice_id: str,
+        amount: float,
+        payment_method: str = "bank_transfer",
+        reference: Optional[str] = None,
+        notes: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Record a payment against an invoice. Auto-marks as 'paid' when fully covered."""
+        with db_conn() as conn:
+            inv = conn.execute("SELECT * FROM invoices WHERE id = ?", (invoice_id,)).fetchone()
+            if not inv:
+                raise ValueError(f"Invoice {invoice_id} not found")
+            if inv["status"] not in ("issued", "overdue"):
+                raise ValueError(f"Invoice {invoice_id} is '{inv['status']}', must be 'issued' or 'overdue' to accept payment")
+
+            sim_time = SimulationService.get_current_time()
+            pay_id = generate_id(conn, "PAY", "payments")
+            conn.execute(
+                "INSERT INTO payments (id, invoice_id, amount, payment_method, payment_date, reference, notes, created_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (pay_id, invoice_id, amount, payment_method, sim_time[:10], reference, notes, sim_time),
+            )
+
+            # Check if fully paid
+            total_paid = conn.execute(
+                "SELECT COALESCE(SUM(amount), 0) as total FROM payments WHERE invoice_id = ?",
+                (invoice_id,),
+            ).fetchone()["total"]
+
+            new_status = inv["status"]
+            if total_paid >= inv["total"]:
+                new_status = "paid"
+                conn.execute(
+                    "UPDATE invoices SET status = 'paid', paid_at = ? WHERE id = ?",
+                    (sim_time, invoice_id),
+                )
+
+            conn.commit()
+            return {
+                "payment_id": pay_id,
+                "invoice_id": invoice_id,
+                "amount": amount,
+                "total_paid": total_paid,
+                "balance_due": inv["total"] - total_paid,
+                "invoice_status": new_status,
+                "ui_url": ui_href("invoices", invoice_id),
+            }
+            balance = inv["total"] - total_paid
+            currency = inv["currency"]
+            if new_status == "paid":
+                result["message"] = f"💰 Payment {pay_id} of {currency} {amount:.2f} recorded on invoice {invoice_id}. ✅ Invoice fully paid!"
+            else:
+                result["message"] = f"💰 Payment {pay_id} of {currency} {amount:.2f} recorded on invoice {invoice_id}. Balance due: {currency} {balance:.2f}"
+            return result
+
+    @staticmethod
+    def mark_overdue(sim_time: str) -> int:
+        """Mark issued invoices as overdue if sim_time > due_date. Returns count updated."""
+        with db_conn() as conn:
+            cur = conn.execute(
+                "UPDATE invoices SET status = 'overdue' "
+                "WHERE status = 'issued' AND due_date IS NOT NULL AND due_date < ?",
+                (sim_time[:10],),
+            )
+            conn.commit()
+            return cur.rowcount
+
+
 class StatsService:
     """Service for statistics operations."""
     
@@ -1041,6 +1274,8 @@ class StatsService:
             "shipments": {"table": "shipments", "join": None, "field_mapping": {}, "date_field_table": None, "valid_fields": ["id"], "valid_groups": ["status"], "date_fields": ["planned_departure", "planned_arrival"]},
             "shipment_lines": {"table": "shipment_lines", "join": "LEFT JOIN shipments ON shipment_lines.shipment_id = shipments.id", "field_mapping": {}, "date_field_table": "shipments", "valid_fields": ["qty"], "valid_groups": ["shipment_id", "item_id"], "date_fields": ["planned_departure", "planned_arrival"]},
             "purchase_orders": {"table": "purchase_orders", "join": None, "field_mapping": {}, "date_field_table": None, "valid_fields": ["qty"], "valid_groups": ["status", "item_id", "supplier_id"], "date_fields": ["ordered_at", "expected_delivery", "received_at"]},
+            "invoices": {"table": "invoices", "join": None, "field_mapping": {}, "date_field_table": None, "valid_fields": ["total", "subtotal"], "valid_groups": ["status", "customer_id"], "date_fields": ["invoice_date", "due_date", "issued_at", "paid_at", "created_at"]},
+            "payments": {"table": "payments", "join": None, "field_mapping": {}, "date_field_table": None, "valid_fields": ["amount"], "valid_groups": ["invoice_id", "payment_method"], "date_fields": ["payment_date", "created_at"]},
         }
         if entity not in entity_config:
             return {"error": f"Invalid entity: {entity}. Valid options: {', '.join(entity_config.keys())}"}
@@ -1614,6 +1849,16 @@ class PendingActionService:
                 params.get("warehouse", "MAIN"), params.get("location", "RM-A"),
             )
         
+        def _exec_create_invoice(params, conn):
+            return InvoiceService.create_invoice(params["sales_order_id"])
+        
+        def _exec_record_payment(params, conn):
+            return InvoiceService.record_payment(
+                params["invoice_id"], params["amount"],
+                params.get("payment_method", "bank_transfer"),
+                params.get("reference"), params.get("notes"),
+            )
+        
         PendingActionService._executors = {
             "create_customer": _exec_create_customer,
             "create_sales_order": _exec_create_sales_order,
@@ -1625,6 +1870,8 @@ class PendingActionService:
             "create_purchase_order": _exec_create_purchase_order,
             "restock_materials": _exec_restock_materials,
             "receive_purchase_order": _exec_receive_purchase_order,
+            "create_invoice": _exec_create_invoice,
+            "record_payment": _exec_record_payment,
         }
     
     @staticmethod
@@ -1747,6 +1994,7 @@ production_service = ProductionService()
 recipe_service = RecipeService()
 purchase_service = PurchaseService()
 messaging_service = MessagingService()
+invoice_service = InvoiceService()
 stats_service = StatsService()
 admin_service = AdminService()
 chart_service = ChartService()
