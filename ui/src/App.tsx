@@ -5,7 +5,7 @@ import { Card } from './components/Card'
 import { Table } from './components/Table'
 import { Badge } from './components/Badge'
 import { api } from './api'
-import { Customer, Item, SalesOrder, SalesOrderDetail, StockSummary, Shipment, ProductionOrder, Email, Invoice } from './types'
+import { Customer, Item, SalesOrder, SalesOrderDetail, StockSummary, Shipment, ProductionOrder, Email, Invoice, Quote } from './types'
 import { NavigationProvider, useNavigation } from './contexts/NavigationContext'
 import { Quantity } from './utils/quantity.tsx'
 import { formatCurrency } from './utils/currency'
@@ -105,6 +105,9 @@ function AppContent() {
   const [draftsCount, setDraftsCount] = useState(0)
   const [invoicesCount, setInvoicesCount] = useState(0)
   const [invoicesOutstanding, setInvoicesOutstanding] = useState(0)
+  const [quotesCount, setQuotesCount] = useState(0)
+  const [quotesPending, setQuotesPending] = useState(0)
+  const [totalQuotesAmount, setTotalQuotesAmount] = useState(0)
   const [view, setView] = useState<ViewState>(() => parseHash())
   const [apiError, setApiError] = useState<string | null>(null)
 
@@ -139,6 +142,13 @@ function AppContent() {
       const outstanding = res.invoices?.filter(i => i.status === 'issued' || i.status === 'overdue').length || 0
       setInvoicesOutstanding(outstanding)
     }).catch(handleApiError)
+    api.quotes().then((res) => {
+      setQuotesCount(res.quotes?.length || 0)
+      const pending = res.quotes?.filter(q => q.status === 'draft' || q.status === 'sent').length || 0
+      setQuotesPending(pending)
+      const total = res.quotes?.reduce((sum, q) => sum + (q.total || 0), 0) || 0
+      setTotalQuotesAmount(total)
+    }).catch(handleApiError)
   }, [])
 
   useEffect(() => {
@@ -147,39 +157,91 @@ function AppContent() {
     return () => window.removeEventListener('hashchange', handler)
   }, [])
 
-  const Nav = () => (
-    <div className="flex gap-3 text-sm text-slate-700">
-      {(
-        [
-          { page: 'home', label: 'Overview' },
-          { page: 'customers', label: 'Customers' },
-          { page: 'items', label: 'Items' },
-          { page: 'stock', label: 'Stock' },
-          { page: 'quotes', label: 'Quotes' },
-          { page: 'orders', label: 'Sales Orders' },
-          { page: 'shipments', label: 'Shipments' },
-          { page: 'emails', label: 'Emails' },
-          { page: 'invoices', label: 'Invoices' },
-          { page: 'production', label: 'Production' },
-          { page: 'recipes', label: 'Recipes' },
-          { page: 'suppliers', label: 'Suppliers' },
-          { page: 'purchase-orders', label: 'Purchases' },
-        ] as Array<{ page: ViewPage; label: string }>
-      ).map((link) => (
+  const navGroups = [
+    {
+      label: 'Sales & CRM',
+      items: [
+        { page: 'customers' as ViewPage, label: 'Customers' },
+        { page: 'quotes' as ViewPage, label: 'Quotes' },
+        { page: 'orders' as ViewPage, label: 'Orders' },
+        { page: 'shipments' as ViewPage, label: 'Shipments' },
+        { page: 'invoices' as ViewPage, label: 'Invoices' },
+        { page: 'emails' as ViewPage, label: 'Emails' },
+      ],
+    },
+    {
+      label: 'Catalog',
+      items: [
+        { page: 'items' as ViewPage, label: 'Items' },
+        { page: 'stock' as ViewPage, label: 'Stock' },
+        { page: 'recipes' as ViewPage, label: 'Recipes' },
+      ],
+    },
+    {
+      label: 'Supply Chain',
+      items: [
+        { page: 'production' as ViewPage, label: 'Production' },
+        { page: 'suppliers' as ViewPage, label: 'Suppliers' },
+        { page: 'purchase-orders' as ViewPage, label: 'Purchases' },
+      ],
+    },
+  ]
+
+  const Nav = () => {
+    const isGroupActive = (group: typeof navGroups[0]) => 
+      group.items.some((item) => view.page === item.page)
+
+    return (
+      <div className="flex items-center gap-2 text-sm text-slate-700">
         <button
-          key={link.page}
-          className={`px-3 py-1 rounded ${view.page === link.page ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}
+          className={`px-3 py-1.5 rounded ${view.page === 'home' ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}
           onClick={() => {
             clearListContext()
-            setHash(link.page)
+            setHash('home')
           }}
           type="button"
         >
-          {link.label}
+          Overview
         </button>
-      ))}
-    </div>
-  )
+        {navGroups.map((group) => (
+          <div key={group.label} className="relative group">
+            <button
+              className={`px-3 py-1.5 rounded flex items-center gap-1 ${
+                isGroupActive(group) 
+                  ? 'bg-slate-900 text-white' 
+                  : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+              }`}
+              type="button"
+            >
+              {group.label}
+              <svg className="w-3 h-3 opacity-60" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+            <div className="absolute left-0 top-full mt-1 bg-white rounded-lg shadow-lg border border-slate-200 py-1 min-w-[160px] opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50">
+              {group.items.map((link) => (
+                <button
+                  key={link.page}
+                  className={`w-full text-left px-3 py-1.5 ${
+                    view.page === link.page 
+                      ? 'bg-slate-100 text-slate-900 font-medium' 
+                      : 'text-slate-700 hover:bg-slate-50'
+                  }`}
+                  onClick={() => {
+                    clearListContext()
+                    setHash(link.page)
+                  }}
+                  type="button"
+                >
+                  {link.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    )
+  }
 
   return (
     <Layout>
@@ -199,86 +261,74 @@ function AppContent() {
         <Nav />
 
         {view.page === 'home' && (
-          <section>
-            <SectionHeading id="overview" title="Overview" />
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mt-2">
-              <Card title="Customers">
-                <div className="text-2xl font-semibold"><Quantity value={customersCount} className="text-left block" /></div>
-                <div className="text-sm text-slate-600 mb-2">total customers</div>
-                <button className="text-brand-600 hover:underline text-sm" onClick={() => setHash('customers')} type="button">
-                  View customers
-                </button>
-              </Card>
-              <Card title="Items">
-                <div className="text-2xl font-semibold"><Quantity value={itemsCount} className="text-left block" /></div>
-                <div className="text-sm text-slate-600 mb-2">total items</div>
-                <button className="text-brand-600 hover:underline text-sm" onClick={() => setHash('items')} type="button">
-                  View items
-                </button>
-              </Card>
-              <Card title="Stock">
-                <div className="text-2xl font-semibold"><Quantity value={stockCount} className="text-left block" /></div>
-                <div className="text-sm text-slate-600 mb-2">stock records</div>
-                <button className="text-brand-600 hover:underline text-sm" onClick={() => setHash('stock')} type="button">
-                  View stock
-                </button>
-              </Card>
-              <Card title="Sales orders">
-                <div className="text-2xl font-semibold"><Quantity value={ordersCount} className="text-left block" /></div>
-                <div className="text-sm text-slate-600 mb-2">orders loaded · {formatCurrency(totalSalesAmount)}</div>
-                <button className="text-brand-600 hover:underline text-sm" onClick={() => setHash('orders')} type="button">
-                  View orders
-                </button>
-              </Card>
-              <Card title="Shipments">
-                <div className="text-2xl font-semibold"><Quantity value={shipmentsCount} className="text-left block" /></div>
-                <div className="text-sm text-slate-600 mb-2">shipments loaded</div>
-                <button className="text-brand-600 hover:underline text-sm" onClick={() => setHash('shipments')} type="button">
-                  View shipments
-                </button>
-              </Card>
-              <Card title="Production Orders">
-                <div className="text-2xl font-semibold"><Quantity value={productionCount} className="text-left block" /></div>
-                <div className="text-sm text-slate-600 mb-2">production orders · <Quantity value={totalProductionQty} className="font-mono inline" /> items</div>
-                <button className="text-brand-600 hover:underline text-sm" onClick={() => setHash('production')} type="button">
-                  View production
-                </button>
-              </Card>
-              <Card title="Recipes">
-                <div className="text-2xl font-semibold"><Quantity value={recipesCount} className="text-left block" /></div>
-                <div className="text-sm text-slate-600 mb-2">recipes loaded</div>
-                <button className="text-brand-600 hover:underline text-sm" onClick={() => setHash('recipes')} type="button">
-                  View recipes
-                </button>
-              </Card>
-              <Card title="Suppliers">
-                <div className="text-2xl font-semibold"><Quantity value={suppliersCount} className="text-left block" /></div>
-                <div className="text-sm text-slate-600 mb-2">suppliers loaded</div>
-                <button className="text-brand-600 hover:underline text-sm" onClick={() => setHash('suppliers')} type="button">
-                  View suppliers
-                </button>
-              </Card>
-              <Card title="Purchase Orders">
-                <div className="text-2xl font-semibold"><Quantity value={activePurchasesCount} className="text-left block" /></div>
-                <div className="text-sm text-slate-600 mb-2">active purchase orders</div>
-                <button className="text-brand-600 hover:underline text-sm" onClick={() => setHash('purchase-orders')} type="button">
-                  View purchase orders
-                </button>
-              </Card>
-              <Card title="Emails">
-                <div className="text-2xl font-semibold"><Quantity value={draftsCount} className="text-left block" /></div>
-                <div className="text-sm text-slate-600 mb-2">draft emails</div>
-                <button className="text-brand-600 hover:underline text-sm" onClick={() => setHash('emails')} type="button">
-                  View emails
-                </button>
-              </Card>
-              <Card title="Invoices">
-                <div className="text-2xl font-semibold"><Quantity value={invoicesCount} className="text-left block" /></div>
-                <div className="text-sm text-slate-600 mb-2">invoices · {invoicesOutstanding} outstanding</div>
-                <button className="text-brand-600 hover:underline text-sm" onClick={() => setHash('invoices')} type="button">
-                  View invoices
-                </button>
-              </Card>
+          <section className="space-y-8">
+            {/* Sales & CRM */}
+            <div>
+              <h2 className="text-lg font-semibold text-slate-800 mb-3">Sales & CRM</h2>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <Card title="Customers" onClick={() => setHash('customers')}>
+                  <div className="text-2xl font-semibold"><Quantity value={customersCount} className="text-left block" /></div>
+                  <div className="text-sm text-slate-600">total customers</div>
+                </Card>
+                <Card title="Quotes" onClick={() => setHash('quotes')}>
+                  <div className="text-2xl font-semibold"><Quantity value={quotesCount} className="text-left block" /></div>
+                  <div className="text-sm text-slate-600">{quotesPending} pending · {formatCurrency(totalQuotesAmount)}</div>
+                </Card>
+                <Card title="Sales Orders" onClick={() => setHash('orders')}>
+                  <div className="text-2xl font-semibold"><Quantity value={ordersCount} className="text-left block" /></div>
+                  <div className="text-sm text-slate-600">orders · {formatCurrency(totalSalesAmount)}</div>
+                </Card>
+                <Card title="Shipments" onClick={() => setHash('shipments')}>
+                  <div className="text-2xl font-semibold"><Quantity value={shipmentsCount} className="text-left block" /></div>
+                  <div className="text-sm text-slate-600">shipments</div>
+                </Card>
+                <Card title="Invoices" onClick={() => setHash('invoices')}>
+                  <div className="text-2xl font-semibold"><Quantity value={invoicesCount} className="text-left block" /></div>
+                  <div className="text-sm text-slate-600">{invoicesOutstanding} outstanding</div>
+                </Card>
+                <Card title="Emails" onClick={() => setHash('emails')}>
+                  <div className="text-2xl font-semibold"><Quantity value={draftsCount} className="text-left block" /></div>
+                  <div className="text-sm text-slate-600">draft emails</div>
+                </Card>
+              </div>
+            </div>
+
+            {/* Catalog & Inventory */}
+            <div>
+              <h2 className="text-lg font-semibold text-slate-800 mb-3">Catalog & Inventory</h2>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <Card title="Items" onClick={() => setHash('items')}>
+                  <div className="text-2xl font-semibold"><Quantity value={itemsCount} className="text-left block" /></div>
+                  <div className="text-sm text-slate-600">catalog items</div>
+                </Card>
+                <Card title="Stock" onClick={() => setHash('stock')}>
+                  <div className="text-2xl font-semibold"><Quantity value={stockCount} className="text-left block" /></div>
+                  <div className="text-sm text-slate-600">stock records</div>
+                </Card>
+                <Card title="Recipes" onClick={() => setHash('recipes')}>
+                  <div className="text-2xl font-semibold"><Quantity value={recipesCount} className="text-left block" /></div>
+                  <div className="text-sm text-slate-600">product recipes</div>
+                </Card>
+              </div>
+            </div>
+
+            {/* Production & Supply Chain */}
+            <div>
+              <h2 className="text-lg font-semibold text-slate-800 mb-3">Production & Supply Chain</h2>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <Card title="Production Orders" onClick={() => setHash('production')}>
+                  <div className="text-2xl font-semibold"><Quantity value={productionCount} className="text-left block" /></div>
+                  <div className="text-sm text-slate-600"><Quantity value={totalProductionQty} className="font-mono inline" /> items planned</div>
+                </Card>
+                <Card title="Suppliers" onClick={() => setHash('suppliers')}>
+                  <div className="text-2xl font-semibold"><Quantity value={suppliersCount} className="text-left block" /></div>
+                  <div className="text-sm text-slate-600">suppliers</div>
+                </Card>
+                <Card title="Purchase Orders" onClick={() => setHash('purchase-orders')}>
+                  <div className="text-2xl font-semibold"><Quantity value={activePurchasesCount} className="text-left block" /></div>
+                  <div className="text-sm text-slate-600">active orders</div>
+                </Card>
+              </div>
             </div>
           </section>
         )}
