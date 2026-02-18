@@ -1,6 +1,6 @@
 # Agent Tool Filtering
 
-This server exposes **47 MCP tools** organized by tags for client-side filtering.
+This server exposes **52 MCP tools** organized by tags for client-side filtering.
 
 ## Architecture
 
@@ -22,13 +22,14 @@ Available to both agents:
 - `action_confirm`, `action_reject`, `action_list_pending`
 - `admin_reset_database`
 
-### Sales Tools (22 tools) - tag: `sales`
+### Sales Tools (27 tools) - tag: `sales`
 Customer relationship and order management:
 - `crm_search_customers`, ⏳ `crm_create_customer`, `crm_get_customer`
-- `sales_get_quote_options`, ⏳ `sales_create_order`, `sales_price_order`, `sales_search_orders`, `sales_get_order`, ⏳ `sales_link_shipment`
+- `sales_get_quote_options`, `sales_price_order`, `sales_search_orders`, `sales_get_order`, ⏳ `sales_link_shipment`
 - ⏳ `logistics_create_shipment`, `logistics_get_shipment`
 - `messaging_create_email`, `messaging_list_emails`, `messaging_get_email`, `messaging_update_email`, `messaging_send_email`, `messaging_delete_email`
-- ⏳ `invoice_create`, `invoice_get`, `invoice_list`, `invoice_issue`, ⏳ `invoice_record_payment`
+- ⏳ `invoice_create`, `invoice_get`, `invoice_list`, ⏳ `invoice_issue`, ⏳ `invoice_record_payment`
+- ⏳ `quote_create`, `quote_get`, `quote_list`, ⏳ `quote_send`, ⏳ `quote_accept`, ⏳ `quote_reject`, ⏳ `quote_revise`
 
 ### Production Tools (9 tools) - tag: `production`
 Manufacturing and materials management:
@@ -38,26 +39,26 @@ Manufacturing and materials management:
 ## Client-Side Filtering
 
 Clients should:
-1. Call `list_tools` to get all 47 tools
+1. Call `list_tools` to get all 52 tools
 2. Filter by tags based on agent type:
-   - **Sales agent**: `tags=['shared', 'sales']` → 38 tools
+   - **Sales agent**: `tags=['shared', 'sales']` → 43 tools
    - **Production agent**: `tags=['shared', 'production']` → 25 tools
 3. Only expose filtered tools to the LLM
 4. Validate tool calls match the allowed tag set
 
 ## Agent Prompts
 
-- **Prompt_sales.md**: Instructions for sales agent (CRM, orders, shipping, emails, invoices)
+- **Prompt_sales.md**: Instructions for sales agent (CRM, orders, shipping, emails, invoices, quotes)
 - **Prompt_production.md**: Instructions for production agent (manufacturing, recipes, materials)
 
 Both prompts should guide the LLM to use appropriate tools, with client-side filtering as the enforcement layer.
 
 ## File Structure
 
-- `server.py`: Main server (registers all 47 tools)
+- `server.py`: Main server (registers all 53 tools)
 - `mcp_tools.py`: All tool definitions with tags
 
 ## Approach to mutation
 
-Every database mutation in the system goes through a pending action gate — a human-in-the-loop confirmation pattern. When the AI agent calls any mutating tool (creating customers, sales orders, production orders, purchase orders, shipments, etc.), the action is not executed immediately. Instead, the tool captures the intent as a JSON payload with a human-readable summary and stores it in a pending_actions table with status pending. The agent then presents that summary to the user and waits for explicit approval. Only when the user confirms does the agent call action_confirm, which dispatches the pending action to a typed executor that runs the actual business logic. If the user declines, action_reject marks it as cancelled and nothing happens. This pattern ensures the AI can never accidentally corrupt the system of record — every destructive operation requires a conscious human decision. Compound operations (like creating a sales order for a new customer) are handled atomically: the executor knows the dependency recipe internally, so the agent only sees one pending action while the code chains the dependent mutations behind the scenes.
+Every database mutation in the system goes through a pending action gate — a human-in-the-loop confirmation pattern. When the AI agent calls any mutating tool (creating customers, sales orders, production orders, purchase orders, shipments, invoices, quotes, etc.), the action is not executed immediately. Instead, the tool captures the intent as a JSON payload with a human-readable summary and stores it in a pending_actions table with status pending. The agent then presents that summary to the user and waits for explicit approval. Only when the user confirms does the agent call action_confirm, which dispatches the pending action to a typed executor that runs the actual business logic. If the user declines, action_reject marks it as cancelled and nothing happens. This pattern ensures the AI can never accidentally corrupt the system of record — every destructive operation requires a conscious human decision. Compound operations (like creating a sales order for a new customer) are handled atomically: the executor knows the dependency recipe internally, so the agent only sees one pending action while the code chains the dependent mutations behind the scenes.
 

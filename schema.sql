@@ -35,6 +35,42 @@ CREATE TABLE IF NOT EXISTS stock (
     on_hand REAL NOT NULL
 );
 
+-- Quotes: customer quotations with pricing frozen at creation time
+-- Status: draft -> sent -> accepted / rejected / expired / superseded
+CREATE TABLE IF NOT EXISTS quotes (
+    id TEXT PRIMARY KEY,
+    customer_id TEXT NOT NULL,
+    revision_number INTEGER NOT NULL DEFAULT 1,
+    supersedes_quote_id TEXT,
+    requested_delivery_date TEXT,
+    ship_to_line1 TEXT,
+    ship_to_postal_code TEXT,
+    ship_to_city TEXT,
+    ship_to_country TEXT,
+    note TEXT,
+    subtotal REAL NOT NULL DEFAULT 0,
+    discount REAL NOT NULL DEFAULT 0,
+    shipping REAL NOT NULL DEFAULT 0,
+    tax REAL NOT NULL DEFAULT 0,
+    total REAL NOT NULL DEFAULT 0,
+    currency TEXT NOT NULL DEFAULT 'EUR',
+    valid_until TEXT,
+    status TEXT NOT NULL DEFAULT 'draft',
+    created_at TEXT NOT NULL,
+    sent_at TEXT,
+    accepted_at TEXT,
+    rejected_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS quote_lines (
+    id TEXT PRIMARY KEY,
+    quote_id TEXT NOT NULL,
+    item_id TEXT NOT NULL,
+    qty REAL NOT NULL,
+    unit_price REAL NOT NULL,
+    line_total REAL NOT NULL
+);
+
 -- Sales order workflow: draft -> committed (price locked) -> delivery (stock allocated) -> completed
 CREATE TABLE IF NOT EXISTS sales_orders (
     id TEXT PRIMARY KEY,
@@ -208,6 +244,22 @@ CREATE TABLE IF NOT EXISTS payments (
     notes TEXT,
     created_at TEXT NOT NULL
 );
+
+-- Documents: stores PDFs and other document artifacts
+CREATE TABLE IF NOT EXISTS documents (
+    id TEXT PRIMARY KEY,
+    entity_type TEXT NOT NULL,
+    entity_id TEXT NOT NULL,
+    document_type TEXT NOT NULL,
+    content BLOB NOT NULL,
+    mime_type TEXT NOT NULL DEFAULT 'application/pdf',
+    filename TEXT NOT NULL,
+    generated_at TEXT NOT NULL,
+    notes TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_documents_entity ON documents(entity_type, entity_id);
+CREATE INDEX IF NOT EXISTS idx_documents_type ON documents(document_type);
 
 -- Pending actions: human-in-the-loop confirmation gate for all mutations
 -- Status: pending -> confirmed / rejected

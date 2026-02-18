@@ -18,6 +18,7 @@ from services import (
     recipe_service,
     purchase_service,
     messaging_service,
+    quote_service,
     invoice_service,
     stats_service,
     admin_service,
@@ -310,46 +311,6 @@ def register_tools(mcp):
             Dictionary with quote_option arrays containing price, availability, eta, and substitution details
         """
         return pricing_service.calculate_quote_options(sku, qty, delivery_date, allowed_substitutions or [])
-    
-    @mcp.tool(name="sales_create_order", meta={"tags": ["sales"]})
-    @log_tool("sales_create_order")
-    def create_sales_order(
-        customer_id: Optional[str] = None,
-        requested_delivery_date: Optional[str] = None,
-        ship_to: Optional[Dict[str, Any]] = None,
-        lines: Optional[List[Dict[str, Any]]] = None,
-        note: Optional[str] = None,
-        new_customer: Optional[Dict[str, Any]] = None,
-    ) -> Dict[str, Any]:
-        """
-        Create a draft sales order with lines. Returns a pending action.
-        
-        If the customer doesn't exist yet, pass new_customer={name, company, email, city}
-        instead of customer_id. The customer will be created automatically on confirmation.
-        
-        Parameters:
-            customer_id: Existing customer ID (e.g., 'CUST-1000')
-            new_customer: Dict with {name, company, email, city} to create a new customer
-            lines: List of {sku, qty} dicts (required)
-            requested_delivery_date: YYYY-MM-DD
-            ship_to: {line1, postal_code, city, country}
-            note: Optional note
-        
-        Returns:
-            A pending action. **Present the summary to the user and wait for explicit confirmation
-            before calling action_confirm.**
-        """
-        if not customer_id and not new_customer:
-            raise ValueError("Provide customer_id or new_customer")
-        line_desc = ", ".join(f"{l['qty']}× {l['sku']}" for l in (lines or []))
-        if new_customer:
-            summary = f"Create order for new customer {new_customer.get('name', '?')}: {line_desc}"
-        else:
-            summary = f"Create order for {customer_id}: {line_desc}"
-        params = {"customer_id": customer_id, "requested_delivery_date": requested_delivery_date, "ship_to": ship_to, "lines": lines, "note": note}
-        if new_customer:
-            params["new_customer"] = new_customer
-        return pending_action_service.create("create_sales_order", params, summary)
     
     @mcp.tool(name="sales_price_order", meta={"tags": ["sales"]})
     @log_tool("sales_price_order")
@@ -752,6 +713,177 @@ def register_tools(mcp):
         """
         return messaging_service.delete_email(email_id)
     
+    # ── Quote tools ──────────────────────────────────────────────────────
+    
+    @mcp.tool(name="quote_create", meta={"tags": ["sales"]})
+    @log_tool("quote_create")
+    def quote_create(
+        customer_id: str,
+        lines: List[Dict[str, Any]],
+        requested_delivery_date: Optional[str] = None,
+        ship_to: Optional[Dict[str, Any]] = None,
+        note: Optional[str] = None,
+        valid_days: int = 30
+    ) -> Dict[str, Any]:
+        """
+        Create a draft quote with frozen pricing. Returns a pending action.
+        
+        Parameters:
+            customer_id: Customer ID (e.g., 'CUST-0001')
+            lines: Array of line items with 'sku' and 'qty' (e.g., [{"sku": "ELVIS-RED-20", "qty": 10}])
+            requested_delivery_date: Optional delivery date (YYYY-MM-DD)
+            ship_to: Optional shipping address dict with line1, postal_code, city, country
+            note: Optional notes
+            valid_days: Quote validity in days (default: 30)
+        
+        Returns:
+            A pending action. **Present the summary to the user and wait for explicit confirmation
+            before calling action_confirm.**
+        """
+        line_desc = ", ".join([f"{l['qty']}x {l['sku']}" for l in lines])
+        summary = f"Create quote for {customer_id}: {line_desc}"
+        params = {
+            "customer_id": customer_id,
+            "lines": lines,
+            "requested_delivery_date": requested_delivery_date,
+            "ship_to": ship_to,
+            "note": note,
+            "valid_days": valid_days
+        }
+        return pending_action_service.create("create_quote", params, summary)
+    
+    @mcp.tool(name="quote_get", meta={"tags": ["sales"]})
+    @log_tool("quote_get")
+    def quote_get(quote_id: str) -> Dict[str, Any]:
+        """
+        Get full quote details including customer, lines, and pricing breakdown.
+        
+        Parameters:
+            quote_id: The quote ID (e.g., 'QUOTE-0001-R1')
+        
+        Returns:
+            Quote details with customer, lines, totals, and revision information
+        """
+        result = quote_service.get_quote(quote_id)
+        if not result:
+            raise ValueError(f"Quote {quote_id} not found")
+        return result
+    
+    @mcp.tool(name="quote_list", meta={"tags": ["sales"]})
+    @log_tool("quote_list")
+    def quote_list(
+        customer_id: Optional[str] = None,
+        status: Optional[str] = None,
+        limit: int = 50,
+        show_superseded: bool = False
+    ) -> Dict[str, Any]:
+        """
+        List quotes with optional filters. By default, hides superseded quotes.
+        
+        Parameters:
+            customer_id: Optional customer ID filter
+            status: Optional status filter (draft, sent, accepted, rejected, expired, superseded)
+            limit: Maximum results (default: 50)
+            show_superseded: Whether to show superseded quotes (default: false)
+        
+        Returns:
+            Dictionary with quotes array
+        """
+        return quote_service.list_quotes(customer_id, status, limit, show_superseded)
+    
+    @mcp.tool(name="quote_send", meta={"tags": ["sales"]})
+    @log_tool("quote_send")
+    def quote_send(quote_id: str) -> Dict[str, Any]:
+        """
+        Send a draft quote to customer. Sets status to 'sent' and generates PDF.
+        Returns a pending action.
+        
+        Parameters:
+            quote_id: The quote ID to send (e.g., 'QUOTE-0001-R1')
+        
+        Returns:
+            A pending action. **Present the summary to the user and wait for explicit confirmation
+            before calling action_confirm.**
+        """
+        summary = f"Send quote {quote_id} to customer (generates PDF)"
+        return pending_action_service.create("send_quote", {"quote_id": quote_id}, summary)
+    
+    @mcp.tool(name="quote_accept", meta={"tags": ["sales"]})
+    @log_tool("quote_accept")
+    def quote_accept(quote_id: str) -> Dict[str, Any]:
+        """
+        Accept a quote. Creates a sales order from the quote and marks quote as accepted.
+        Returns a pending action.
+        
+        Parameters:
+            quote_id: The quote ID to accept (e.g., 'QUOTE-0001-R1')
+        
+        Returns:
+            A pending action. **Present the summary to the user and wait for explicit confirmation
+            before calling action_confirm.**
+        """
+        summary = f"Accept quote {quote_id} (creates sales order)"
+        return pending_action_service.create("accept_quote", {"quote_id": quote_id}, summary)
+    
+    @mcp.tool(name="quote_reject", meta={"tags": ["sales"]})
+    @log_tool("quote_reject")
+    def quote_reject(quote_id: str, reason: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Reject a quote. Returns a pending action.
+        
+        Parameters:
+            quote_id: The quote ID to reject (e.g., 'QUOTE-0001-R1')
+            reason: Optional rejection reason
+        
+        Returns:
+            A pending action. **Present the summary to the user and wait for explicit confirmation
+            before calling action_confirm.**
+        """
+        summary = f"Reject quote {quote_id}"
+        if reason:
+            summary += f": {reason}"
+        return pending_action_service.create("reject_quote", {"quote_id": quote_id, "reason": reason}, summary)
+    
+    @mcp.tool(name="quote_revise", meta={"tags": ["sales"]})
+    @log_tool("quote_revise")
+    def quote_revise(
+        quote_id: str,
+        lines: Optional[List[Dict[str, Any]]] = None,
+        requested_delivery_date: Optional[str] = None,
+        ship_to: Optional[Dict[str, Any]] = None,
+        note: Optional[str] = None,
+        valid_days: int = 30
+    ) -> Dict[str, Any]:
+        """
+        Create a new revision of a quote. Marks the original as superseded and creates a new draft.
+        Returns a pending action.
+        
+        Parameters:
+            quote_id: The quote ID to revise (e.g., 'QUOTE-0001-R1')
+            lines: Optional new line items (if omitted, copies from original)
+            requested_delivery_date: Optional new delivery date
+            ship_to: Optional new shipping address
+            note: Optional new notes
+            valid_days: Quote validity in days (default: 30)
+        
+        Returns:
+            A pending action. **Present the summary to the user and wait for explicit confirmation
+            before calling action_confirm.**
+        """
+        changes = {}
+        if lines is not None:
+            changes["lines"] = lines
+        if requested_delivery_date is not None:
+            changes["requested_delivery_date"] = requested_delivery_date
+        if ship_to is not None:
+            changes["ship_to"] = ship_to
+        if note is not None:
+            changes["note"] = note
+        changes["valid_days"] = valid_days
+        
+        summary = f"Revise quote {quote_id} (creates new revision)"
+        return pending_action_service.create("revise_quote", {"quote_id": quote_id, "changes": changes}, summary)
+    
     # ── Invoice & Payment tools ──────────────────────────────────────────
     
     @mcp.tool(name="invoice_create", meta={"tags": ["sales"]})
@@ -808,15 +940,18 @@ def register_tools(mcp):
     @log_tool("invoice_issue")
     def invoice_issue(invoice_id: str) -> Dict[str, Any]:
         """
-        Issue a draft invoice to the customer. Sets the due date based on payment terms (30 days).
+        Issue a draft invoice to the customer. Sets the due date based on payment terms (30 days)
+        and generates the invoice PDF. Returns a pending action.
         
         Parameters:
             invoice_id: The invoice ID to issue (e.g., 'INV-2001')
         
         Returns:
-            Dictionary with invoice_id, status, due_date, and message
+            A pending action. **Present the summary to the user and wait for explicit confirmation
+            before calling action_confirm.**
         """
-        return invoice_service.issue_invoice(invoice_id)
+        summary = f"Issue invoice {invoice_id} (sets due date and generates PDF)"
+        return pending_action_service.create("issue_invoice", {"invoice_id": invoice_id}, summary)
     
     @mcp.tool(name="invoice_record_payment", meta={"tags": ["sales"]})
     @log_tool("invoice_record_payment")

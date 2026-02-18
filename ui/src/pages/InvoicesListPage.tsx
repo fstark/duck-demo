@@ -5,7 +5,7 @@ import { Badge } from '../components/Badge'
 import { Invoice } from '../types'
 import { api } from '../api'
 import { useNavigation } from '../contexts/NavigationContext'
-import { formatPrice } from '../utils/currency'
+import { formatCurrency } from '../utils/currency'
 import { formatDate } from '../utils/date'
 
 type SortDir = 'asc' | 'desc'
@@ -127,7 +127,7 @@ export function InvoicesListPage() {
                                 key: 'total',
                                 label: 'Total',
                                 sortable: true,
-                                render: (row: Invoice) => <div className="text-right">{formatPrice(row.total, row.currency)}</div>,
+                                render: (row: Invoice) => <div className="text-right">{formatCurrency(row.total, row.currency)}</div>,
                             },
                             {
                                 key: 'status',

@@ -1,4 +1,4 @@
-import { Customer, Item, SalesOrder, SalesOrderDetail, Shipment, StockSummary, QuoteOption, ProductionOrder, Recipe, Supplier, PurchaseOrder, Email, EmailDetail, Invoice, InvoiceDetail } from './types'
+import { Customer, Item, SalesOrder, SalesOrderDetail, Shipment, StockSummary, QuoteOption, ProductionOrder, Recipe, Supplier, PurchaseOrder, Email, EmailDetail, Invoice, InvoiceDetail, Quote, QuoteDetail } from './types'
 
 const API_BASE = import.meta.env.VITE_API_BASE || '/api'
 
@@ -34,7 +34,7 @@ export const api = {
   shipments: () => fetchJson<{ shipments: Shipment[] }>(`/shipments`),
   productionOrders: () => fetchJson<{ production_orders: ProductionOrder[] }>(`/production-orders?limit=100`),
   productionOrder: (id: string) => fetchJson<ProductionOrder>(`/production-orders/${encodeURIComponent(id)}`),
-  quote: (sku: string, qty: number) => fetchJson<{ options: QuoteOption[] }>(`/quotes?sku=${encodeURIComponent(sku)}&qty=${qty}`),
+  quote: (sku: string, qty: number) => fetchJson<{ options: QuoteOption[] }>(`/quote-options?sku=${encodeURIComponent(sku)}&qty=${qty}`),
   recipes: (outputItemSku?: string) =>
     fetchJson<{ recipes: Recipe[] }>(`/recipes${outputItemSku ? `?output_item_sku=${encodeURIComponent(outputItemSku)}` : ''}`),
   recipeDetail: (id: string) => fetchJson<Recipe>(`/recipes/${encodeURIComponent(id)}`),
@@ -61,4 +61,13 @@ export const api = {
     return fetchJson<{ invoices: Invoice[] }>(`/invoices${query ? `?${query}` : ''}`)
   },
   invoiceDetail: (id: string) => fetchJson<InvoiceDetail>(`/invoices/${encodeURIComponent(id)}`),
+  quotes: (q?: { customer_id?: string; status?: string; show_superseded?: boolean }) => {
+    const params = new URLSearchParams()
+    if (q?.customer_id) params.set('customer_id', q.customer_id)
+    if (q?.status) params.set('status', q.status)
+    if (q?.show_superseded) params.set('show_superseded', 'true')
+    const query = params.toString()
+    return fetchJson<{ quotes: Quote[] }>(`/quotes${query ? `?${query}` : ''}`)
+  },
+  quoteDetail: (id: string) => fetchJson<QuoteDetail>(`/quotes/${encodeURIComponent(id)}`),
 }

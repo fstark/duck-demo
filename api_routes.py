@@ -287,8 +287,8 @@ def register_routes(mcp):
         except Exception as exc:
             return _json({"error": str(exc)}, status_code=404)
     
-    @mcp.custom_route("/api/quotes", methods=["GET", "OPTIONS"])
-    async def api_quotes(request):
+    @mcp.custom_route("/api/quote-options", methods=["GET", "OPTIONS"])
+    async def api_quote_options(request):
         if request.method == "OPTIONS":
             return _cors_preflight(["GET"])
         qp = request.query_params
@@ -419,6 +419,68 @@ def register_routes(mcp):
         except Exception as exc:
             return _json({"error": str(exc)}, status_code=404)
     
+    @mcp.custom_route("/api/quotes", methods=["GET", "OPTIONS"])
+    async def api_quotes(request):
+        if request.method == "OPTIONS":
+            return _cors_preflight(["GET"])
+        qp = request.query_params
+        limit = int(qp.get("limit", 50))
+        show_superseded = qp.get("show_superseded", "false").lower() == "true"
+        from services import quote_service
+        result = quote_service.list_quotes(
+            customer_id=qp.get("customer_id"),
+            status=qp.get("status"),
+            limit=limit,
+            show_superseded=show_superseded
+        )
+        return _json(result)
+    
+    @mcp.custom_route("/api/quotes/{quote_id}", methods=["GET", "OPTIONS"])
+    async def api_quote_detail(request):
+        if request.method == "OPTIONS":
+            return _cors_preflight(["GET"])
+        quote_id = request.path_params.get("quote_id")
+        try:
+            from services import quote_service
+            result = quote_service.get_quote(quote_id)
+            if not result:
+                return _json({"error": "Quote not found"}, status_code=404)
+            return _json(result)
+        except Exception as exc:
+            return _json({"error": str(exc)}, status_code=404)
+    
+    @mcp.custom_route("/api/quotes/{quote_id}/pdf", methods=["GET", "OPTIONS"])
+    async def api_quote_pdf(request):
+        if request.method == "OPTIONS":
+            return _cors_preflight(["GET"])
+        quote_id = request.path_params.get("quote_id")
+        try:
+            from services import DocumentService, quote_service
+            
+            # Try to get stored PDF first
+            doc = DocumentService.get_document("quote", quote_id, "quote_pdf")
+            
+            if doc:
+                # Serve stored PDF
+                pdf_bytes = doc["content"]
+            else:
+                # Generate on-demand (for draft quotes or if PDF missing)
+                pdf_bytes = quote_service.generate_quote_pdf(quote_id)
+            
+            from starlette.responses import Response
+            return Response(
+                content=pdf_bytes,
+                media_type="application/pdf",
+                headers={
+                    "Content-Disposition": f"inline; filename=quote_{quote_id}.pdf",
+                    "Access-Control-Allow-Origin": "*",
+                }
+            )
+        except ValueError as exc:
+            return _json({"error": str(exc)}, status_code=404)
+        except Exception as exc:
+            return _json({"error": f"Failed to generate PDF: {str(exc)}"}, status_code=500)
+    
     @mcp.custom_route("/api/invoices", methods=["GET", "OPTIONS"])
     async def api_invoices(request):
         if request.method == "OPTIONS":
@@ -444,6 +506,38 @@ def register_routes(mcp):
             return _json(result)
         except Exception as exc:
             return _json({"error": str(exc)}, status_code=404)
+    
+    @mcp.custom_route("/api/invoices/{invoice_id}/pdf", methods=["GET", "OPTIONS"])
+    async def api_invoice_pdf(request):
+        if request.method == "OPTIONS":
+            return _cors_preflight(["GET"])
+        invoice_id = request.path_params.get("invoice_id")
+        try:
+            from services import DocumentService
+            
+            # Try to get stored PDF first
+            doc = DocumentService.get_document("invoice", invoice_id, "invoice_pdf")
+            
+            if doc:
+                # Serve stored PDF
+                pdf_bytes = doc["content"]
+            else:
+                # Generate on-demand (for draft invoices or if PDF missing)
+                pdf_bytes = invoice_service.generate_invoice_pdf(invoice_id)
+            
+            from starlette.responses import Response
+            return Response(
+                content=pdf_bytes,
+                media_type="application/pdf",
+                headers={
+                    "Content-Disposition": f"inline; filename=invoice_{invoice_id}.pdf",
+                    "Access-Control-Allow-Origin": "*",
+                }
+            )
+        except ValueError as exc:
+            return _json({"error": str(exc)}, status_code=404)
+        except Exception as exc:
+            return _json({"error": f"Failed to generate PDF: {str(exc)}"}, status_code=500)
     
     @mcp.custom_route("/api/pending-actions", methods=["GET", "OPTIONS"])
     async def api_pending_actions(request):

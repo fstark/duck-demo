@@ -4,15 +4,26 @@ import os
 import re
 import sqlite3
 import uuid
+import logging
 from contextlib import contextmanager
 from datetime import datetime
 from typing import Any, Dict, Iterator, List, Optional, Union
 
 import config
 
+logger = logging.getLogger(__name__)
+
 import matplotlib
 matplotlib.use('Agg')  # Use non-interactive backend
 import matplotlib.pyplot as plt
+
+from reportlab.lib.pagesizes import letter
+from reportlab.lib import colors
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.units import inch
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+from reportlab.lib.enums import TA_RIGHT, TA_CENTER
+from io import BytesIO
 
 from db import dict_rows, generate_id, get_connection
 from utils import ui_href, eta_from_days, parse_date
@@ -1009,6 +1020,601 @@ class MessagingService:
             return {"email_id": email_id, "message": f"Email {email_id} deleted"}
 
 
+class QuoteService:
+    """Service for quote operations."""
+
+    @staticmethod
+    def create_quote(
+        customer_id: str,
+        requested_delivery_date: Optional[str],
+        ship_to: Optional[Dict[str, Any]],
+        lines: List[Dict[str, Any]],
+        note: Optional[str] = None,
+        valid_days: int = 30
+    ) -> Dict[str, Any]:
+        """Create a draft quote with frozen pricing."""
+        with db_conn() as conn:
+            # Validate customer
+            customer = conn.execute("SELECT * FROM customers WHERE id = ?", (customer_id,)).fetchone()
+            if not customer:
+                raise ValueError(f"Customer {customer_id} not found")
+            
+            sim_time = SimulationService.get_current_time()
+            quote_id = generate_id(conn, "QUOTE", "quotes")
+            
+            # Calculate pricing for each line (freeze prices)
+            subtotal = 0.0
+            quote_lines = []
+            
+            for idx, line in enumerate(lines, start=1):
+                item = conn.execute("SELECT * FROM items WHERE sku = ?", (line["sku"],)).fetchone()
+                if not item:
+                    raise ValueError(f"Item {line['sku']} not found")
+                
+                qty = line["qty"]
+                unit_price = item["unit_price"]
+                line_total = qty * unit_price
+                subtotal += line_total
+                
+                line_id = f"{quote_id}-{idx:02d}"
+                quote_lines.append({
+                    "id": line_id,
+                    "item_id": item["id"],
+                    "sku": item["sku"],
+                    "name": item["name"],
+                    "qty": qty,
+                    "unit_price": unit_price,
+                    "line_total": line_total
+                })
+            
+            # Apply business rules for discount and shipping
+            total_qty = sum(line["qty"] for line in lines)
+            discount = config.PRICING_VOLUME_DISCOUNT_PCT * subtotal if total_qty >= config.PRICING_VOLUME_QTY_THRESHOLD else 0.0
+            shipping = 0.0 if subtotal >= config.PRICING_FREE_SHIPPING_THRESHOLD else 20.0
+            tax = 0.0  # Tax calculation not implemented
+            total = subtotal - discount + shipping + tax
+            
+            # Calculate valid_until date
+            from datetime import datetime, timedelta
+            valid_until = (datetime.fromisoformat(sim_time) + timedelta(days=valid_days)).strftime("%Y-%m-%d")
+            
+            # Insert quote header
+            conn.execute(
+                "INSERT INTO quotes (id, customer_id, revision_number, requested_delivery_date, "
+                "ship_to_line1, ship_to_postal_code, ship_to_city, ship_to_country, note, "
+                "subtotal, discount, shipping, tax, total, currency, valid_until, status, created_at) "
+                "VALUES (?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', ?)",
+                (
+                    quote_id, customer_id, requested_delivery_date,
+                    ship_to.get("line1") if ship_to else None,
+                    ship_to.get("postal_code") if ship_to else None,
+                    ship_to.get("city") if ship_to else None,
+                    ship_to.get("country") if ship_to else None,
+                    note,
+                    subtotal, discount, shipping, tax, total, config.PRICING_CURRENCY,
+                    valid_until, sim_time
+                )
+            )
+            
+            # Insert quote lines
+            for line in quote_lines:
+                conn.execute(
+                    "INSERT INTO quote_lines (id, quote_id, item_id, qty, unit_price, line_total) "
+                    "VALUES (?, ?, ?, ?, ?, ?)",
+                    (line["id"], quote_id, line["item_id"], line["qty"], line["unit_price"], line["line_total"])
+                )
+            
+            conn.commit()
+            
+            return {
+                "quote_id": quote_id,
+                "customer_id": customer_id,
+                "status": "draft",
+                "total": total,
+                "currency": config.PRICING_CURRENCY,
+                "valid_until": valid_until,
+                "lines": quote_lines,
+                "ui_url": ui_href("quotes", quote_id),
+                "message": f"📋 Quote {quote_id} created — {config.PRICING_CURRENCY} {total:.2f} (valid until {valid_until})"
+            }
+    
+    @staticmethod
+    def get_quote(quote_id: str) -> Optional[Dict[str, Any]]:
+        """Get full quote details with customer, lines, and pricing."""
+        with db_conn() as conn:
+            quote = conn.execute("SELECT * FROM quotes WHERE id = ?", (quote_id,)).fetchone()
+            if not quote:
+                return None
+            
+            quote_dict = dict(quote)
+            quote_dict["ui_url"] = ui_href("quotes", quote_id)
+            
+            # Get customer
+            customer = conn.execute("SELECT * FROM customers WHERE id = ?", (quote["customer_id"],)).fetchone()
+            customer_dict = dict(customer) if customer else None
+            if customer_dict:
+                customer_dict["ui_url"] = ui_href("customers", customer_dict["id"])
+            
+            # Get quote lines with item details
+            lines = dict_rows(conn.execute(
+                "SELECT ql.*, i.sku, i.name, i.uom FROM quote_lines ql "
+                "JOIN items i ON ql.item_id = i.id "
+                "WHERE ql.quote_id = ? ORDER BY ql.id",
+                (quote_id,)
+            ).fetchall())
+            
+            # Get superseded quote if this is a revision
+            superseded_quote = None
+            if quote["supersedes_quote_id"]:
+                superseded_quote = {"id": quote["supersedes_quote_id"], "ui_url": ui_href("quotes", quote["supersedes_quote_id"])}
+            
+            # Get newer revision if this quote was superseded
+            newer_revision = conn.execute(
+                "SELECT id FROM quotes WHERE supersedes_quote_id = ? ORDER BY revision_number DESC LIMIT 1",
+                (quote_id,)
+            ).fetchone()
+            newer_revision_dict = None
+            if newer_revision:
+                newer_revision_dict = {"id": newer_revision[0], "ui_url": ui_href("quotes", newer_revision[0])}
+            
+            return {
+                "quote": quote_dict,
+                "customer": customer_dict,
+                "lines": lines,
+                "superseded_quote": superseded_quote,
+                "newer_revision": newer_revision_dict
+            }
+    
+    @staticmethod
+    def list_quotes(
+        customer_id: Optional[str] = None,
+        status: Optional[str] = None,
+        limit: int = 50,
+        show_superseded: bool = False
+    ) -> Dict[str, Any]:
+        """List quotes with optional filters. By default, hides superseded quotes."""
+        filters: List[str] = []
+        params: List[Any] = []
+        
+        if customer_id:
+            filters.append("q.customer_id = ?")
+            params.append(customer_id)
+        if status:
+            filters.append("q.status = ?")
+            params.append(status)
+        if not show_superseded:
+            filters.append("q.status != 'superseded'")
+        
+        where_clause = f"WHERE {' AND '.join(filters)}" if filters else ""
+        
+        sql = (
+            f"SELECT q.*, c.name as customer_name, c.company as customer_company "
+            f"FROM quotes q LEFT JOIN customers c ON q.customer_id = c.id "
+            f"{where_clause} ORDER BY q.created_at DESC LIMIT ?"
+        )
+        params.append(limit)
+        
+        with db_conn() as conn:
+            rows = dict_rows(conn.execute(sql, params))
+            for row in rows:
+                row["ui_url"] = ui_href("quotes", row["id"])
+            return {"quotes": rows}
+    
+    @staticmethod
+    def send_quote(quote_id: str) -> Dict[str, Any]:
+        """Send a draft quote to customer: sets status='sent', sent_at, and generates PDF."""
+        with db_conn() as conn:
+            quote = conn.execute("SELECT * FROM quotes WHERE id = ?", (quote_id,)).fetchone()
+            if not quote:
+                raise ValueError(f"Quote {quote_id} not found")
+            if quote["status"] != "draft":
+                raise ValueError(f"Quote {quote_id} is '{quote['status']}', must be 'draft' to send")
+            
+            sim_time = SimulationService.get_current_time()
+            conn.execute(
+                "UPDATE quotes SET status = 'sent', sent_at = ? WHERE id = ?",
+                (sim_time, quote_id)
+            )
+            conn.commit()
+            
+            # Generate and store PDF
+            try:
+                pdf_bytes = QuoteService.generate_quote_pdf(quote_id)
+                DocumentService.store_document(
+                    entity_type="quote",
+                    entity_id=quote_id,
+                    document_type="quote_pdf",
+                    content=pdf_bytes,
+                    filename=f"quote_{quote_id}.pdf",
+                    notes="Generated when quote was sent"
+                )
+            except Exception as e:
+                logger.error(f"Failed to generate PDF for {quote_id}: {e}")
+                # Don't fail the send operation if PDF generation fails
+            
+            return {
+                "quote_id": quote_id,
+                "status": "sent",
+                "sent_at": sim_time,
+                "valid_until": quote["valid_until"],
+                "ui_url": ui_href("quotes", quote_id),
+                "message": f"📨 Quote {quote_id} sent to customer (valid until {quote['valid_until']})"
+            }
+    
+    @staticmethod
+    def accept_quote(quote_id: str) -> Dict[str, Any]:
+        """Accept a sent quote: creates sales order and updates quote status."""
+        with db_conn() as conn:
+            quote = conn.execute("SELECT * FROM quotes WHERE id = ?", (quote_id,)).fetchone()
+            if not quote:
+                raise ValueError(f"Quote {quote_id} not found")
+            if quote["status"] not in ("sent", "draft"):
+                raise ValueError(f"Quote {quote_id} is '{quote['status']}', must be 'sent' or 'draft' to accept")
+            
+            # Check if quote is expired
+            sim_time = SimulationService.get_current_time()
+            if quote["valid_until"] and quote["valid_until"] < sim_time[:10]:
+                raise ValueError(f"Quote {quote_id} expired on {quote['valid_until']}")
+            
+            # Get quote lines
+            lines = dict_rows(conn.execute(
+                "SELECT ql.*, i.sku FROM quote_lines ql JOIN items i ON ql.item_id = i.id WHERE ql.quote_id = ?",
+                (quote_id,)
+            ).fetchall())
+            
+            # Create sales order from quote
+            sales_order_lines = [{"sku": line["sku"], "qty": line["qty"]} for line in lines]
+            
+            ship_to = None
+            if quote["ship_to_line1"]:
+                ship_to = {
+                    "line1": quote["ship_to_line1"],
+                    "postal_code": quote["ship_to_postal_code"],
+                    "city": quote["ship_to_city"],
+                    "country": quote["ship_to_country"]
+                }
+            
+            # Create sales order
+            sales_result = SalesService.create_order(
+                customer_id=quote["customer_id"],
+                requested_delivery_date=quote["requested_delivery_date"],
+                ship_to=ship_to,
+                lines=sales_order_lines,
+                note=f"Created from quote {quote_id}"
+            )
+            
+            # Update quote status
+            conn.execute(
+                "UPDATE quotes SET status = 'accepted', accepted_at = ? WHERE id = ?",
+                (sim_time, quote_id)
+            )
+            conn.commit()
+            
+            return {
+                "quote_id": quote_id,
+                "status": "accepted",
+                "sales_order_id": sales_result["sales_order_id"],
+                "sales_order_url": sales_result.get("ui_url"),
+                "ui_url": ui_href("quotes", quote_id),
+                "message": f"✅ Quote {quote_id} accepted → Sales order {sales_result['sales_order_id']} created"
+            }
+    
+    @staticmethod
+    def reject_quote(quote_id: str, reason: Optional[str] = None) -> Dict[str, Any]:
+        """Reject a quote."""
+        with db_conn() as conn:
+            quote = conn.execute("SELECT * FROM quotes WHERE id = ?", (quote_id,)).fetchone()
+            if not quote:
+                raise ValueError(f"Quote {quote_id} not found")
+            if quote["status"] not in ("sent", "draft"):
+                raise ValueError(f"Quote {quote_id} is '{quote['status']}', cannot reject")
+            
+            sim_time = SimulationService.get_current_time()
+            note = quote["note"] or ""
+            if reason:
+                note = f"{note}\nRejection reason: {reason}".strip()
+            
+            conn.execute(
+                "UPDATE quotes SET status = 'rejected', rejected_at = ?, note = ? WHERE id = ?",
+                (sim_time, note, quote_id)
+            )
+            conn.commit()
+            
+            return {
+                "quote_id": quote_id,
+                "status": "rejected",
+                "ui_url": ui_href("quotes", quote_id),
+                "message": f"❌ Quote {quote_id} rejected"
+            }
+    
+    @staticmethod
+    def revise_quote(quote_id: str, changes: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        """Create a new revision of a quote, marking the old one as superseded."""
+        with db_conn() as conn:
+            original_quote = conn.execute("SELECT * FROM quotes WHERE id = ?", (quote_id,)).fetchone()
+            if not original_quote:
+                raise ValueError(f"Quote {quote_id} not found")
+            if original_quote["status"] in ("accepted", "superseded"):
+                raise ValueError(f"Quote {quote_id} is '{original_quote['status']}', cannot revise")
+            
+            # Get original lines
+            original_lines = dict_rows(conn.execute(
+                "SELECT ql.*, i.sku FROM quote_lines ql JOIN items i ON ql.item_id = i.id WHERE ql.quote_id = ?",
+                (quote_id,)
+            ).fetchall())
+            
+            # Extract base quote number (QUOTE-0001-R1 -> QUOTE-0001)
+            import re
+            match = re.match(r"(QUOTE-\d+)(?:-R\d+)?", quote_id)
+            base_id = match.group(1) if match else quote_id.rsplit('-R', 1)[0]
+            
+            # Generate new revision ID
+            new_revision_num = original_quote["revision_number"] + 1
+            new_quote_id = f"{base_id}-R{new_revision_num}"
+            
+            sim_time = SimulationService.get_current_time()
+            
+            # Apply changes if provided, otherwise copy everything
+            lines_to_use = changes.get("lines") if changes and "lines" in changes else [{"sku": line["sku"], "qty": line["qty"]} for line in original_lines]
+            requested_delivery_date = changes.get("requested_delivery_date", original_quote["requested_delivery_date"]) if changes else original_quote["requested_delivery_date"]
+            note = changes.get("note", original_quote["note"]) if changes else original_quote["note"]
+            
+            ship_to = None
+            if changes and "ship_to" in changes:
+                ship_to = changes["ship_to"]
+            elif original_quote["ship_to_line1"]:
+                ship_to = {
+                    "line1": original_quote["ship_to_line1"],
+                    "postal_code": original_quote["ship_to_postal_code"],
+                    "city": original_quote["ship_to_city"],
+                    "country": original_quote["ship_to_country"]
+                }
+            
+            # Calculate pricing for revised lines
+            subtotal = 0.0
+            revised_lines = []
+            
+            for idx, line in enumerate(lines_to_use, start=1):
+                item = conn.execute("SELECT * FROM items WHERE sku = ?", (line["sku"],)).fetchone()
+                if not item:
+                    raise ValueError(f"Item {line['sku']} not found")
+                
+                qty = line["qty"]
+                unit_price = item["unit_price"]
+                line_total = qty * unit_price
+                subtotal += line_total
+                
+                line_id = f"{new_quote_id}-{idx:02d}"
+                revised_lines.append({
+                    "id": line_id,
+                    "item_id": item["id"],
+                    "sku": item["sku"],
+                    "qty": qty,
+                    "unit_price": unit_price,
+                    "line_total": line_total
+                })
+            
+            # Apply business rules
+            total_qty = sum(line["qty"] for line in lines_to_use)
+            discount = config.PRICING_VOLUME_DISCOUNT_PCT * subtotal if total_qty >= config.PRICING_VOLUME_QTY_THRESHOLD else 0.0
+            shipping = 0.0 if subtotal >= config.PRICING_FREE_SHIPPING_THRESHOLD else 20.0
+            tax = 0.0
+            total = subtotal - discount + shipping + tax
+            
+            # Calculate new valid_until
+            from datetime import datetime, timedelta
+            valid_days = changes.get("valid_days", 30) if changes else 30
+            valid_until = (datetime.fromisoformat(sim_time) + timedelta(days=valid_days)).strftime("%Y-%m-%d")
+            
+            # Insert new revision
+            conn.execute(
+                "INSERT INTO quotes (id, customer_id, revision_number, supersedes_quote_id, requested_delivery_date, "
+                "ship_to_line1, ship_to_postal_code, ship_to_city, ship_to_country, note, "
+                "subtotal, discount, shipping, tax, total, currency, valid_until, status, created_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', ?)",
+                (
+                    new_quote_id, original_quote["customer_id"], new_revision_num, quote_id, requested_delivery_date,
+                    ship_to.get("line1") if ship_to else None,
+                    ship_to.get("postal_code") if ship_to else None,
+                    ship_to.get("city") if ship_to else None,
+                    ship_to.get("country") if ship_to else None,
+                    note,
+                    subtotal, discount, shipping, tax, total, config.PRICING_CURRENCY,
+                    valid_until, sim_time
+                )
+            )
+            
+            # Insert revised lines
+            for line in revised_lines:
+                conn.execute(
+                    "INSERT INTO quote_lines (id, quote_id, item_id, qty, unit_price, line_total) "
+                    "VALUES (?, ?, ?, ?, ?, ?)",
+                    (line["id"], new_quote_id, line["item_id"], line["qty"], line["unit_price"], line["line_total"])
+                )
+            
+            # Mark original quote as superseded
+            conn.execute(
+                "UPDATE quotes SET status = 'superseded' WHERE id = ?",
+                (quote_id,)
+            )
+            
+            conn.commit()
+            
+            return {
+                "quote_id": new_quote_id,
+                "revision_number": new_revision_num,
+                "supersedes": quote_id,
+                "status": "draft",
+                "total": total,
+                "currency": config.PRICING_CURRENCY,
+                "valid_until": valid_until,
+                "ui_url": ui_href("quotes", new_quote_id),
+                "message": f"📝 Quote revised: {quote_id} → {new_quote_id} (R{new_revision_num})"
+            }
+    
+    @staticmethod
+    def generate_quote_pdf(quote_id: str) -> bytes:
+        """Generate a PDF for a quote using ReportLab."""
+        # Get quote data
+        quote_data = QuoteService.get_quote(quote_id)
+        if not quote_data:
+            raise ValueError(f"Quote {quote_id} not found")
+        
+        quote = quote_data["quote"]
+        customer = quote_data["customer"]
+        lines = quote_data["lines"]
+        
+        # Create PDF in memory
+        buffer = BytesIO()
+        doc = SimpleDocTemplate(buffer, pagesize=letter,
+                              topMargin=0.5*inch, bottomMargin=0.5*inch)
+        
+        story = []
+        styles = getSampleStyleSheet()
+        
+        # Custom styles
+        title_style = ParagraphStyle(
+            'CustomTitle',
+            parent=styles['Heading1'],
+            fontSize=24,
+            textColor=colors.HexColor('#1e293b'),
+            spaceAfter=30,
+        )
+        
+        # Title
+        title_text = f"<b>QUOTATION {quote['id']}</b>"
+        if quote["revision_number"] > 1:
+            title_text += f" <font size='18'>(Revision {quote['revision_number']})</font>"
+        story.append(Paragraph(title_text, title_style))
+        story.append(Spacer(1, 0.2*inch))
+        
+        # Company header
+        story.append(Paragraph("<b>Duck Inc</b>", styles['Normal']))
+        story.append(Paragraph("World Leading Manufacturer of Rubber Ducks", styles['Normal']))
+        story.append(Spacer(1, 0.3*inch))
+        
+        # Customer and Quote info section
+        info_data = [
+            [Paragraph("<b>Quote For:</b>", styles['Normal']), 
+             Paragraph("<b>Quote Details:</b>", styles['Normal'])],
+            [Paragraph(customer['name'] if customer else quote['customer_id'], styles['Normal']),
+             Paragraph(f"<b>Date:</b> {quote['created_at'][:10]}", styles['Normal'])],
+        ]
+        
+        if customer and customer.get('company'):
+            info_data.append([Paragraph(customer['company'], styles['Normal']), 
+                            Paragraph(f"<b>Valid Until:</b> {quote['valid_until']}", styles['Normal'])])
+        else:
+            info_data.append(['', Paragraph(f"<b>Valid Until:</b> {quote['valid_until']}", styles['Normal'])])
+        
+        if customer and customer.get('email'):
+            info_data.append([Paragraph(customer['email'], styles['Normal']), 
+                            Paragraph(f"<b>Status:</b> {quote['status'].upper()}", styles['Normal'])])
+        else:
+            info_data.append(['', Paragraph(f"<b>Status:</b> {quote['status'].upper()}", styles['Normal'])])
+        
+        if quote.get('requested_delivery_date'):
+            info_data.append(['', Paragraph(f"<b>Requested Delivery:</b> {quote['requested_delivery_date']}", styles['Normal'])])
+        
+        info_table = Table(info_data, colWidths=[3*inch, 3*inch])
+        info_table.setStyle(TableStyle([
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ('LEFTPADDING', (0, 0), (-1, -1), 0),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 0),
+        ]))
+        story.append(info_table)
+        story.append(Spacer(1, 0.4*inch))
+        
+        # Line items table
+        line_items_data = [['Item (SKU)', 'Quantity', 'Unit Price', 'Total']]
+        
+        for line in lines:
+            line_items_data.append([
+                f"{line['name']} ({line['sku']})",
+                f"{int(line['qty'])} {line.get('uom', 'ea')}",
+                f"{quote['currency']} {line['unit_price']:.2f}",
+                f"{quote['currency']} {line['line_total']:.2f}"
+            ])
+        
+        line_items_table = Table(line_items_data, colWidths=[3*inch, 1*inch, 1.25*inch, 1.25*inch])
+        line_items_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#e2e8f0')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.HexColor('#1e293b')),
+            ('ALIGN', (1, 0), (-1, -1), 'RIGHT'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 10),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+            ('TOPPADDING', (0, 0), (-1, 0), 12),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#cbd5e1')),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('LEFTPADDING', (0, 0), (-1, -1), 8),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 8),
+        ]))
+        story.append(line_items_table)
+        story.append(Spacer(1, 0.3*inch))
+        
+        # Totals section
+        totals_data = [
+            ['Subtotal:', f"{quote['currency']} {quote['subtotal']:.2f}"],
+        ]
+        
+        if quote['discount'] > 0:
+            totals_data.append(['Discount:', f"-{quote['currency']} {quote['discount']:.2f}"])
+        if quote['shipping'] > 0:
+            totals_data.append(['Shipping:', f"{quote['currency']} {quote['shipping']:.2f}"])
+        if quote['tax'] > 0:
+            totals_data.append(['Tax:', f"{quote['currency']} {quote['tax']:.2f}"])
+        
+        totals_data.append(['<b>Total:</b>', f"<b>{quote['currency']} {quote['total']:.2f}</b>"])
+        
+        # Convert to Paragraphs
+        totals_styled = [[Paragraph(cell, styles['Normal']) for cell in row] for row in totals_data]
+        
+        totals_table = Table(totals_styled, colWidths=[4.5*inch, 2*inch])
+        totals_table.setStyle(TableStyle([
+            ('ALIGN', (1, 0), (1, -1), 'RIGHT'),
+            ('ALIGN', (0, 0), (0, -1), 'RIGHT'),
+            ('LINEABOVE', (0, -1), (-1, -1), 1, colors.HexColor('#1e293b')),
+            ('TOPPADDING', (0, 0), (-1, -1), 6),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+        ]))
+        story.append(totals_table)
+        
+        # Validity notice
+        story.append(Spacer(1, 0.3*inch))
+        validity_text = f"<b>This quotation is valid until {quote['valid_until']}</b>"
+        story.append(Paragraph(validity_text, ParagraphStyle(
+            'Validity',
+            parent=styles['Normal'],
+            fontSize=11,
+            textColor=colors.HexColor('#dc2626'),
+            alignment=TA_CENTER,
+        )))
+        
+        # Footer
+        story.append(Spacer(1, 0.3*inch))
+        footer_text = "<i>Thank you for considering Duck Inc for your rubber duck needs!</i>"
+        story.append(Paragraph(footer_text, ParagraphStyle(
+            'Footer',
+            parent=styles['Normal'],
+            fontSize=10,
+            textColor=colors.HexColor('#64748b'),
+            alignment=TA_CENTER,
+        )))
+        
+        # Build PDF
+        try:
+            doc.build(story)
+        except Exception as e:
+            logger.error(f"Error building PDF: {e}", exc_info=True)
+            raise
+        
+        pdf_bytes = buffer.getvalue()
+        buffer.close()
+        
+        return pdf_bytes
+
+
 class InvoiceService:
     """Service for invoice and payment operations."""
 
@@ -1060,7 +1666,7 @@ class InvoiceService:
 
     @staticmethod
     def issue_invoice(invoice_id: str) -> Dict[str, Any]:
-        """Issue a draft invoice: sets due_date and status='issued'."""
+        """Issue a draft invoice: sets due_date, status='issued', and generates PDF."""
         with db_conn() as conn:
             inv = conn.execute("SELECT * FROM invoices WHERE id = ?", (invoice_id,)).fetchone()
             if not inv:
@@ -1079,6 +1685,22 @@ class InvoiceService:
                 (due_date, sim_time, invoice_id),
             )
             conn.commit()
+            
+            # Generate and store PDF
+            try:
+                pdf_bytes = InvoiceService.generate_invoice_pdf(invoice_id)
+                DocumentService.store_document(
+                    entity_type="invoice",
+                    entity_id=invoice_id,
+                    document_type="invoice_pdf",
+                    content=pdf_bytes,
+                    filename=f"invoice_{invoice_id}.pdf",
+                    notes="Generated when invoice was issued"
+                )
+            except Exception as e:
+                logger.error(f"Failed to generate PDF for {invoice_id}: {e}")
+                # Don't fail the issue operation if PDF generation fails
+            
             return {
                 "invoice_id": invoice_id,
                 "status": "issued",
@@ -1229,6 +1851,285 @@ class InvoiceService:
             )
             conn.commit()
             return cur.rowcount
+
+    @staticmethod
+    def generate_invoice_pdf(invoice_id: str) -> bytes:
+        """Generate a PDF for an invoice using ReportLab."""
+        # Get invoice data
+        invoice_data = InvoiceService.get_invoice(invoice_id)
+        if not invoice_data:
+            raise ValueError(f"Invoice {invoice_id} not found")
+        
+        inv = invoice_data.get("invoice")
+        customer = invoice_data.get("customer")
+        lines = invoice_data.get("lines", [])
+        payments = invoice_data.get("payments", [])
+        
+        if not inv:
+            raise ValueError(f"Invoice data missing 'invoice' key")
+        
+        # Create PDF in memory
+        buffer = BytesIO()
+        doc = SimpleDocTemplate(buffer, pagesize=letter,
+                              topMargin=0.5*inch, bottomMargin=0.5*inch)
+        
+        # Container for PDF elements
+        story = []
+        styles = getSampleStyleSheet()
+        
+        # Custom styles
+        title_style = ParagraphStyle(
+            'CustomTitle',
+            parent=styles['Heading1'],
+            fontSize=24,
+            textColor=colors.HexColor('#1e293b'),
+            spaceAfter=30,
+        )
+        
+        right_align_style = ParagraphStyle(
+            'RightAlign',
+            parent=styles['Normal'],
+            alignment=TA_RIGHT,
+        )
+        
+        # Title
+        story.append(Paragraph(f"<b>INVOICE {inv['id']}</b>", title_style))
+        story.append(Spacer(1, 0.2*inch))
+        
+        # Company header
+        story.append(Paragraph("<b>Duck Inc</b>", styles['Normal']))
+        story.append(Paragraph("World Leading Manufacturer of Rubber Ducks", styles['Normal']))
+        story.append(Spacer(1, 0.3*inch))
+        
+        # Customer and Invoice info section
+        info_data = [
+            [Paragraph("<b>Bill To:</b>", styles['Normal']), 
+             Paragraph("<b>Invoice Details:</b>", styles['Normal'])],
+            [Paragraph(customer['name'] if customer else inv['customer_id'], styles['Normal']),
+             Paragraph(f"<b>Date:</b> {inv['invoice_date'] or 'N/A'}", styles['Normal'])],
+        ]
+        
+        if customer and customer.get('company'):
+            info_data.append([Paragraph(customer['company'], styles['Normal']), 
+                            Paragraph(f"<b>Due Date:</b> {inv['due_date'] or 'N/A'}", styles['Normal'])])
+        else:
+            info_data.append(['', Paragraph(f"<b>Due Date:</b> {inv['due_date'] or 'N/A'}", styles['Normal'])])
+            
+        if customer and customer.get('email'):
+            info_data.append([Paragraph(customer['email'], styles['Normal']), 
+                            Paragraph(f"<b>Status:</b> {inv['status'].upper()}", styles['Normal'])])
+        else:
+            info_data.append(['', Paragraph(f"<b>Status:</b> {inv['status'].upper()}", styles['Normal'])])
+        
+        info_table = Table(info_data, colWidths=[3*inch, 3*inch])
+        info_table.setStyle(TableStyle([
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ('LEFTPADDING', (0, 0), (-1, -1), 0),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 0),
+        ]))
+        story.append(info_table)
+        story.append(Spacer(1, 0.4*inch))
+        
+        # Line items table
+        line_items_data = [['Item (SKU)', 'Quantity', 'Unit Price', 'Total']]
+        
+        # Get pricing details for each line
+        with db_conn() as conn:
+            for line in lines:
+                item = conn.execute("SELECT * FROM items WHERE sku = ?", (line['sku'],)).fetchone()
+                if item:
+                    unit_price = item['unit_price']
+                    line_total = unit_price * line['qty']
+                    line_items_data.append([
+                        f"{item['name']} ({line['sku']})",
+                        str(int(line['qty'])),
+                        f"{inv['currency']} {unit_price:.2f}",
+                        f"{inv['currency']} {line_total:.2f}"
+                    ])
+        
+        line_items_table = Table(line_items_data, colWidths=[3*inch, 1*inch, 1.25*inch, 1.25*inch])
+        line_items_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#e2e8f0')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.HexColor('#1e293b')),
+            ('ALIGN', (1, 0), (-1, -1), 'RIGHT'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 10),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+            ('TOPPADDING', (0, 0), (-1, 0), 12),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#cbd5e1')),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('LEFTPADDING', (0, 0), (-1, -1), 8),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 8),
+        ]))
+        story.append(line_items_table)
+        story.append(Spacer(1, 0.3*inch))
+        
+        # Totals section
+        totals_data = [
+            ['Subtotal:', f"{inv['currency']} {inv['subtotal']:.2f}"],
+        ]
+        
+        if inv['discount'] > 0:
+            totals_data.append(['Discount:', f"-{inv['currency']} {inv['discount']:.2f}"])
+        if inv['shipping'] > 0:
+            totals_data.append(['Shipping:', f"{inv['currency']} {inv['shipping']:.2f}"])
+        if inv['tax'] > 0:
+            totals_data.append(['Tax:', f"{inv['currency']} {inv['tax']:.2f}"])
+        
+        totals_data.append(['<b>Total:</b>', f"<b>{inv['currency']} {inv['total']:.2f}</b>"])
+        
+        if payments:
+            amount_paid = sum(p['amount'] for p in payments)
+            totals_data.append(['Amount Paid:', f"{inv['currency']} {amount_paid:.2f}"])
+            balance = inv['total'] - amount_paid
+            totals_data.append(['<b>Balance Due:</b>', f"<b>{inv['currency']} {balance:.2f}</b>"])
+        
+        # Convert to Paragraphs for styling
+        totals_styled = [[Paragraph(cell, styles['Normal']) for cell in row] for row in totals_data]
+        
+        totals_table = Table(totals_styled, colWidths=[4.5*inch, 2*inch])
+        totals_table.setStyle(TableStyle([
+            ('ALIGN', (1, 0), (1, -1), 'RIGHT'),
+            ('ALIGN', (0, 0), (0, -1), 'RIGHT'),
+            ('LINEABOVE', (0, -1), (-1, -1), 1, colors.HexColor('#1e293b')),
+            ('LINEABOVE', (0, -3), (-1, -3), 0.5, colors.HexColor('#cbd5e1')),
+            ('TOPPADDING', (0, 0), (-1, -1), 6),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+        ]))
+        story.append(totals_table)
+        
+        # Payment information if any
+        if payments:
+            story.append(Spacer(1, 0.3*inch))
+            story.append(Paragraph("<b>Payment History:</b>", styles['Heading3']))
+            story.append(Spacer(1, 0.1*inch))
+            
+            payment_data = [['Date', 'Method', 'Reference', 'Amount']]
+            for payment in payments:
+                payment_data.append([
+                    payment['payment_date'][:10] if payment.get('payment_date') else 'N/A',
+                    payment.get('payment_method', 'N/A'),
+                    payment.get('reference', 'N/A'),
+                    f"{inv['currency']} {payment['amount']:.2f}"
+                ])
+            
+            payment_table = Table(payment_data, colWidths=[1.5*inch, 1.5*inch, 2*inch, 1.5*inch])
+            payment_table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#e2e8f0')),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('ALIGN', (3, 0), (3, -1), 'RIGHT'),
+                ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#cbd5e1')),
+                ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                ('LEFTPADDING', (0, 0), (-1, -1), 8),
+                ('RIGHTPADDING', (0, 0), (-1, -1), 8),
+                ('TOPPADDING', (0, 0), (-1, -1), 6),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+            ]))
+            story.append(payment_table)
+        
+        # Footer
+        story.append(Spacer(1, 0.5*inch))
+        footer_text = "<i>Thank you for your business!</i>"
+        story.append(Paragraph(footer_text, ParagraphStyle(
+            'Footer',
+            parent=styles['Normal'],
+            fontSize=10,
+            textColor=colors.HexColor('#64748b'),
+            alignment=TA_CENTER,
+        )))
+        
+        # Build PDF
+        try:
+            doc.build(story)
+        except Exception as e:
+            logger.error(f"Error building PDF: {e}", exc_info=True)
+            raise
+        
+        # Get PDF bytes
+        pdf_bytes = buffer.getvalue()
+        buffer.close()
+        
+        return pdf_bytes
+
+
+class DocumentService:
+    """Service for document storage and retrieval."""
+    
+    @staticmethod
+    def store_document(
+        entity_type: str,
+        entity_id: str,
+        document_type: str,
+        content: bytes,
+        filename: str,
+        mime_type: str = "application/pdf",
+        notes: Optional[str] = None
+    ) -> str:
+        """Store a document in the database."""
+        with db_conn() as conn:
+            sim_time = SimulationService.get_current_time()
+            doc_id = generate_id(conn, "DOC", "documents")
+            
+            conn.execute(
+                "INSERT INTO documents (id, entity_type, entity_id, document_type, content, mime_type, filename, generated_at, notes) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (doc_id, entity_type, entity_id, document_type, content, mime_type, filename, sim_time, notes)
+            )
+            conn.commit()
+            return doc_id
+    
+    @staticmethod
+    def get_document(entity_type: str, entity_id: str, document_type: str) -> Optional[Dict[str, Any]]:
+        """Get the most recent document for an entity."""
+        with db_conn() as conn:
+            row = conn.execute(
+                "SELECT id, entity_type, entity_id, document_type, content, mime_type, filename, generated_at, notes "
+                "FROM documents "
+                "WHERE entity_type = ? AND entity_id = ? AND document_type = ? "
+                "ORDER BY generated_at DESC LIMIT 1",
+                (entity_type, entity_id, document_type)
+            ).fetchone()
+            
+            if not row:
+                return None
+            
+            return {
+                "id": row[0],
+                "entity_type": row[1],
+                "entity_id": row[2],
+                "document_type": row[3],
+                "content": row[4],
+                "mime_type": row[5],
+                "filename": row[6],
+                "generated_at": row[7],
+                "notes": row[8]
+            }
+    
+    @staticmethod
+    def list_documents(entity_type: str, entity_id: str) -> List[Dict[str, Any]]:
+        """List all documents for an entity (excluding content)."""
+        with db_conn() as conn:
+            rows = conn.execute(
+                "SELECT id, entity_type, entity_id, document_type, mime_type, filename, generated_at, notes "
+                "FROM documents "
+                "WHERE entity_type = ? AND entity_id = ? "
+                "ORDER BY generated_at DESC",
+                (entity_type, entity_id)
+            ).fetchall()
+            
+            return [
+                {
+                    "id": row[0],
+                    "entity_type": row[1],
+                    "entity_id": row[2],
+                    "document_type": row[3],
+                    "mime_type": row[4],
+                    "filename": row[5],
+                    "generated_at": row[6],
+                    "notes": row[7]
+                }
+                for row in rows
+            ]
 
 
 class StatsService:
@@ -1782,7 +2683,7 @@ class PendingActionService:
     The action stores the intent (type + params + human-readable summary).
     Execution only happens when the user explicitly confirms via action_confirm.
     
-    Compound actions (e.g. create_sales_order with a new_customer embedded)
+    Compound actions (e.g. accept_quote which creates a sales order)
     are handled by typed executors that know the internal dependency recipe.
     """
     
@@ -1797,21 +2698,6 @@ class PendingActionService:
         
         def _exec_create_customer(params, conn):
             return CustomerService.create_customer(**params)
-        
-        def _exec_create_sales_order(params, conn):
-            # Compound: if new_customer is embedded, create it first
-            p = dict(params)
-            new_customer = p.pop("new_customer", None)
-            if new_customer and not p.get("customer_id"):
-                cust_result = CustomerService.create_customer(**new_customer)
-                p["customer_id"] = cust_result["customer_id"]
-            return SalesService.create_order(
-                p["customer_id"],
-                p.get("requested_delivery_date"),
-                p.get("ship_to"),
-                p.get("lines"),
-                p.get("note"),
-            )
         
         def _exec_link_shipment(params, conn):
             return SalesService.link_shipment(params["sales_order_id"], params["shipment_id"])
@@ -1849,8 +2735,30 @@ class PendingActionService:
                 params.get("warehouse", "MAIN"), params.get("location", "RM-A"),
             )
         
+        def _exec_create_quote(params, conn):
+            return QuoteService.create_quote(
+                params["customer_id"], params.get("requested_delivery_date"),
+                params.get("ship_to"), params["lines"], params.get("note"),
+                params.get("valid_days", 30)
+            )
+        
+        def _exec_send_quote(params, conn):
+            return QuoteService.send_quote(params["quote_id"])
+        
+        def _exec_accept_quote(params, conn):
+            return QuoteService.accept_quote(params["quote_id"])
+        
+        def _exec_reject_quote(params, conn):
+            return QuoteService.reject_quote(params["quote_id"], params.get("reason"))
+        
+        def _exec_revise_quote(params, conn):
+            return QuoteService.revise_quote(params["quote_id"], params.get("changes"))
+        
         def _exec_create_invoice(params, conn):
             return InvoiceService.create_invoice(params["sales_order_id"])
+        
+        def _exec_issue_invoice(params, conn):
+            return InvoiceService.issue_invoice(params["invoice_id"])
         
         def _exec_record_payment(params, conn):
             return InvoiceService.record_payment(
@@ -1861,7 +2769,6 @@ class PendingActionService:
         
         PendingActionService._executors = {
             "create_customer": _exec_create_customer,
-            "create_sales_order": _exec_create_sales_order,
             "link_shipment": _exec_link_shipment,
             "create_shipment": _exec_create_shipment,
             "create_production_order": _exec_create_production_order,
@@ -1870,7 +2777,13 @@ class PendingActionService:
             "create_purchase_order": _exec_create_purchase_order,
             "restock_materials": _exec_restock_materials,
             "receive_purchase_order": _exec_receive_purchase_order,
+            "create_quote": _exec_create_quote,
+            "send_quote": _exec_send_quote,
+            "accept_quote": _exec_accept_quote,
+            "reject_quote": _exec_reject_quote,
+            "revise_quote": _exec_revise_quote,
             "create_invoice": _exec_create_invoice,
+            "issue_invoice": _exec_issue_invoice,
             "record_payment": _exec_record_payment,
         }
     
@@ -1994,7 +2907,9 @@ production_service = ProductionService()
 recipe_service = RecipeService()
 purchase_service = PurchaseService()
 messaging_service = MessagingService()
+quote_service = QuoteService()
 invoice_service = InvoiceService()
+document_service = DocumentService()
 stats_service = StatsService()
 admin_service = AdminService()
 chart_service = ChartService()

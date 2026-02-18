@@ -4,7 +4,7 @@
  * @param currency - Currency code (default: 'EUR')
  * @returns Formatted price string (e.g., "1 234.56 €") or "—" for null/undefined
  */
-export function formatPrice(amount: number | null | undefined, currency: string = 'EUR'): string {
+export function formatCurrency(amount: number | null | undefined, currency: string = 'EUR'): string {
     if (amount == null) {
         return '—'
     }

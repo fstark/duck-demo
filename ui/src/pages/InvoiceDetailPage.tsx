@@ -5,7 +5,7 @@ import { Badge } from '../components/Badge'
 import { Invoice, InvoiceDetail } from '../types'
 import { api } from '../api'
 import { useNavigation } from '../contexts/NavigationContext'
-import { formatPrice } from '../utils/currency'
+import { formatCurrency } from '../utils/currency'
 import { Quantity } from '../utils/quantity'
 import { formatDate } from '../utils/date'
 
@@ -146,9 +146,19 @@ export function InvoiceDetailPage({ invoiceId }: InvoiceDetailPageProps) {
                     )}
                 </div>
                 <div className="space-y-3 text-sm text-slate-800">
-                    <div className="flex items-center gap-3">
-                        <div className="font-semibold text-lg">{inv.id}</div>
-                        <Badge>{inv.status}</Badge>
+                    <div className="flex items-center gap-3 justify-between">
+                        <div className="flex items-center gap-3">
+                            <div className="font-semibold text-lg">{inv.id}</div>
+                            <Badge>{inv.status}</Badge>
+                        </div>
+                        <a
+                            href={`/api/invoices/${encodeURIComponent(invoiceId)}/pdf`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="px-4 py-2 bg-brand-600 text-white rounded hover:bg-brand-700 text-sm font-medium"
+                        >
+                            📄 Download PDF
+                        </a>
                     </div>
 
                     <div className="grid grid-cols-2 gap-3">
@@ -181,11 +191,11 @@ export function InvoiceDetailPage({ invoiceId }: InvoiceDetailPageProps) {
                                 {inv.issued_at && <div><span className="text-slate-500">Issued:</span> {formatDate(inv.issued_at)}</div>}
                                 {inv.paid_at && <div><span className="text-slate-500">Paid:</span> {formatDate(inv.paid_at)}</div>}
                                 <div className="pt-2 border-t mt-2">
-                                    <div><span className="text-slate-500">Subtotal:</span> {formatPrice(inv.subtotal, inv.currency)}</div>
-                                    {inv.discount > 0 && <div><span className="text-slate-500">Discount:</span> -{formatPrice(inv.discount, inv.currency)}</div>}
-                                    {inv.shipping > 0 && <div><span className="text-slate-500">Shipping:</span> {formatPrice(inv.shipping, inv.currency)}</div>}
-                                    {inv.tax > 0 && <div><span className="text-slate-500">Tax:</span> {formatPrice(inv.tax, inv.currency)}</div>}
-                                    <div className="font-semibold"><span className="text-slate-500">Total:</span> {formatPrice(inv.total, inv.currency)}</div>
+                                    <div><span className="text-slate-500">Subtotal:</span> {formatCurrency(inv.subtotal, inv.currency)}</div>
+                                    {inv.discount > 0 && <div><span className="text-slate-500">Discount:</span> -{formatCurrency(inv.discount, inv.currency)}</div>}
+                                    {inv.shipping > 0 && <div><span className="text-slate-500">Shipping:</span> {formatCurrency(inv.shipping, inv.currency)}</div>}
+                                    {inv.tax > 0 && <div><span className="text-slate-500">Tax:</span> {formatCurrency(inv.tax, inv.currency)}</div>}
+                                    <div className="font-semibold"><span className="text-slate-500">Total:</span> {formatCurrency(inv.total, inv.currency)}</div>
                                 </div>
                             </div>
                         </Card>
@@ -245,7 +255,7 @@ export function InvoiceDetailPage({ invoiceId }: InvoiceDetailPageProps) {
                                         {
                                             key: 'amount',
                                             label: 'Amount',
-                                            render: (row: any) => <div className="text-right">{formatPrice(row.amount, inv.currency)}</div>,
+                                            render: (row: any) => <div className="text-right">{formatCurrency(row.amount, inv.currency)}</div>,
                                         },
                                         { key: 'payment_method', label: 'Method' },
                                         { key: 'payment_date', label: 'Date', render: (row: any) => formatDate(row.payment_date) },
@@ -253,8 +263,8 @@ export function InvoiceDetailPage({ invoiceId }: InvoiceDetailPageProps) {
                                     ]}
                                 />
                                 <div className="flex justify-between mt-3 pt-2 border-t text-sm">
-                                    <div><span className="text-slate-500">Amount paid:</span> {formatPrice(data.amount_paid, inv.currency)}</div>
-                                    <div className="font-semibold"><span className="text-slate-500">Balance due:</span> {formatPrice(data.balance_due, inv.currency)}</div>
+                                    <div><span className="text-slate-500">Amount paid:</span> {formatCurrency(data.amount_paid, inv.currency)}</div>
+                                    <div className="font-semibold"><span className="text-slate-500">Balance due:</span> {formatCurrency(data.balance_due, inv.currency)}</div>
                                 </div>
                             </>
                         ) : (

@@ -95,6 +95,39 @@ export type SalesOrderDetail = {
   shipments: Shipment[]
 }
 
+export type Quote = {
+  id: string
+  customer_id: string
+  customer_name?: string
+  customer_company?: string
+  revision_number: number
+  supersedes_quote_id?: string
+  status: string
+  subtotal: number
+  tax: number
+  total: number
+  valid_until?: string
+  created_at?: string
+  sent_at?: string
+}
+
+export type QuoteDetail = {
+  quote: Record<string, any>
+  lines: Array<{
+    sku: string
+    item_name?: string
+    qty: number
+    unit_price: number
+    line_total: number
+  }>
+  revisions?: Array<{
+    id: string
+    revision_number: number
+    status: string
+    created_at?: string
+  }>
+}
+
 export type Shipment = {
   id: string
   status: string

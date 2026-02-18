@@ -5,7 +5,7 @@ import { Badge } from '../components/Badge'
 import { SalesOrder, SalesOrderDetail, Email } from '../types'
 import { api } from '../api'
 import { useNavigation } from '../contexts/NavigationContext'
-import { formatPrice } from '../utils/currency'
+import { formatCurrency } from '../utils/currency'
 import { Quantity } from '../utils/quantity.tsx'
 import { formatDate } from '../utils/date'
 
@@ -209,7 +209,7 @@ export function SalesOrderDetailPage({ orderId }: SalesOrderDetailPageProps) {
                             />
                         </Card>
                         <Card title="Pricing">
-                            <div className="text-right">{formatPrice(order.pricing.total, order.pricing.currency)}</div>
+                            <div className="text-right">{formatCurrency(order.pricing.total, order.pricing.currency)}</div>
                         </Card>
                     </div>
                     <Card title="Shipments">

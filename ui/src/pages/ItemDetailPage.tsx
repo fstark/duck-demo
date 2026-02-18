@@ -5,7 +5,7 @@ import { Badge } from '../components/Badge'
 import { Item, StockSummary } from '../types'
 import { api } from '../api'
 import { useNavigation } from '../contexts/NavigationContext'
-import { formatPrice } from '../utils/currency'
+import { formatCurrency } from '../utils/currency'
 import { formatQuantity, Quantity } from '../utils/quantity.tsx'
 
 function setHash(page: string, id?: string) {
@@ -164,7 +164,7 @@ export function ItemDetailPage({ sku }: ItemDetailPageProps) {
                                 <span className="font-medium">Type:</span> {item.type ? <Badge>{item.type}</Badge> : '—'}
                             </div>
                             <div className="text-slate-600">
-                                <span className="font-medium">Unit price:</span> {formatPrice(item.unit_price)}
+                                <span className="font-medium">Unit price:</span> {formatCurrency(item.unit_price)}
                             </div>
                         </div>
                         {item.image_url && (

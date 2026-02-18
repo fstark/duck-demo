@@ -8,7 +8,7 @@ import { api } from './api'
 import { Customer, Item, SalesOrder, SalesOrderDetail, StockSummary, Shipment, ProductionOrder, Email, Invoice } from './types'
 import { NavigationProvider, useNavigation } from './contexts/NavigationContext'
 import { Quantity } from './utils/quantity.tsx'
-import { formatPrice } from './utils/currency'
+import { formatCurrency } from './utils/currency'
 import { CustomersListPage } from './pages/CustomersListPage'
 import { CustomerDetailPage } from './pages/CustomerDetailPage'
 import { ItemsListPage } from './pages/ItemsListPage'
@@ -31,11 +31,13 @@ import { EmailsListPage } from './pages/EmailsListPage'
 import { EmailDetailPage } from './pages/EmailDetailPage'
 import { InvoicesListPage } from './pages/InvoicesListPage'
 import { InvoiceDetailPage } from './pages/InvoiceDetailPage'
+import QuotesListPage from './pages/QuotesListPage'
+import QuoteDetailPage from './pages/QuoteDetailPage'
 
 type SortDir = 'asc' | 'desc'
 type SortState<T> = { key: keyof T; dir: SortDir }
 
-type ViewPage = 'home' | 'customers' | 'items' | 'stock' | 'orders' | 'shipments' | 'production' | 'suppliers' | 'recipes' | 'purchase-orders' | 'emails' | 'invoices'
+type ViewPage = 'home' | 'customers' | 'items' | 'stock' | 'orders' | 'shipments' | 'production' | 'suppliers' | 'recipes' | 'purchase-orders' | 'emails' | 'invoices' | 'quotes'
 type ViewState = { page: ViewPage; id?: string }
 
 function SectionHeading({ id, title }: { id: string; title: string }) {
@@ -52,7 +54,7 @@ function parseHash(): ViewState {
   const parts = hash.split('/').filter(Boolean)
   const page = (parts[0] as ViewPage) || 'home'
   const id = parts[1] ? decodeURIComponent(parts.slice(1).join('/')) : undefined
-  const allowed: ViewPage[] = ['home', 'customers', 'items', 'stock', 'orders', 'shipments', 'production', 'suppliers', 'recipes', 'purchase-orders', 'emails', 'invoices']
+  const allowed: ViewPage[] = ['home', 'customers', 'items', 'stock', 'orders', 'shipments', 'production', 'suppliers', 'recipes', 'purchase-orders', 'emails', 'invoices', 'quotes']
   return { page: allowed.includes(page) ? page : 'home', id }
 }
 
@@ -153,6 +155,7 @@ function AppContent() {
           { page: 'customers', label: 'Customers' },
           { page: 'items', label: 'Items' },
           { page: 'stock', label: 'Stock' },
+          { page: 'quotes', label: 'Quotes' },
           { page: 'orders', label: 'Sales Orders' },
           { page: 'shipments', label: 'Shipments' },
           { page: 'emails', label: 'Emails' },
@@ -222,7 +225,7 @@ function AppContent() {
               </Card>
               <Card title="Sales orders">
                 <div className="text-2xl font-semibold"><Quantity value={ordersCount} className="text-left block" /></div>
-                <div className="text-sm text-slate-600 mb-2">orders loaded · {formatPrice(totalSalesAmount)}</div>
+                <div className="text-sm text-slate-600 mb-2">orders loaded · {formatCurrency(totalSalesAmount)}</div>
                 <button className="text-brand-600 hover:underline text-sm" onClick={() => setHash('orders')} type="button">
                   View orders
                 </button>
@@ -309,6 +312,9 @@ function AppContent() {
 
         {view.page === 'invoices' && !view.id && <InvoicesListPage />}
         {view.page === 'invoices' && view.id && <InvoiceDetailPage invoiceId={view.id} />}
+
+        {view.page === 'quotes' && !view.id && <QuotesListPage />}
+        {view.page === 'quotes' && view.id && <QuoteDetailPage quoteId={view.id} />}
 
         {view.page === 'production' && !view.id && <ProductionOrdersListPage />}
         {view.page === 'production' && view.id && <ProductionOrderDetailPage productionOrderId={view.id} />}
