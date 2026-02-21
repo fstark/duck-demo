@@ -200,7 +200,7 @@ function AppContent() {
   ]
 
   const Nav = () => {
-    const isGroupActive = (group: typeof navGroups[0]) => 
+    const isGroupActive = (group: typeof navGroups[0]) =>
       group.items.some((item) => view.page === item.page)
 
     return (
@@ -218,11 +218,10 @@ function AppContent() {
         {navGroups.map((group) => (
           <div key={group.label} className="relative group">
             <button
-              className={`px-3 py-1.5 rounded flex items-center gap-1 ${
-                isGroupActive(group) 
-                  ? 'bg-slate-900 text-white' 
+              className={`px-3 py-1.5 rounded flex items-center gap-1 ${isGroupActive(group)
+                  ? 'bg-slate-900 text-white'
                   : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-              }`}
+                }`}
               type="button"
             >
               {group.label}
@@ -234,11 +233,10 @@ function AppContent() {
               {group.items.map((link) => (
                 <button
                   key={link.page}
-                  className={`w-full text-left px-3 py-1.5 ${
-                    view.page === link.page 
-                      ? 'bg-slate-100 text-slate-900 font-medium' 
+                  className={`w-full text-left px-3 py-1.5 ${view.page === link.page
+                      ? 'bg-slate-100 text-slate-900 font-medium'
                       : 'text-slate-700 hover:bg-slate-50'
-                  }`}
+                    }`}
                   onClick={() => {
                     clearListContext()
                     setHash(link.page)
@@ -278,48 +276,48 @@ function AppContent() {
             <div>
               <h2 className="text-lg font-semibold text-slate-800 mb-3">Sales & CRM</h2>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                <Card 
-                  title="Customers" 
+                <Card
+                  title="Customers"
                   onClick={() => setHash('customers')}
                   spotlight={spotlight.customers}
                 >
                   <div className="text-2xl font-semibold"><Quantity value={customersCount} className="text-left block" /></div>
                   <div className="text-sm text-slate-600">total customers</div>
                 </Card>
-                <Card 
-                  title="Quotes" 
+                <Card
+                  title="Quotes"
                   onClick={() => setHash('quotes')}
                   spotlight={spotlight.quotes}
                 >
                   <div className="text-2xl font-semibold"><Quantity value={quotesCount} className="text-left block" /></div>
                   <div className="text-sm text-slate-600">{quotesPending} pending · {formatCurrency(totalQuotesAmount)}</div>
                 </Card>
-                <Card 
-                  title="Sales Orders" 
+                <Card
+                  title="Sales Orders"
                   onClick={() => setHash('orders')}
                   spotlight={spotlight.sales_orders}
                 >
                   <div className="text-2xl font-semibold"><Quantity value={ordersCount} className="text-left block" /></div>
                   <div className="text-sm text-slate-600">orders · {formatCurrency(totalSalesAmount)}</div>
                 </Card>
-                <Card 
-                  title="Shipments" 
+                <Card
+                  title="Shipments"
                   onClick={() => setHash('shipments')}
                   spotlight={spotlight.shipments}
                 >
                   <div className="text-2xl font-semibold"><Quantity value={shipmentsCount} className="text-left block" /></div>
                   <div className="text-sm text-slate-600">shipments</div>
                 </Card>
-                <Card 
-                  title="Invoices" 
+                <Card
+                  title="Invoices"
                   onClick={() => setHash('invoices')}
                   spotlight={spotlight.invoices}
                 >
                   <div className="text-2xl font-semibold"><Quantity value={invoicesCount} className="text-left block" /></div>
                   <div className="text-sm text-slate-600">{invoicesOutstanding} outstanding</div>
                 </Card>
-                <Card 
-                  title="Emails" 
+                <Card
+                  title="Emails"
                   onClick={() => setHash('emails')}
                   spotlight={spotlight.emails}
                 >
@@ -337,8 +335,8 @@ function AppContent() {
                   <div className="text-2xl font-semibold"><Quantity value={itemsCount} className="text-left block" /></div>
                   <div className="text-sm text-slate-600">catalog items</div>
                 </Card>
-                <Card 
-                  title="Stock" 
+                <Card
+                  title="Stock"
                   onClick={() => setHash('stock')}
                   spotlight={spotlight.stock}
                 >
@@ -356,8 +354,8 @@ function AppContent() {
             <div>
               <h2 className="text-lg font-semibold text-slate-800 mb-3">Production & Supply Chain</h2>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                <Card 
-                  title="Production Orders" 
+                <Card
+                  title="Production Orders"
                   onClick={() => setHash('production')}
                   spotlight={spotlight.production_orders}
                 >
@@ -368,8 +366,8 @@ function AppContent() {
                   <div className="text-2xl font-semibold"><Quantity value={suppliersCount} className="text-left block" /></div>
                   <div className="text-sm text-slate-600">suppliers</div>
                 </Card>
-                <Card 
-                  title="Purchase Orders" 
+                <Card
+                  title="Purchase Orders"
                   onClick={() => setHash('purchase-orders')}
                   spotlight={spotlight.purchase_orders}
                 >

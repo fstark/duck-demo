@@ -15,9 +15,9 @@ type CardProps = {
 
 export function Card({ title, children, onClick, spotlight }: CardProps) {
   const isClickable = !!onClick
-  
+
   return (
-    <div 
+    <div
       className={`card p-4 ${isClickable ? 'cursor-pointer transition-all hover:shadow-md hover:border-slate-300' : ''}`}
       onClick={onClick}
       role={isClickable ? 'button' : undefined}
@@ -30,7 +30,7 @@ export function Card({ title, children, onClick, spotlight }: CardProps) {
           {children}
         </div>
         {spotlight?.length ? (
-          <div 
+          <div
             className="grid gap-y-1 text-xs border-l border-slate-200 pl-3"
             style={{ gridTemplateColumns: 'auto auto' }}
             onClick={(e) => e.stopPropagation()}
