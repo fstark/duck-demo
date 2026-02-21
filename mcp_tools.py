@@ -23,7 +23,6 @@ from services import (
     stats_service,
     admin_service,
     chart_service,
-    pending_action_service,
 )
 
 
@@ -160,6 +159,7 @@ def register_tools(mcp):
         """Find matching customers. Any provided field is used as a case-insensitive contains filter (except country which uses exact ISO match)."""
         return customer_service.find_customers(name, email, company, city, country, phone, limit)
     
+    # MUTATING TOOL
     @mcp.tool(name="crm_create_customer", meta={"tags": ["sales"]})
     @log_tool("crm_create_customer")
     def create_customer(
@@ -178,7 +178,7 @@ def register_tools(mcp):
         notes: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
-        Create a new customer. Returns a pending action that must be confirmed.
+        Create a new customer. Returns the created customer object.
         
         Parameters:
             name: Customer name (required)
@@ -196,21 +196,16 @@ def register_tools(mcp):
             notes: Internal notes about the customer
         
         Returns:
-            A pending action. **Present the summary to the user and wait for explicit confirmation
-            before calling action_confirm.**
+            The created customer object with id, name, and all fields.
         """
-        parts = [name]
-        if company: parts.append(f"({company})")
-        if city: parts.append(f"in {city}")
-        if country: parts.append(f"[{country}]")
-        summary = f"Create customer {' '.join(parts)}"
-        return pending_action_service.create("create_customer", {
-            "name": name, "company": company, "email": email, "phone": phone,
-            "address_line1": address_line1, "address_line2": address_line2,
-            "city": city, "postal_code": postal_code, "country": country,
-            "tax_id": tax_id, "payment_terms": payment_terms, "currency": currency, "notes": notes,
-        }, summary)
+        return customer_service.create_customer(
+            name=name, company=company, email=email, phone=phone,
+            address_line1=address_line1, address_line2=address_line2,
+            city=city, postal_code=postal_code, country=country,
+            tax_id=tax_id, payment_terms=payment_terms, currency=currency, notes=notes,
+        )
     
+    # MUTATING TOOL
     @mcp.tool(name="crm_update_customer", meta={"tags": ["sales"]})
     @log_tool("crm_update_customer")
     def update_customer(
@@ -230,8 +225,8 @@ def register_tools(mcp):
         notes: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
-        Update an existing customer. Returns a pending action that must be confirmed.
-        Only provided fields will be updated.
+        Update an existing customer. Only provided fields will be updated.
+        Returns the updated customer object.
         
         Parameters:
             customer_id: The customer ID to update (e.g., 'CUST-0044')
@@ -250,28 +245,14 @@ def register_tools(mcp):
             notes: New internal notes
         
         Returns:
-            A pending action. **Present the summary to the user and wait for explicit confirmation
-            before calling action_confirm.**
+            The updated customer object.
         """
-        # Verify customer exists first
-        existing = customer_service.get_customer_details(customer_id, include_orders=False)
-        current_name = existing["customer"]["name"]
-        
-        field_values = {
-            "name": name, "company": company, "email": email, "phone": phone,
-            "address_line1": address_line1, "address_line2": address_line2,
-            "city": city, "postal_code": postal_code, "country": country,
-            "tax_id": tax_id, "payment_terms": payment_terms, "currency": currency, "notes": notes,
-        }
-        changes = [f"{k} → '{v}'" for k, v in field_values.items() if v is not None]
-        
-        if not changes:
-            raise ValueError("No fields to update")
-        
-        summary = f"Update customer {current_name} ({customer_id}): {', '.join(changes)}"
-        return pending_action_service.create("update_customer", {
-            "customer_id": customer_id, **field_values
-        }, summary)
+        return customer_service.update_customer(
+            customer_id=customer_id, name=name, company=company, email=email, phone=phone,
+            address_line1=address_line1, address_line2=address_line2,
+            city=city, postal_code=postal_code, country=country,
+            tax_id=tax_id, payment_terms=payment_terms, currency=currency, notes=notes,
+        )
 
     @mcp.tool(name="crm_get_customer", meta={"tags": ["sales"]})
     @log_tool("crm_get_customer")
@@ -444,19 +425,19 @@ def register_tools(mcp):
             raise ValueError("Sales order not found")
         return detail
     
+    # MUTATING TOOL
     @mcp.tool(name="sales_link_shipment", meta={"tags": ["sales"]})
     @log_tool("sales_link_shipment")
     def link_shipment_to_sales_order(sales_order_id: str, shipment_id: str) -> Dict[str, Any]:
         """
-        Link an existing shipment to a sales order. Returns a pending action.
+        Link an existing shipment to a sales order.
         
         Returns:
-            A pending action. **Present the summary to the user and wait for explicit confirmation
-            before calling action_confirm.**
+            The link result with sales_order_id and shipment_id.
         """
-        summary = f"Link shipment {shipment_id} to sales order {sales_order_id}"
-        return pending_action_service.create("link_shipment", {"sales_order_id": sales_order_id, "shipment_id": shipment_id}, summary)
+        return sales_service.link_shipment(sales_order_id, shipment_id)
     
+    # MUTATING TOOL
     @mcp.tool(name="logistics_create_shipment", meta={"tags": ["sales"]})
     @log_tool("logistics_create_shipment")
     def create_shipment(
@@ -468,7 +449,8 @@ def register_tools(mcp):
         reference: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """
-        Create a planned shipment with package contents and delivery schedule. Returns a pending action.
+        Create a planned shipment with package contents and delivery schedule.
+        Returns the created shipment object.
         
         Parameters:
             ship_from: Dict with warehouse info {warehouse: str}
@@ -479,13 +461,11 @@ def register_tools(mcp):
             reference: Optional sales order reference {type: 'sales_order', id: 'SO-1000'}
         
         Returns:
-            A pending action. **Present the summary to the user and wait for explicit confirmation
-            before calling action_confirm.**
+            The created shipment object with id, status, and details.
         """
-        dest = (ship_to or {}).get("city", "?")
-        ref_str = f" for {reference['id']}" if reference and reference.get("id") else ""
-        summary = f"Create shipment to {dest}{ref_str} (depart {planned_departure or '?'}, arrive {planned_arrival or '?'})"
-        return pending_action_service.create("create_shipment", {"ship_from": ship_from, "ship_to": ship_to, "planned_departure": planned_departure, "planned_arrival": planned_arrival, "packages": packages, "reference": reference}, summary)
+        return logistics_service.create_shipment(
+            ship_from, ship_to, planned_departure, planned_arrival, packages, reference,
+        )
     
     @mcp.tool(name="logistics_get_shipment", meta={"tags": ["sales"]})
     @log_tool("logistics_get_shipment")
@@ -538,39 +518,40 @@ def register_tools(mcp):
         """
         return production_service.find_orders_by_date_range(start_date, end_date, limit)
     
+    # MUTATING TOOL
     @mcp.tool(name="production_create_order", meta={"tags": ["production"]})
     @log_tool("production_create_order")
     def production_create_order(recipe_id: str, notes: Optional[str] = None) -> Dict[str, Any]:
         """
-        Create a new production order to execute one batch of a recipe. Returns a pending action.
+        Create a new production order to execute one batch of a recipe.
+        Returns the created production order object.
         
         Parameters:
             recipe_id: The recipe to execute (e.g., 'RCP-ELVIS-20')
             notes: Optional notes for the production order
         
         Returns:
-            A pending action. **Present the summary to the user and wait for explicit confirmation
-            before calling action_confirm.**
+            The created production order object with id, status, and recipe details.
         """
-        summary = f"Create production order for recipe {recipe_id}"
-        return pending_action_service.create("create_production_order", {"recipe_id": recipe_id, "notes": notes}, summary)
+        return production_service.create_order(recipe_id, notes)
     
+    # MUTATING TOOL
     @mcp.tool(name="production_start_order", meta={"tags": ["production"]})
     @log_tool("production_start_order")
     def production_start_order(production_order_id: str) -> Dict[str, Any]:
         """
-        Start a production order (change status from 'ready' to 'in_progress'). Returns a pending action.
+        Start a production order (change status from 'ready' to 'in_progress').
+        Returns the updated production order.
         
         Parameters:
             production_order_id: The production order ID (e.g., 'MO-1000')
         
         Returns:
-            A pending action. **Present the summary to the user and wait for explicit confirmation
-            before calling action_confirm.**
+            The updated production order object with status 'in_progress'.
         """
-        summary = f"Start production order {production_order_id}"
-        return pending_action_service.create("start_production", {"production_order_id": production_order_id}, summary)
+        return production_service.start_order(production_order_id)
     
+    # MUTATING TOOL
     @mcp.tool(name="production_complete_order", meta={"tags": ["production"]})
     @log_tool("production_complete_order")
     def production_complete_order(
@@ -580,7 +561,8 @@ def register_tools(mcp):
         location: str = "FG-A"
     ) -> Dict[str, Any]:
         """
-        Complete a production order and add produced goods to stock. Returns a pending action.
+        Complete a production order and add produced goods to stock.
+        Returns the completed production order.
         
         Parameters:
             production_order_id: The production order ID (e.g., 'MO-1000')
@@ -589,11 +571,9 @@ def register_tools(mcp):
             location: Location within warehouse (default: FG-A)
         
         Returns:
-            A pending action. **Present the summary to the user and wait for explicit confirmation
-            before calling action_confirm.**
+            The completed production order object with stock update details.
         """
-        summary = f"Complete production order {production_order_id} ({qty_produced} units → {warehouse}/{location})"
-        return pending_action_service.create("complete_production", {"production_order_id": production_order_id, "qty_produced": qty_produced, "warehouse": warehouse, "location": location}, summary)
+        return production_service.complete_order(production_order_id, qty_produced, warehouse, location)
     
     @mcp.tool(name="catalog_list_recipes", meta={"tags": ["shared"]})
     @log_tool("catalog_list_recipes")
@@ -618,12 +598,14 @@ def register_tools(mcp):
         """
         return recipe_service.get_recipe(recipe_id)
     
+    # MUTATING TOOL
     @mcp.tool(name="purchase_create_order", meta={"tags": ["production"]})
     @log_tool("purchase_create_order")
     def purchase_create_order(item_sku: str, qty: float, supplier_name: Optional[str] = None) -> Dict[str, Any]:
         """
-        Create a purchase order for raw materials or components. Returns a pending action.
+        Create a purchase order for raw materials or components.
         If supplier_name not provided, auto-selects based on item type.
+        Returns the created purchase order object.
         
         Parameters:
             item_sku: SKU of item to purchase (e.g., 'ITEM-PVC')
@@ -631,45 +613,30 @@ def register_tools(mcp):
             supplier_name: Optional supplier name (auto-selected if not provided)
         
         Returns:
-            A pending action. **Present the summary to the user and wait for explicit confirmation
-            before calling action_confirm.**
+            The created purchase order object with id, status, and supplier details.
         """
-        supplier_str = f" from {supplier_name}" if supplier_name else ""
-        summary = f"Purchase {qty} of {item_sku}{supplier_str}"
-        return pending_action_service.create("create_purchase_order", {"item_sku": item_sku, "qty": qty, "supplier_name": supplier_name}, summary)
+        return purchase_service.create_order(item_sku, qty, supplier_name)
     
+    # MUTATING TOOL
     @mcp.tool(name="purchase_restock_materials", meta={"tags": ["production"]})
     @log_tool("purchase_restock_materials")
     def purchase_restock_materials() -> Dict[str, Any]:
         """
         Check all raw materials and create purchase orders for items below reorder quantity.
-        Returns a pending action with a preview of what will be ordered.
+        Executes immediately — may create multiple purchase orders in one call.
         
         Returns:
-            A pending action with dry-run preview. **Present the summary to the user
-            and wait for explicit confirmation before calling action_confirm.**
+            Result with list of created purchase orders, or a message if nothing to restock.
         """
-        # Dry-run: check what would be ordered without actually creating POs
-        from services import db_conn, CatalogService, InventoryService
-        from db import dict_rows
-        with db_conn() as conn:
-            items_to_reorder = dict_rows(conn.execute(
-                "SELECT i.sku, i.name, i.reorder_qty, COALESCE(SUM(s.on_hand), 0) as current_stock "
-                "FROM items i LEFT JOIN stock s ON i.id = s.item_id "
-                "WHERE i.type IN ('raw_material', 'component') AND i.reorder_qty > 0 "
-                "GROUP BY i.id HAVING current_stock < i.reorder_qty ORDER BY i.sku"
-            ))
-        if not items_to_reorder:
-            return {"message": "All materials are above reorder levels. Nothing to do."}
-        preview_lines = [f"{it['name']} ({it['sku']}): order {it['reorder_qty'] - it['current_stock']}" for it in items_to_reorder]
-        summary = f"Restock {len(items_to_reorder)} materials: " + "; ".join(preview_lines)
-        return pending_action_service.create("restock_materials", {}, summary)
+        return purchase_service.restock_materials()
     
+    # MUTATING TOOL
     @mcp.tool(name="purchase_receive_order", meta={"tags": ["production"]})
     @log_tool("purchase_receive_order")
     def purchase_receive_order(purchase_order_id: str, warehouse: str = "MAIN", location: str = "RM-A") -> Dict[str, Any]:
         """
-        Receive a purchase order delivery and add materials to stock. Returns a pending action.
+        Receive a purchase order delivery and add materials to stock.
+        Returns the received purchase order with stock update details.
         
         Parameters:
             purchase_order_id: The purchase order ID (e.g., 'PO-1000')
@@ -677,11 +644,9 @@ def register_tools(mcp):
             location: Location within warehouse (default: RM-A for raw materials)
         
         Returns:
-            A pending action. **Present the summary to the user and wait for explicit confirmation
-            before calling action_confirm.**
+            The received purchase order object with updated status and stock details.
         """
-        summary = f"Receive purchase order {purchase_order_id} into {warehouse}/{location}"
-        return pending_action_service.create("receive_purchase_order", {"purchase_order_id": purchase_order_id, "warehouse": warehouse, "location": location}, summary)
+        return purchase_service.receive(purchase_order_id, warehouse, location)
     
     @mcp.tool(name="simulation_get_time", meta={"tags": ["shared"]})
     @log_tool("simulation_get_time")
@@ -808,6 +773,7 @@ def register_tools(mcp):
     
     # ── Quote tools ──────────────────────────────────────────────────────
     
+    # MUTATING TOOL
     @mcp.tool(name="quote_create", meta={"tags": ["sales"]})
     @log_tool("quote_create")
     def quote_create(
@@ -819,7 +785,8 @@ def register_tools(mcp):
         valid_days: int = 30
     ) -> Dict[str, Any]:
         """
-        Create a draft quote with frozen pricing. Returns a pending action.
+        Create a draft quote with frozen pricing.
+        Returns the created quote object.
         
         Parameters:
             customer_id: Customer ID (e.g., 'CUST-0001')
@@ -830,20 +797,11 @@ def register_tools(mcp):
             valid_days: Quote validity in days (default: 30)
         
         Returns:
-            A pending action. **Present the summary to the user and wait for explicit confirmation
-            before calling action_confirm.**
+            The created quote object with id, lines, frozen pricing, and validity.
         """
-        line_desc = ", ".join([f"{l['qty']}x {l['sku']}" for l in lines])
-        summary = f"Create quote for {customer_id}: {line_desc}"
-        params = {
-            "customer_id": customer_id,
-            "lines": lines,
-            "requested_delivery_date": requested_delivery_date,
-            "ship_to": ship_to,
-            "note": note,
-            "valid_days": valid_days
-        }
-        return pending_action_service.create("create_quote", params, summary)
+        return quote_service.create_quote(
+            customer_id, requested_delivery_date, ship_to, lines, note, valid_days,
+        )
     
     @mcp.tool(name="quote_get", meta={"tags": ["sales"]})
     @log_tool("quote_get")
@@ -884,59 +842,56 @@ def register_tools(mcp):
         """
         return quote_service.list_quotes(customer_id, status, limit, show_superseded)
     
+    # MUTATING TOOL
     @mcp.tool(name="quote_send", meta={"tags": ["sales"]})
     @log_tool("quote_send")
     def quote_send(quote_id: str) -> Dict[str, Any]:
         """
         Send a draft quote to customer. Sets status to 'sent' and generates PDF.
-        Returns a pending action.
+        Returns the updated quote.
         
         Parameters:
             quote_id: The quote ID to send (e.g., 'QUOTE-0001-R1')
         
         Returns:
-            A pending action. **Present the summary to the user and wait for explicit confirmation
-            before calling action_confirm.**
+            The updated quote object with status 'sent'.
         """
-        summary = f"Send quote {quote_id} to customer (generates PDF)"
-        return pending_action_service.create("send_quote", {"quote_id": quote_id}, summary)
+        return quote_service.send_quote(quote_id)
     
+    # MUTATING TOOL
     @mcp.tool(name="quote_accept", meta={"tags": ["sales"]})
     @log_tool("quote_accept")
     def quote_accept(quote_id: str) -> Dict[str, Any]:
         """
         Accept a quote. Creates a sales order from the quote and marks quote as accepted.
-        Returns a pending action.
+        Note: this is a compound operation — it both updates the quote status AND creates a sales order.
+        Returns the accepted quote with the linked sales_order_id.
         
         Parameters:
             quote_id: The quote ID to accept (e.g., 'QUOTE-0001-R1')
         
         Returns:
-            A pending action. **Present the summary to the user and wait for explicit confirmation
-            before calling action_confirm.**
+            The accepted quote object with sales_order_id of the auto-created sales order.
         """
-        summary = f"Accept quote {quote_id} (creates sales order)"
-        return pending_action_service.create("accept_quote", {"quote_id": quote_id}, summary)
+        return quote_service.accept_quote(quote_id)
     
+    # MUTATING TOOL
     @mcp.tool(name="quote_reject", meta={"tags": ["sales"]})
     @log_tool("quote_reject")
     def quote_reject(quote_id: str, reason: Optional[str] = None) -> Dict[str, Any]:
         """
-        Reject a quote. Returns a pending action.
+        Reject a quote. Returns the rejected quote.
         
         Parameters:
             quote_id: The quote ID to reject (e.g., 'QUOTE-0001-R1')
             reason: Optional rejection reason
         
         Returns:
-            A pending action. **Present the summary to the user and wait for explicit confirmation
-            before calling action_confirm.**
+            The rejected quote object with status 'rejected'.
         """
-        summary = f"Reject quote {quote_id}"
-        if reason:
-            summary += f": {reason}"
-        return pending_action_service.create("reject_quote", {"quote_id": quote_id, "reason": reason}, summary)
+        return quote_service.reject_quote(quote_id, reason)
     
+    # MUTATING TOOL
     @mcp.tool(name="quote_revise", meta={"tags": ["sales"]})
     @log_tool("quote_revise")
     def quote_revise(
@@ -949,7 +904,7 @@ def register_tools(mcp):
     ) -> Dict[str, Any]:
         """
         Create a new revision of a quote. Marks the original as superseded and creates a new draft.
-        Returns a pending action.
+        Returns the new revision quote object.
         
         Parameters:
             quote_id: The quote ID to revise (e.g., 'QUOTE-0001-R1')
@@ -960,8 +915,7 @@ def register_tools(mcp):
             valid_days: Quote validity in days (default: 30)
         
         Returns:
-            A pending action. **Present the summary to the user and wait for explicit confirmation
-            before calling action_confirm.**
+            The new revision quote object (e.g., QUOTE-0001-R2) with status 'draft'.
         """
         changes = {}
         if lines is not None:
@@ -973,28 +927,25 @@ def register_tools(mcp):
         if note is not None:
             changes["note"] = note
         changes["valid_days"] = valid_days
-        
-        summary = f"Revise quote {quote_id} (creates new revision)"
-        return pending_action_service.create("revise_quote", {"quote_id": quote_id, "changes": changes}, summary)
+        return quote_service.revise_quote(quote_id, changes)
     
     # ── Invoice & Payment tools ──────────────────────────────────────────
     
+    # MUTATING TOOL
     @mcp.tool(name="invoice_create", meta={"tags": ["sales"]})
     @log_tool("invoice_create")
     def invoice_create(sales_order_id: str) -> Dict[str, Any]:
         """
         Create a draft invoice from a sales order. Pricing is computed automatically.
-        Returns a pending action.
+        Returns the created invoice object.
         
         Parameters:
             sales_order_id: The sales order to invoice (e.g., 'SO-1041')
         
         Returns:
-            A pending action. **Present the summary to the user and wait for explicit confirmation
-            before calling action_confirm.**
+            The created invoice object with id, lines, and pricing breakdown.
         """
-        summary = f"Create invoice for sales order {sales_order_id}"
-        return pending_action_service.create("create_invoice", {"sales_order_id": sales_order_id}, summary)
+        return invoice_service.create_invoice(sales_order_id)
     
     @mcp.tool(name="invoice_get", meta={"tags": ["sales"]})
     @log_tool("invoice_get")
@@ -1029,23 +980,23 @@ def register_tools(mcp):
         """
         return invoice_service.list_invoices(customer_id, status, limit)
     
+    # MUTATING TOOL
     @mcp.tool(name="invoice_issue", meta={"tags": ["sales"]})
     @log_tool("invoice_issue")
     def invoice_issue(invoice_id: str) -> Dict[str, Any]:
         """
         Issue a draft invoice to the customer. Sets the due date based on payment terms (30 days)
-        and generates the invoice PDF. Returns a pending action.
+        and generates the invoice PDF. Returns the issued invoice.
         
         Parameters:
             invoice_id: The invoice ID to issue (e.g., 'INV-2001')
         
         Returns:
-            A pending action. **Present the summary to the user and wait for explicit confirmation
-            before calling action_confirm.**
+            The issued invoice object with due_date set and PDF generated.
         """
-        summary = f"Issue invoice {invoice_id} (sets due date and generates PDF)"
-        return pending_action_service.create("issue_invoice", {"invoice_id": invoice_id}, summary)
+        return invoice_service.issue_invoice(invoice_id)
     
+    # MUTATING TOOL
     @mcp.tool(name="invoice_record_payment", meta={"tags": ["sales"]})
     @log_tool("invoice_record_payment")
     def invoice_record_payment(
@@ -1057,7 +1008,7 @@ def register_tools(mcp):
     ) -> Dict[str, Any]:
         """
         Record a payment against an invoice. Auto-marks invoice as 'paid' when fully covered.
-        Returns a pending action.
+        Returns the payment record and updated invoice balance.
         
         Parameters:
             invoice_id: The invoice to pay (e.g., 'INV-2001')
@@ -1067,14 +1018,11 @@ def register_tools(mcp):
             notes: Optional notes
         
         Returns:
-            A pending action. **Present the summary to the user and wait for explicit confirmation
-            before calling action_confirm.**
+            The payment record with updated invoice balance_due.
         """
-        summary = f"Record payment of {amount:.2f} on invoice {invoice_id} via {payment_method}"
-        return pending_action_service.create("record_payment", {
-            "invoice_id": invoice_id, "amount": amount,
-            "payment_method": payment_method, "reference": reference, "notes": notes,
-        }, summary)
+        return invoice_service.record_payment(
+            invoice_id, amount, payment_method, reference, notes,
+        )
     
     @mcp.tool(name="chart_generate", meta={"tags": ["shared"]})
     @log_tool("chart_generate")
@@ -1125,46 +1073,6 @@ def register_tools(mcp):
         """
         result = chart_service.generate_chart(chart_type, labels, values, series, title)
         return {"url": result["url"], "filename": result["filename"]}
-    
-    @mcp.tool(name="action_confirm", meta={"tags": ["shared"]})
-    @log_tool("action_confirm")
-    def action_confirm(action_id: str) -> Dict[str, Any]:
-        """
-        Confirm and execute a pending action. Only call this after the user explicitly approves.
-        
-        Parameters:
-            action_id: The pending action ID (e.g., 'ACT-0001')
-        
-        Returns:
-            The result of the executed action (same as the original tool would have returned).
-            **Always relay the message verbatim to the user to confirm the action.**
-        """
-        return pending_action_service.confirm(action_id)
-    
-    @mcp.tool(name="action_reject", meta={"tags": ["shared"]})
-    @log_tool("action_reject")
-    def action_reject(action_id: str) -> Dict[str, Any]:
-        """
-        Reject a pending action. The action will not be executed.
-        
-        Parameters:
-            action_id: The pending action ID (e.g., 'ACT-0001')
-        
-        Returns:
-            Dictionary with action_id, status, and message.
-        """
-        return pending_action_service.reject(action_id)
-    
-    @mcp.tool(name="action_list_pending", meta={"tags": ["shared"]})
-    @log_tool("action_list_pending")
-    def action_list_pending() -> Dict[str, Any]:
-        """
-        List all pending actions awaiting user confirmation.
-        
-        Returns:
-            Dictionary with actions array containing id, action_type, summary, status, created_at
-        """
-        return pending_action_service.list_pending()
     
     @mcp.tool(name="admin_reset_database", meta={"tags": ["shared"]})
     @log_tool("admin_reset_database")

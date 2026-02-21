@@ -44,13 +44,13 @@ Quotes are formal price proposals sent to customers **before** creating sales or
 ### MCP Tools (mcp_tools.py)
 
 7 quote tools (tag: `sales`):
-- `quote_create` ⏳ - pending action
+- `quote_create` 🔧 - mutating
 - `quote_get` - direct read
 - `quote_list` - direct read
-- `quote_send` ⏳ - pending action
-- `quote_accept` ⏳ - pending action
-- `quote_reject` ⏳ - pending action
-- `quote_revise` ⏳ - pending action
+- `quote_send` 🔧 - mutating
+- `quote_accept` 🔧 - mutating (compound: also creates sales order)
+- `quote_reject` 🔧 - mutating
+- `quote_revise` 🔧 - mutating
 
 ### API Routes (api_routes.py)
 
@@ -81,16 +81,16 @@ Quotes are formal price proposals sent to customers **before** creating sales or
 ## Workflow
 
 ### Standard Flow
-1. Sales rep creates quote → `quote_create` → pending action → user confirms
-2. Quote PDF generated and sent → `quote_send` → pending action → user confirms
-3. Customer accepts → `quote_accept` → creates sales order → pending action → user confirms
+1. Sales rep creates quote → `quote_create` → returns created quote
+2. Quote PDF generated and sent → `quote_send` → returns updated quote
+3. Customer accepts → `quote_accept` → creates sales order and returns accepted quote
 4. Sales order → Production → Invoice/Shipping
 
 ### Revision Flow
 1. Customer requests changes
-2. Sales rep revises quote → `quote_revise` → pending action → user confirms
+2. Sales rep revises quote → `quote_revise` → returns new revision
 3. New revision created (QUOTE-0001-R2), old marked as superseded
-4. Send new revision → `quote_send` → pending action → user confirms
+4. Send new revision → `quote_send` → returns updated quote
 5. Continue with standard flow
 
 ### Pricing Behavior
@@ -104,7 +104,7 @@ Quotes are formal price proposals sent to customers **before** creating sales or
 1. **Revision Support:** Base ID + revision number (QUOTE-0001-R1, QUOTE-0001-R2)
 2. **Frozen Pricing:** unit_price and line_total stored in quote_lines
 3. **PDF Generation:** ReportLab with validity notice, stored in documents table
-4. **Pending Actions:** All mutations require user confirmation
+4. **Direct Execution:** All mutation tools execute immediately and return the created/updated object
 5. **Status Tracking:** draft → sent → accepted/rejected/expired/superseded
 6. **Document Storage:** Generic documents table for all PDFs (quotes, invoices, etc.)
 7. **UI Integration:** Full CRUD with navigation, filters, detail views
@@ -190,7 +190,7 @@ CREATE TABLE quote_lines (
 
 ## Implementation Notes
 
-- **Pending Actions:** All quote mutations go through action_confirm/action_reject
+- **Direct Execution:** All quote mutation tools execute immediately and return the result
 - **PDF Storage:** Stored in documents table as BLOB, entity_type='quote'
 - **Revision Linking:** supersedes_quote_id creates chain, status='superseded' hides old versions
 - **Sales Order Creation:** quote_accept() calls SalesService.create_order() internally

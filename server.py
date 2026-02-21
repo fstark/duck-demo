@@ -1,13 +1,13 @@
 """Duck Demo Server - Manufacturing simulation with MCP and REST APIs.
 
-Single MCP server with all 42 tools, organized by tags:
-  - 'shared' tools (16): Available to both agents - user, stats, catalog (items + recipes), inventory, simulation, charts, actions, admin
+Single MCP server with all 39 tools, organized by tags:
+  - 'shared' tools (13): Available to both agents - user, stats, catalog (items + recipes), inventory, simulation, charts, admin
   - 'sales' tools (17): Sales agent - CRM, orders, shipping, emails
   - 'production' tools (9): Production agent - manufacturing, materials
 
 Clients filter tools by tag to create specialized agents:
-  - Sales agent: Uses Prompt_sales.md, filters to 'shared' + 'sales' tags (33 tools)
-  - Production agent: Uses Prompt_production.md, filters to 'shared' + 'production' tags (25 tools)
+  - Sales agent: Uses Prompt_sales.md, filters to 'shared' + 'sales' tags (30 tools)
+  - Production agent: Uses Prompt_production.md, filters to 'shared' + 'production' tags (22 tools)
 """
 
 import logging
@@ -44,20 +44,20 @@ mcp = FastMCP(
     ),
 )
 
-# Register all tools with tags: shared (16) + sales (17) + production (9) = 42 tools
+# Register all tools with tags: shared (13) + sales (17) + production (9) = 39 tools
 register_tools(mcp)
 
 # Register REST API routes (for UI compatibility)
 register_routes(mcp)
 
-logger.info("Starting Duck Demo MCP Server (42 tools)")
-logger.info("  Shared tools (16): user_*, stats_*, catalog_* (items + recipes), inventory_*, simulation_*, chart_*, action_*, admin_*")
+logger.info("Starting Duck Demo MCP Server (39 tools)")
+logger.info("  Shared tools (13): user_*, stats_*, catalog_* (items + recipes), inventory_*, simulation_*, chart_*, admin_*")
 logger.info("  Sales tools (17): crm_*, sales_*, logistics_*, messaging_*")
 logger.info("  Production tools (9): production_*, purchase_*")
 logger.info("")
 logger.info("Client-side agent filtering by tag:")
-logger.info("  - Sales agent (Prompt_sales.md): tags=['shared', 'sales'] → 33 tools")
-logger.info("  - Production agent (Prompt_production.md): tags=['shared', 'production'] → 25 tools")
+logger.info("  - Sales agent (Prompt_sales.md): tags=['shared', 'sales'] → 30 tools")
+logger.info("  - Production agent (Prompt_production.md): tags=['shared', 'production'] → 22 tools")
 
 
 if __name__ == "__main__":

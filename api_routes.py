@@ -21,7 +21,6 @@ from services import (
     recipe_service,
     messaging_service,
     invoice_service,
-    pending_action_service,
 )
 from utils import ui_href
 import config
@@ -538,24 +537,6 @@ def register_routes(mcp):
             return _json({"error": str(exc)}, status_code=404)
         except Exception as exc:
             return _json({"error": f"Failed to generate PDF: {str(exc)}"}, status_code=500)
-    
-    @mcp.custom_route("/api/pending-actions", methods=["GET", "OPTIONS"])
-    async def api_pending_actions(request):
-        if request.method == "OPTIONS":
-            return _cors_preflight(["GET"])
-        result = pending_action_service.list_pending()
-        return _json(result)
-    
-    @mcp.custom_route("/api/pending-actions/{action_id}", methods=["GET", "OPTIONS"])
-    async def api_pending_action_detail(request):
-        if request.method == "OPTIONS":
-            return _cors_preflight(["GET"])
-        action_id = request.path_params.get("action_id")
-        try:
-            result = pending_action_service.get(action_id)
-            return _json(result)
-        except Exception as exc:
-            return _json({"error": str(exc)}, status_code=404)
     
     @mcp.custom_route("/api/charts/{filename}", methods=["GET", "OPTIONS"])
     async def api_chart_image(request):

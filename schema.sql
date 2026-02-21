@@ -269,16 +269,3 @@ CREATE TABLE IF NOT EXISTS documents (
 
 CREATE INDEX IF NOT EXISTS idx_documents_entity ON documents(entity_type, entity_id);
 CREATE INDEX IF NOT EXISTS idx_documents_type ON documents(document_type);
-
--- Pending actions: human-in-the-loop confirmation gate for all mutations
--- Status: pending -> confirmed / rejected
-CREATE TABLE IF NOT EXISTS pending_actions (
-    id TEXT PRIMARY KEY,
-    action_type TEXT NOT NULL,
-    params TEXT NOT NULL,
-    summary TEXT NOT NULL,
-    status TEXT NOT NULL DEFAULT 'pending',
-    result TEXT,
-    created_at TEXT NOT NULL,
-    resolved_at TEXT
-);
