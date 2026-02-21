@@ -12,7 +12,16 @@ CREATE TABLE IF NOT EXISTS customers (
     name TEXT NOT NULL,
     company TEXT,
     email TEXT,
+    phone TEXT,
+    address_line1 TEXT,
+    address_line2 TEXT,
     city TEXT,
+    postal_code TEXT,
+    country TEXT DEFAULT 'FR',
+    tax_id TEXT,
+    payment_terms INTEGER DEFAULT 30,
+    currency TEXT DEFAULT 'EUR',
+    notes TEXT,
     created_at TEXT
 );
 

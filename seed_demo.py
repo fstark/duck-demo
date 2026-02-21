@@ -25,26 +25,28 @@ def seed(from_admin=False):
         )
         
         # Customers
+        # Fields: id, name, company, email, phone, address_line1, address_line2, city, postal_code, country, tax_id, payment_terms, currency, notes, created_at
         conn.executemany(
-            "INSERT INTO customers (id, name, company, email, city, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+            """INSERT INTO customers (id, name, company, email, phone, address_line1, address_line2, city, postal_code, country, tax_id, payment_terms, currency, notes, created_at) 
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             [
-                ("CUST-0044", "Sarah Martin", None, "sarah@martin-retail.example", "Paris", "2025-12-01 10:00:00"),
-                ("CUST-0001", "Rubber Duck Works", None, "contact@rubberduck.example", "Lyon", "2025-12-02 11:30:00"),
-                ("CUST-0102", "John Doe", "DuckFan Paris", "john@duckfan-paris.example", "Paris", "2025-12-05 14:20:00"),
-                ("CUST-0103", "Daisy Paddlesworth", "Splash & Co", "daisy@splashco.example", "Nice", "2025-12-07 09:15:00"),
-                ("CUST-0104", "Quackers McGee", None, "quackers@pond.example", "Marseille", "2025-12-08 16:45:00"),
-                ("CUST-0105", "Bella Featherstone", "The Duck Emporium", "bella@duckemporium.example", "Toulouse", "2025-12-10 13:00:00"),
-                ("CUST-0106", "Puddles O'Mallory", None, "puddles@mailexample.example", "Bordeaux", "2025-12-12 10:30:00"),
-                ("CUST-0107", "Drake Fluffington", "Fluff & Feathers", "drake@fluffnfeathers.example", "Strasbourg", "2025-12-14 15:20:00"),
-                ("CUST-0108", "Mallory Beakworth", None, "mallory@beakmail.example", "Nantes", "2025-12-15 11:00:00"),
-                ("CUST-0109", "Waddles Johnson", "Waddle Inc", "waddles@waddleinc.example", "Lille", "2025-12-16 14:45:00"),
-                ("CUST-0110", "Ducky McDuckface", None, "ducky@mcduckface.example", "Montpellier", "2025-12-17 09:30:00"),
-                ("CUST-0111", "Splash Gordon", "Aquatic Adventures", "splash@aquatic.example", "Rennes", "2025-12-18 16:00:00"),
-                ("CUST-0112", "Feather McFloaty", None, "feather@floaty.example", "Grenoble", "2025-12-19 10:15:00"),
-                ("CUST-0113", "Bubbles LaRue", "Bath Time Boutique", "bubbles@bathtime.example", "Dijon", "2025-12-20 13:30:00"),
-                ("CUST-0114", "Captain Quack", "Quack Squadron", "captain@quacksquadron.example", "Angers", "2025-12-21 11:45:00"),
-                ("CUST-0115", "Honk Singleton", None, "honk@singleton.example", "Le Havre", "2025-12-22 14:20:00"),
-                ("CUST-0116", "Webby Toes", "Webfoot Wonders", "webby@webfoot.example", "Reims", "2025-12-23 09:00:00"),
+                ("CUST-0044", "Sarah Martin", None, "sarah@martin-retail.example", "+33 6 12 34 56 78", "15 Rue de la Paix", None, "Paris", "75002", "FR", None, 30, "EUR", None, "2025-12-01 10:00:00"),
+                ("CUST-0001", "Rubber Duck Works", None, "contact@rubberduck.example", "+33 4 78 00 11 22", "42 Avenue Jean Jaurès", "Bâtiment B", "Lyon", "69007", "FR", "FR12345678901", 45, "EUR", "Key account - premium rubber duck manufacturer", "2025-12-02 11:30:00"),
+                ("CUST-0102", "John Doe", "DuckFan Paris", "john@duckfan-paris.example", "+33 1 42 33 44 55", "8 Boulevard Haussmann", None, "Paris", "75009", "FR", "FR98765432109", 30, "EUR", None, "2025-12-05 14:20:00"),
+                ("CUST-0103", "Daisy Paddlesworth", "Splash & Co", "daisy@splashco.example", "+33 4 93 12 34 56", "22 Promenade des Anglais", "Apt 5B", "Nice", "06000", "FR", "FR55566677788", 30, "EUR", None, "2025-12-07 09:15:00"),
+                ("CUST-0104", "Quackers McGee", None, "quackers@pond.example", None, "17 Rue du Vieux Port", None, "Marseille", "13001", "FR", None, 30, "EUR", "Prefers email contact only", "2025-12-08 16:45:00"),
+                ("CUST-0105", "Bella Featherstone", "The Duck Emporium", "bella@duckemporium.example", "+33 5 61 22 33 44", "5 Place du Capitole", None, "Toulouse", "31000", "FR", "FR11122233344", 60, "EUR", "Large orders, quarterly invoicing", "2025-12-10 13:00:00"),
+                ("CUST-0106", "Puddles O'Mallory", None, None, "+33 5 56 78 90 12", None, None, "Bordeaux", None, "FR", None, 30, "EUR", "No email - call for orders", "2025-12-12 10:30:00"),
+                ("CUST-0107", "Drake Fluffington", "Fluff & Feathers", "drake@fluffnfeathers.example", "+33 3 88 11 22 33", "28 Rue des Hallebardes", None, "Strasbourg", "67000", "FR", "FR77788899900", 30, "EUR", None, "2025-12-14 15:20:00"),
+                ("CUST-0108", "Mallory Beakworth", None, "mallory@beakmail.example", "+33 2 40 55 66 77", None, None, "Nantes", None, "FR", None, 15, "EUR", "COD preferred", "2025-12-15 11:00:00"),
+                ("CUST-0109", "Waddles Johnson", "Waddle Inc", "waddles@waddleinc.example", "+33 3 20 44 55 66", "12 Rue Faidherbe", "3ème étage", "Lille", "59000", "FR", "FR44455566677", 30, "EUR", None, "2025-12-16 14:45:00"),
+                ("CUST-0110", "Ducky McDuckface", None, "ducky@mcduckface.example", None, "7 Place de la Comédie", None, "Montpellier", "34000", "FR", None, 30, "EUR", None, "2025-12-17 09:30:00"),
+                ("CUST-0111", "Splash Gordon", "Aquatic Adventures", "splash@aquatic.example", "+33 2 99 33 44 55", "3 Quai Émile Zola", None, "Rennes", "35000", "FR", "FR22233344455", 30, "EUR", None, "2025-12-18 16:00:00"),
+                ("CUST-0112", "Feather McFloaty", None, "feather@floaty.example", "+33 4 76 22 33 44", "19 Avenue Alsace-Lorraine", "Apt 12", "Grenoble", "38000", "FR", None, 30, "EUR", None, "2025-12-19 10:15:00"),
+                ("CUST-0113", "Bubbles LaRue", "Bath Time Boutique", "bubbles@bathtime.example", "+33 3 80 11 22 33", "45 Rue de la Liberté", None, "Dijon", "21000", "FR", "FR66677788899", 30, "EUR", None, "2025-12-20 13:30:00"),
+                ("CUST-0114", "Captain Quack", "Quack Squadron", "captain@quacksquadron.example", "+33 2 41 55 66 77", "6 Boulevard du Roi René", None, "Angers", "49000", "FR", "FR33344455566", 30, "EUR", "Military discount applies", "2025-12-21 11:45:00"),
+                ("CUST-0115", "Honk Singleton", None, "honk@singleton.example", "+33 2 35 22 33 44", None, None, "Le Havre", None, "FR", None, 30, "EUR", None, "2025-12-22 14:20:00"),
+                ("CUST-0116", "Webby Toes", "Webfoot Wonders", "webby@webfoot.example", "+33 3 26 44 55 66", "14 Place Drouet d'Erlon", None, "Reims", "51100", "FR", "FR88899900011", 30, "EUR", None, "2025-12-23 09:00:00"),
             ],
         )
 

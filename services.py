@@ -124,6 +124,8 @@ class CustomerService:
         email: Optional[str] = None,
         company: Optional[str] = None,
         city: Optional[str] = None,
+        country: Optional[str] = None,
+        phone: Optional[str] = None,
         limit: int = 5,
     ) -> Dict[str, Any]:
         """Find matching customers with filters."""
@@ -141,9 +143,15 @@ class CustomerService:
         if city:
             filters.append("LOWER(city) LIKE ?")
             params.append(f"%{city.lower()}%")
+        if country:
+            filters.append("UPPER(country) = ?")
+            params.append(country.upper())
+        if phone:
+            filters.append("phone LIKE ?")
+            params.append(f"%{phone}%")
 
         where_clause = f"WHERE {' AND '.join(filters)}" if filters else ""
-        sql = f"SELECT id, name, company, email, city, created_at FROM customers {where_clause} ORDER BY id LIMIT ?"
+        sql = f"SELECT id, name, company, email, phone, city, country, created_at FROM customers {where_clause} ORDER BY id LIMIT ?"
         params.append(limit)
 
         with db_conn() as conn:
@@ -157,15 +165,26 @@ class CustomerService:
         name: str,
         company: Optional[str] = None,
         email: Optional[str] = None,
-        city: Optional[str] = None
+        phone: Optional[str] = None,
+        address_line1: Optional[str] = None,
+        address_line2: Optional[str] = None,
+        city: Optional[str] = None,
+        postal_code: Optional[str] = None,
+        country: Optional[str] = None,
+        tax_id: Optional[str] = None,
+        payment_terms: Optional[int] = None,
+        currency: Optional[str] = None,
+        notes: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Create a new customer."""
         with db_conn() as conn:
             customer_id = generate_id(conn, "CUST", "customers")
             sim_time = simulation_service.get_current_time()
             conn.execute(
-                "INSERT INTO customers (id, name, company, email, city, created_at) VALUES (?, ?, ?, ?, ?, ?)",
-                (customer_id, name, company, email, city, sim_time),
+                """INSERT INTO customers 
+                   (id, name, company, email, phone, address_line1, address_line2, city, postal_code, country, tax_id, payment_terms, currency, notes, created_at) 
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (customer_id, name, company, email, phone, address_line1, address_line2, city, postal_code, country, tax_id, payment_terms, currency, notes, sim_time),
             )
             conn.commit()
             row = conn.execute("SELECT * FROM customers WHERE id = ?", (customer_id,)).fetchone()
@@ -177,6 +196,60 @@ class CustomerService:
                 "message": f"Customer '{name}' created with ID {customer_id} at {sim_time}"
             }
     
+    @staticmethod
+    def update_customer(
+        customer_id: str,
+        name: Optional[str] = None,
+        company: Optional[str] = None,
+        email: Optional[str] = None,
+        phone: Optional[str] = None,
+        address_line1: Optional[str] = None,
+        address_line2: Optional[str] = None,
+        city: Optional[str] = None,
+        postal_code: Optional[str] = None,
+        country: Optional[str] = None,
+        tax_id: Optional[str] = None,
+        payment_terms: Optional[int] = None,
+        currency: Optional[str] = None,
+        notes: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Update an existing customer. Only provided fields are updated."""
+        with db_conn() as conn:
+            cust = conn.execute("SELECT * FROM customers WHERE id = ?", (customer_id,)).fetchone()
+            if not cust:
+                raise ValueError(f"Customer {customer_id} not found")
+            
+            updates = []
+            params: List[Any] = []
+            field_map = {
+                "name": name, "company": company, "email": email, "phone": phone,
+                "address_line1": address_line1, "address_line2": address_line2,
+                "city": city, "postal_code": postal_code, "country": country,
+                "tax_id": tax_id, "payment_terms": payment_terms, "currency": currency, "notes": notes,
+            }
+            for field, value in field_map.items():
+                if value is not None:
+                    updates.append(f"{field} = ?")
+                    params.append(value)
+            
+            if not updates:
+                raise ValueError("No fields to update")
+            
+            params.append(customer_id)
+            conn.execute(
+                f"UPDATE customers SET {', '.join(updates)} WHERE id = ?",
+                params,
+            )
+            conn.commit()
+            row = conn.execute("SELECT * FROM customers WHERE id = ?", (customer_id,)).fetchone()
+            row_dict = dict(row)
+            row_dict["ui_url"] = ui_href("customers", customer_id)
+            return {
+                "customer_id": customer_id,
+                "customer": row_dict,
+                "message": f"Customer {customer_id} updated successfully"
+            }
+
     @staticmethod
     def get_customer_details(customer_id: str, include_orders: bool = True) -> Dict[str, Any]:
         """Get customer data plus recent orders."""
@@ -669,6 +742,20 @@ class LogisticsService:
         ship_from = ship_from or {}
         ship_to = ship_to or {}
         packages = packages or []
+        
+        # Validate ship_to address
+        missing_fields = []
+        if not ship_to.get("line1"):
+            missing_fields.append("line1 (street address)")
+        if not ship_to.get("city"):
+            missing_fields.append("city")
+        if not ship_to.get("postal_code"):
+            missing_fields.append("postal_code")
+        if not ship_to.get("country"):
+            missing_fields.append("country")
+        if missing_fields:
+            raise ValueError(f"Cannot create shipment: missing address fields: {', '.join(missing_fields)}. Please provide a complete shipping address.")
+        
         with db_conn() as conn:
             shipment_id = generate_id(conn, "SHIP", "shipments")
             conn.execute("INSERT INTO shipments (id, ship_from_warehouse, ship_to_line1, ship_to_postal_code, ship_to_city, ship_to_country, planned_departure, planned_arrival, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", (shipment_id, ship_from.get("warehouse"), ship_to.get("line1"), ship_to.get("postal_code"), ship_to.get("city"), ship_to.get("country"), planned_departure, planned_arrival, "planned"))
@@ -908,7 +995,7 @@ class MessagingService:
             final_recipient_email = recipient_email or customer["email"]
             final_recipient_name = recipient_name or customer["name"]
             if not final_recipient_email:
-                raise ValueError(f"No email address available for customer {customer_id}")
+                raise ValueError(f"Cannot send email to {customer['name']} ({customer_id}): no email address on file. Please update the customer record with an email address.")
             email_id = generate_id(conn, "EMAIL", "emails")
             sim_time = SimulationService.get_current_time()
             conn.execute("INSERT INTO emails (id, customer_id, sales_order_id, recipient_email, recipient_name, subject, body, status, created_at, modified_at) VALUES (?, ?, ?, ?, ?, ?, ?, 'draft', ?, ?)", (email_id, customer_id, sales_order_id, final_recipient_email, final_recipient_name, subject, body, sim_time, sim_time))
@@ -1627,6 +1714,9 @@ class InvoiceService:
             if not so:
                 raise ValueError(f"Sales order {sales_order_id} not found")
 
+            # Get customer for tax_id check
+            customer = conn.execute("SELECT name, tax_id FROM customers WHERE id = ?", (so["customer_id"],)).fetchone()
+
             # Compute pricing from the sales order lines
             pricing_result = PricingService.compute_pricing(sales_order_id)
             p = pricing_result["pricing"]
@@ -1653,6 +1743,13 @@ class InvoiceService:
                 ),
             )
             conn.commit()
+            
+            # Build message with optional warning
+            message = f"📄 Invoice {inv_id} created for order {sales_order_id} — {p['currency']} {p['total']:.2f}"
+            warning = None
+            if customer and not customer["tax_id"]:
+                warning = f"⚠️ Customer {customer['name']} has no tax_id/VAT number on file. The invoice will be created without it."
+            
             return {
                 "invoice_id": inv_id,
                 "sales_order_id": sales_order_id,
@@ -1661,7 +1758,8 @@ class InvoiceService:
                 "currency": p["currency"],
                 "status": "draft",
                 "ui_url": ui_href("invoices", inv_id),
-                "message": f"📄 Invoice {inv_id} created for order {sales_order_id} — {p['currency']} {p['total']:.2f}",
+                "message": message,
+                "warning": warning,
             }
 
     @staticmethod
@@ -2699,6 +2797,9 @@ class PendingActionService:
         def _exec_create_customer(params, conn):
             return CustomerService.create_customer(**params)
         
+        def _exec_update_customer(params, conn):
+            return CustomerService.update_customer(**params)
+        
         def _exec_link_shipment(params, conn):
             return SalesService.link_shipment(params["sales_order_id"], params["shipment_id"])
         
@@ -2769,6 +2870,7 @@ class PendingActionService:
         
         PendingActionService._executors = {
             "create_customer": _exec_create_customer,
+            "update_customer": _exec_update_customer,
             "link_shipment": _exec_link_shipment,
             "create_shipment": _exec_create_shipment,
             "create_production_order": _exec_create_production_order,

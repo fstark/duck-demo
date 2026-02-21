@@ -153,14 +153,30 @@ def register_tools(mcp):
         email: Optional[str] = None,
         company: Optional[str] = None,
         city: Optional[str] = None,
+        country: Optional[str] = None,
+        phone: Optional[str] = None,
         limit: int = 5,
     ) -> Dict[str, Any]:
-        """Find matching customers. Any provided field is used as a case-insensitive contains filter."""
-        return customer_service.find_customers(name, email, company, city, limit)
+        """Find matching customers. Any provided field is used as a case-insensitive contains filter (except country which uses exact ISO match)."""
+        return customer_service.find_customers(name, email, company, city, country, phone, limit)
     
     @mcp.tool(name="crm_create_customer", meta={"tags": ["sales"]})
     @log_tool("crm_create_customer")
-    def create_customer(name: str, company: Optional[str] = None, email: Optional[str] = None, city: Optional[str] = None) -> Dict[str, Any]:
+    def create_customer(
+        name: str,
+        company: Optional[str] = None,
+        email: Optional[str] = None,
+        phone: Optional[str] = None,
+        address_line1: Optional[str] = None,
+        address_line2: Optional[str] = None,
+        city: Optional[str] = None,
+        postal_code: Optional[str] = None,
+        country: Optional[str] = None,
+        tax_id: Optional[str] = None,
+        payment_terms: Optional[int] = None,
+        currency: Optional[str] = None,
+        notes: Optional[str] = None,
+    ) -> Dict[str, Any]:
         """
         Create a new customer. Returns a pending action that must be confirmed.
         
@@ -168,7 +184,16 @@ def register_tools(mcp):
             name: Customer name (required)
             company: Company name
             email: Email address
-            city: City location
+            phone: Phone number
+            address_line1: Street address line 1
+            address_line2: Street address line 2 (apt, suite, etc.)
+            city: City
+            postal_code: Postal/ZIP code
+            country: ISO 3166-1 alpha-2 country code (e.g., 'FR', 'DE', 'US')
+            tax_id: Tax ID / VAT number for invoicing
+            payment_terms: Payment terms in days (default: 30)
+            currency: Preferred currency ISO code (default: 'EUR')
+            notes: Internal notes about the customer
         
         Returns:
             A pending action. **Present the summary to the user and wait for explicit confirmation
@@ -177,9 +202,77 @@ def register_tools(mcp):
         parts = [name]
         if company: parts.append(f"({company})")
         if city: parts.append(f"in {city}")
+        if country: parts.append(f"[{country}]")
         summary = f"Create customer {' '.join(parts)}"
-        return pending_action_service.create("create_customer", {"name": name, "company": company, "email": email, "city": city}, summary)
+        return pending_action_service.create("create_customer", {
+            "name": name, "company": company, "email": email, "phone": phone,
+            "address_line1": address_line1, "address_line2": address_line2,
+            "city": city, "postal_code": postal_code, "country": country,
+            "tax_id": tax_id, "payment_terms": payment_terms, "currency": currency, "notes": notes,
+        }, summary)
     
+    @mcp.tool(name="crm_update_customer", meta={"tags": ["sales"]})
+    @log_tool("crm_update_customer")
+    def update_customer(
+        customer_id: str,
+        name: Optional[str] = None,
+        company: Optional[str] = None,
+        email: Optional[str] = None,
+        phone: Optional[str] = None,
+        address_line1: Optional[str] = None,
+        address_line2: Optional[str] = None,
+        city: Optional[str] = None,
+        postal_code: Optional[str] = None,
+        country: Optional[str] = None,
+        tax_id: Optional[str] = None,
+        payment_terms: Optional[int] = None,
+        currency: Optional[str] = None,
+        notes: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Update an existing customer. Returns a pending action that must be confirmed.
+        Only provided fields will be updated.
+        
+        Parameters:
+            customer_id: The customer ID to update (e.g., 'CUST-0044')
+            name: New customer name
+            company: New company name
+            email: New email address
+            phone: New phone number
+            address_line1: New street address line 1
+            address_line2: New street address line 2
+            city: New city
+            postal_code: New postal/ZIP code
+            country: New ISO 3166-1 alpha-2 country code
+            tax_id: New tax ID / VAT number
+            payment_terms: New payment terms in days
+            currency: New preferred currency ISO code
+            notes: New internal notes
+        
+        Returns:
+            A pending action. **Present the summary to the user and wait for explicit confirmation
+            before calling action_confirm.**
+        """
+        # Verify customer exists first
+        existing = customer_service.get_customer_details(customer_id, include_orders=False)
+        current_name = existing["customer"]["name"]
+        
+        field_values = {
+            "name": name, "company": company, "email": email, "phone": phone,
+            "address_line1": address_line1, "address_line2": address_line2,
+            "city": city, "postal_code": postal_code, "country": country,
+            "tax_id": tax_id, "payment_terms": payment_terms, "currency": currency, "notes": notes,
+        }
+        changes = [f"{k} → '{v}'" for k, v in field_values.items() if v is not None]
+        
+        if not changes:
+            raise ValueError("No fields to update")
+        
+        summary = f"Update customer {current_name} ({customer_id}): {', '.join(changes)}"
+        return pending_action_service.create("update_customer", {
+            "customer_id": customer_id, **field_values
+        }, summary)
+
     @mcp.tool(name="crm_get_customer", meta={"tags": ["sales"]})
     @log_tool("crm_get_customer")
     def get_customer_details(customer_id: str, include_orders: bool = True) -> Dict[str, Any]:

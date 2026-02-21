@@ -1,6 +1,6 @@
 # Agent Tool Filtering
 
-This server exposes **52 MCP tools** organized by tags for client-side filtering.
+This server exposes **53 MCP tools** organized by tags for client-side filtering.
 
 ## Architecture
 
@@ -22,9 +22,9 @@ Available to both agents:
 - `action_confirm`, `action_reject`, `action_list_pending`
 - `admin_reset_database`
 
-### Sales Tools (27 tools) - tag: `sales`
+### Sales Tools (28 tools) - tag: `sales`
 Customer relationship and order management:
-- `crm_search_customers`, ⏳ `crm_create_customer`, `crm_get_customer`
+- `crm_search_customers`, ⏳ `crm_create_customer`, ⏳ `crm_update_customer`, `crm_get_customer`
 - `sales_get_quote_options`, `sales_price_order`, `sales_search_orders`, `sales_get_order`, ⏳ `sales_link_shipment`
 - ⏳ `logistics_create_shipment`, `logistics_get_shipment`
 - `messaging_create_email`, `messaging_list_emails`, `messaging_get_email`, `messaging_update_email`, `messaging_send_email`, `messaging_delete_email`
@@ -41,7 +41,7 @@ Manufacturing and materials management:
 Clients should:
 1. Call `list_tools` to get all 52 tools
 2. Filter by tags based on agent type:
-   - **Sales agent**: `tags=['shared', 'sales']` → 43 tools
+   - **Sales agent**: `tags=['shared', 'sales']` → 44 tools
    - **Production agent**: `tags=['shared', 'production']` → 25 tools
 3. Only expose filtered tools to the LLM
 4. Validate tool calls match the allowed tag set

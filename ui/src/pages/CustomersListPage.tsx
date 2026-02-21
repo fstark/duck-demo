@@ -129,10 +129,22 @@ export function CustomersListPage() {
                             render: (row) => row.email || '—'
                         },
                         {
+                            key: 'phone',
+                            label: 'Phone',
+                            sortable: true,
+                            render: (row) => row.phone || '—'
+                        },
+                        {
                             key: 'city',
                             label: 'City',
                             sortable: true,
                             render: (row) => row.city || '—'
+                        },
+                        {
+                            key: 'country',
+                            label: 'Country',
+                            sortable: true,
+                            render: (row) => row.country || '—'
                         },
                         {
                             key: 'created_at',

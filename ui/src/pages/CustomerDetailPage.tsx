@@ -153,22 +153,73 @@ export function CustomerDetailPage({ customerId }: CustomerDetailPageProps) {
                         </div>
                     )}
                 </div>
-                <div className="space-y-2 text-sm text-slate-700">
+                <div className="space-y-4 text-sm text-slate-700">
                     <div className="font-semibold text-lg">{customer.name}</div>
                     <div className="text-slate-600">
                         <span className="font-medium">ID:</span> {customer.id}
                     </div>
-                    <div className="text-slate-600">
-                        <span className="font-medium">Company:</span> {customer.company || '—'}
+                    {customer.company && (
+                        <div className="text-slate-600">
+                            <span className="font-medium">Company:</span> {customer.company}
+                        </div>
+                    )}
+
+                    {/* Contact Section */}
+                    <div className="border-t pt-3 mt-3">
+                        <div className="font-medium text-slate-800 mb-2">Contact</div>
+                        <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+                            <div className="text-slate-600">
+                                <span className="font-medium">Email:</span> {customer.email || '—'}
+                            </div>
+                            <div className="text-slate-600">
+                                <span className="font-medium">Phone:</span> {customer.phone || '—'}
+                            </div>
+                        </div>
                     </div>
-                    <div className="text-slate-600">
-                        <span className="font-medium">Email:</span> {customer.email || '—'}
+
+                    {/* Address Section */}
+                    <div className="border-t pt-3 mt-3">
+                        <div className="font-medium text-slate-800 mb-2">Address</div>
+                        {customer.address_line1 || customer.city ? (
+                            <div className="text-slate-600">
+                                {customer.address_line1 && <div>{customer.address_line1}</div>}
+                                {customer.address_line2 && <div>{customer.address_line2}</div>}
+                                <div>
+                                    {[customer.postal_code, customer.city].filter(Boolean).join(' ')}
+                                    {customer.country && `, ${customer.country}`}
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="text-slate-400 italic">No address on file</div>
+                        )}
                     </div>
-                    <div className="text-slate-600">
-                        <span className="font-medium">City:</span> {customer.city || '—'}
+
+                    {/* Billing Section */}
+                    <div className="border-t pt-3 mt-3">
+                        <div className="font-medium text-slate-800 mb-2">Billing</div>
+                        <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+                            <div className="text-slate-600">
+                                <span className="font-medium">Tax ID:</span> {customer.tax_id || '—'}
+                            </div>
+                            <div className="text-slate-600">
+                                <span className="font-medium">Payment Terms:</span> {customer.payment_terms ? `Net ${customer.payment_terms}` : '—'}
+                            </div>
+                            <div className="text-slate-600">
+                                <span className="font-medium">Currency:</span> {customer.currency || '—'}
+                            </div>
+                        </div>
                     </div>
-                    <div className="text-slate-600">
-                        <span className="font-medium">Created:</span> {formatDate(customer.created_at)}
+
+                    {/* Notes Section */}
+                    {customer.notes && (
+                        <div className="border-t pt-3 mt-3">
+                            <div className="font-medium text-slate-800 mb-2">Notes</div>
+                            <div className="text-slate-600 whitespace-pre-wrap">{customer.notes}</div>
+                        </div>
+                    )}
+
+                    <div className="border-t pt-3 mt-3 text-slate-500 text-xs">
+                        Created: {formatDate(customer.created_at)}
                     </div>
                 </div>
                 {customer.sales_orders && customer.sales_orders.length > 0 && (

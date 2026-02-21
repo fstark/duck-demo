@@ -3,7 +3,16 @@ export type Customer = {
   name: string
   company?: string
   email?: string
+  phone?: string
+  address_line1?: string
+  address_line2?: string
   city?: string
+  postal_code?: string
+  country?: string
+  tax_id?: string
+  payment_terms?: number
+  currency?: string
+  notes?: string
   created_at?: string
 }
 
