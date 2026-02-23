@@ -6,10 +6,12 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "build:mcp-app": "vite build --mode mcp-app",
     "preview": "vite preview",
     "lint": "eslint . --ext ts,tsx --max-warnings=0"
   },
   "dependencies": {
+    "@modelcontextprotocol/ext-apps": "^0.1.0",
     "@tailwindcss/typography": "^0.5.19",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
@@ -26,6 +28,7 @@
     "postcss": "^8.4.47",
     "tailwindcss": "^3.4.12",
     "typescript": "^5.6.3",
-    "vite": "^5.4.8"
+    "vite": "^5.4.8",
+    "vite-plugin-singlefile": "^2.0.2"
   }
 }

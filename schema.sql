@@ -103,14 +103,14 @@ CREATE TABLE IF NOT EXISTS sales_order_lines (
 
 CREATE TABLE IF NOT EXISTS shipments (
     id TEXT PRIMARY KEY,
-    ship_from_warehouse TEXT,
-    ship_to_line1 TEXT,
-    ship_to_postal_code TEXT,
-    ship_to_city TEXT,
-    ship_to_country TEXT,
-    planned_departure TEXT,
-    planned_arrival TEXT,
-    status TEXT,
+    ship_from_warehouse TEXT NOT NULL,
+    ship_to_line1 TEXT NOT NULL,
+    ship_to_postal_code TEXT NOT NULL,
+    ship_to_city TEXT NOT NULL,
+    ship_to_country TEXT NOT NULL,
+    planned_departure TEXT NOT NULL,
+    planned_arrival TEXT NOT NULL,
+    status TEXT NOT NULL,
     tracking_ref TEXT
 );
 

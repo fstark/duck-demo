@@ -1,16 +1,20 @@
 """Duck Demo Server - Manufacturing simulation with MCP and REST APIs.
 
-Single MCP server with all 39 tools, organized by tags:
+Single MCP server with all 40 tools, organized by tags:
   - 'shared' tools (13): Available to both agents - user, stats, catalog (items + recipes), inventory, simulation, charts, admin
-  - 'sales' tools (17): Sales agent - CRM, orders, shipping, emails
+  - 'sales' tools (18): Sales agent - CRM, orders, shipping, emails, invoices, quotes
   - 'production' tools (9): Production agent - manufacturing, materials
+  - 'internal' tools (1): Only callable by MCP Apps, not exposed to agents - customer confirmation
 
 Clients filter tools by tag to create specialized agents:
-  - Sales agent: Uses Prompt_sales.md, filters to 'shared' + 'sales' tags (30 tools)
+  - Sales agent: Uses Prompt_sales.md, filters to 'shared' + 'sales' tags (31 tools)
   - Production agent: Uses Prompt_production.md, filters to 'shared' + 'production' tags (22 tools)
+  
+MCP Apps: Interactive UI components served via ui:// scheme for human-in-the-loop workflows.
 """
 
 import logging
+import os
 
 from mcp.server.fastmcp import FastMCP
 from mcp.server.transport_security import TransportSecuritySettings
@@ -44,30 +48,44 @@ mcp = FastMCP(
     ),
 )
 
-# Register all tools with tags: shared (13) + sales (17) + production (9) = 39 tools
+# Register all tools with tags:
+#   - shared (13) + sales (18) + production (9) + internal (1) = 40 tools total
+#   - Agents see: sales=31 tools, production=22 tools (internal excluded)
 register_tools(mcp)
 
 # Register REST API routes (for UI compatibility)
 register_routes(mcp)
 
-logger.info("Starting Duck Demo MCP Server (39 tools)")
-logger.info("  Shared tools (13): user_*, stats_*, catalog_* (items + recipes), inventory_*, simulation_*, chart_*, admin_*")
-logger.info("  Sales tools (17): crm_*, sales_*, logistics_*, messaging_*")
-logger.info("  Production tools (9): production_*, purchase_*")
-logger.info("")
-logger.info("Client-side agent filtering by tag:")
-logger.info("  - Sales agent (Prompt_sales.md): tags=['shared', 'sales'] → 30 tools")
-logger.info("  - Production agent (Prompt_production.md): tags=['shared', 'production'] → 22 tools")
+# Register MCP App UI resources
+@mcp.resource("ui://customer-confirm/dialog", mime_type="text/html;profile=mcp-app")
+def get_customer_confirm_ui() -> str:
+    """Serves the customer confirmation MCP App UI."""
+    ui_path = os.path.join(os.path.dirname(__file__), "mcp_apps_ui", "customer-confirm.html")
+    if os.path.exists(ui_path):
+        with open(ui_path, "r", encoding="utf-8") as f:
+            return f.read()
+    else:
+        logger.warning(f"MCP App UI not found at {ui_path}. Run 'cd ui && npm run build:mcp-app' to build it.")
+        return "<html><body><p>MCP App UI not built yet. Please run: cd ui && npm run build:mcp-app</p></body></html>"
+
+logger.info("Duck Demo MCP Server ready (40 tools)")
 
 
 if __name__ == "__main__":
-    import uvicorn
-    from uvicorn.config import LOGGING_CONFIG as UVICORN_DEFAULT_CONFIG
+    import sys
     
-    # Add timestamps to uvicorn's log formats
-    UVICORN_DEFAULT_CONFIG["formatters"]["default"]["fmt"] = "%(asctime)s %(levelname)s %(message)s"
-    UVICORN_DEFAULT_CONFIG["formatters"]["default"]["datefmt"] = "%Y-%m-%dT%H:%M:%S"
-    UVICORN_DEFAULT_CONFIG["formatters"]["access"]["fmt"] = '%(asctime)s %(levelname)s %(client_addr)s - "%(request_line)s" %(status_code)s'
-    UVICORN_DEFAULT_CONFIG["formatters"]["access"]["datefmt"] = "%Y-%m-%dT%H:%M:%S"
-    
-    mcp.run(transport="streamable-http")
+    # Check for --stdio flag
+    if "--stdio" in sys.argv:
+        logger.info("Starting Duck Demo MCP Server in STDIO mode")
+        mcp.run(transport="stdio")
+    else:
+        import uvicorn
+        from uvicorn.config import LOGGING_CONFIG as UVICORN_DEFAULT_CONFIG
+        
+        # Add timestamps to uvicorn's log formats
+        UVICORN_DEFAULT_CONFIG["formatters"]["default"]["fmt"] = "%(asctime)s %(levelname)s %(message)s"
+        UVICORN_DEFAULT_CONFIG["formatters"]["default"]["datefmt"] = "%Y-%m-%dT%H:%M:%S"
+        UVICORN_DEFAULT_CONFIG["formatters"]["access"]["fmt"] = '%(asctime)s %(levelname)s %(client_addr)s - "%(request_line)s" %(status_code)s'
+        UVICORN_DEFAULT_CONFIG["formatters"]["access"]["datefmt"] = "%Y-%m-%dT%H:%M:%S"
+        
+        mcp.run(transport="streamable-http")

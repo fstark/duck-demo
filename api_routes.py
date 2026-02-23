@@ -63,6 +63,19 @@ def register_routes(mcp):
             return _cors_preflight(["GET"])
         return _json({"status": "ok"})
     
+    @mcp.custom_route("/api/mcp-app-ui/customer-confirm", methods=["GET", "OPTIONS"])
+    async def api_mcp_app_test(request):
+        """Test endpoint to manually access the MCP App UI for debugging."""
+        if request.method == "OPTIONS":
+            return _cors_preflight(["GET"])
+        ui_path = os.path.join(os.path.dirname(__file__), "mcp_apps_ui", "customer-confirm.html")
+        if os.path.exists(ui_path):
+            with open(ui_path, "r", encoding="utf-8") as f:
+                from starlette.responses import HTMLResponse
+                return HTMLResponse(f.read(), headers=DEMO_CORS_HEADERS)
+        else:
+            return _json({"error": "MCP App UI not found"}, status_code=404)
+    
     @mcp.custom_route("/api/simulation/time", methods=["GET", "OPTIONS"])
     async def api_simulation_time(request):
         if request.method == "OPTIONS":

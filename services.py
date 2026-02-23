@@ -737,11 +737,15 @@ class LogisticsService:
     """Service for logistics and shipment operations."""
     
     @staticmethod
-    def create_shipment(ship_from: Optional[Dict[str, Any]], ship_to: Optional[Dict[str, Any]], planned_departure: Optional[str], planned_arrival: Optional[str], packages: Optional[List[Dict[str, Any]]], reference: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    def create_shipment(ship_from: Dict[str, Any], ship_to: Dict[str, Any], planned_departure: str, planned_arrival: str, packages: List[Dict[str, Any]], reference: Optional[Dict[str, Any]]) -> Dict[str, Any]:
         """Create a planned shipment."""
-        ship_from = ship_from or {}
-        ship_to = ship_to or {}
-        packages = packages or []
+        # Validate packages not empty
+        if not packages:
+            raise ValueError("Cannot create shipment: packages list cannot be empty. At least one package with contents is required.")
+        
+        # Validate ship_from has warehouse
+        if not ship_from.get("warehouse"):
+            raise ValueError("Cannot create shipment: ship_from must contain a 'warehouse' field.")
         
         # Validate ship_to address
         missing_fields = []
@@ -754,7 +758,7 @@ class LogisticsService:
         if not ship_to.get("country"):
             missing_fields.append("country")
         if missing_fields:
-            raise ValueError(f"Cannot create shipment: missing address fields: {', '.join(missing_fields)}. Please provide a complete shipping address.")
+            raise ValueError(f"Cannot create shipment: ship_to address is missing required fields: {', '.join(missing_fields)}. Please provide a complete shipping address.")
         
         with db_conn() as conn:
             shipment_id = generate_id(conn, "SHIP", "shipments")

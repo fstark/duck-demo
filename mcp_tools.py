@@ -5,6 +5,8 @@ import json
 import logging
 from typing import Any, Dict, List, Optional, Union
 
+from mcp.types import CallToolResult, TextContent
+
 import config
 from services import (
     simulation_service,
@@ -160,7 +162,13 @@ def register_tools(mcp):
         return customer_service.find_customers(name, email, company, city, country, phone, limit)
     
     # MUTATING TOOL
-    @mcp.tool(name="crm_create_customer", meta={"tags": ["sales"]})
+    @mcp.tool(name="crm_create_customer", meta={
+        "tags": ["sales"],
+        "ui": {
+            "resourceUri": "ui://customer-confirm/dialog",
+            "visibility": ["model", "app"]
+        }
+    }, structured_output=False)
     @log_tool("crm_create_customer")
     def create_customer(
         name: str,
@@ -178,7 +186,8 @@ def register_tools(mcp):
         notes: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
-        Create a new customer. Returns the created customer object.
+        Initiate customer creation with interactive confirmation dialog.
+        This tool returns an MCP App UI for user confirmation before creating the customer.
         
         Parameters:
             name: Customer name (required)
@@ -196,7 +205,69 @@ def register_tools(mcp):
             notes: Internal notes about the customer
         
         Returns:
-            The created customer object with id, name, and all fields.
+            UI metadata for interactive confirmation dialog. The actual customer creation
+            happens after user confirms via the dialog.
+        """
+        # Build customer data for preview
+        customer_data = {
+            "name": name,
+        }
+        if company:
+            customer_data["company"] = company
+        if email:
+            customer_data["email"] = email
+        if phone:
+            customer_data["phone"] = phone
+        if address_line1:
+            customer_data["address_line1"] = address_line1
+        if address_line2:
+            customer_data["address_line2"] = address_line2
+        if city:
+            customer_data["city"] = city
+        if postal_code:
+            customer_data["postal_code"] = postal_code
+        if country:
+            customer_data["country"] = country
+        if tax_id:
+            customer_data["tax_id"] = tax_id
+        if payment_terms:
+            customer_data["payment_terms"] = payment_terms
+        if currency:
+            customer_data["currency"] = currency
+        if notes:
+            customer_data["notes"] = notes
+        
+        # Return plain dict — FastMCP will put it in both structuredContent (for UI)
+        # and content (as text). The _meta.ui.resourceUri on the tool definition tells
+        # VS Code to render the MCP App UI.
+        return {
+            "message": f"Please confirm creation of customer: **{name}**",
+            "data": customer_data
+        }
+    
+    # MUTATING TOOL - Confirms and creates customer after user approval
+    # NOTE: No tags - this tool is only callable by MCP App UI, not by agents
+    @mcp.tool(name="crm_confirm_create_customer", meta={"tags": [], "ui": {"visibility": ["app"]}})
+    @log_tool("crm_confirm_create_customer")
+    def confirm_create_customer(
+        name: str,
+        company: Optional[str] = None,
+        email: Optional[str] = None,
+        phone: Optional[str] = None,
+        address_line1: Optional[str] = None,
+        address_line2: Optional[str] = None,
+        city: Optional[str] = None,
+        postal_code: Optional[str] = None,
+        country: Optional[str] = None,
+        tax_id: Optional[str] = None,
+        payment_terms: Optional[int] = None,
+        currency: Optional[str] = None,
+        notes: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        ⚠️ INTERNAL TOOL — DO NOT CALL DIRECTLY. This tool is reserved for the MCP App confirmation UI only.
+        Agents/LLMs must use crm_create_customer instead, which triggers the confirmation dialog.
+        Calling this tool directly bypasses the required user confirmation step.
         """
         return customer_service.create_customer(
             name=name, company=company, email=email, phone=phone,
@@ -441,11 +512,11 @@ def register_tools(mcp):
     @mcp.tool(name="logistics_create_shipment", meta={"tags": ["sales"]})
     @log_tool("logistics_create_shipment")
     def create_shipment(
-        ship_from: Optional[Dict[str, Any]] = None,
-        ship_to: Optional[Dict[str, Any]] = None,
-        planned_departure: Optional[str] = None,
-        planned_arrival: Optional[str] = None,
-        packages: Optional[List[Dict[str, Any]]] = None,
+        ship_from: Dict[str, Any],
+        ship_to: Dict[str, Any],
+        planned_departure: str,
+        planned_arrival: str,
+        packages: List[Dict[str, Any]],
         reference: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """
@@ -453,11 +524,11 @@ def register_tools(mcp):
         Returns the created shipment object.
         
         Parameters:
-            ship_from: Dict with warehouse info {warehouse: str}
-            ship_to: Dict with address {line1, postal_code, city, country}
-            planned_departure: Departure date in ISO format
-            planned_arrival: Arrival date in ISO format
-            packages: List of dicts with contents: [{contents: [{sku, qty}]}]
+            ship_from: Dict with warehouse info {warehouse: str} (required)
+            ship_to: Dict with address {line1, postal_code, city, country} (required)
+            planned_departure: Departure date in ISO format (required)
+            planned_arrival: Arrival date in ISO format (required)
+            packages: List of dicts with contents: [{contents: [{sku, qty}]}] (required, must not be empty)
             reference: Optional sales order reference {type: 'sales_order', id: 'SO-1000'}
         
         Returns:

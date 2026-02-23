@@ -1,6 +1,6 @@
 # Agent Tool Filtering
 
-This server exposes **39 MCP tools** organized by tags for client-side filtering.
+This server exposes **40 MCP tools** organized by tags for client-side filtering.
 
 ## Architecture
 
@@ -21,14 +21,18 @@ Available to both agents:
 - `chart_generate`
 - `admin_reset_database`
 
-### Sales Tools (17 tools) - tag: `sales`
+### Sales Tools (18 tools) - tag: `sales`
 Customer relationship and order management:
-- `crm_search_customers`, 🔧 `crm_create_customer`, 🔧 `crm_update_customer`, `crm_get_customer`
+- `crm_search_customers`, 🔧 `crm_create_customer` (MCP App), 🔧 `crm_update_customer`, `crm_get_customer`
 - `sales_get_quote_options`, `sales_price_order`, `sales_search_orders`, `sales_get_order`, 🔧 `sales_link_shipment`
 - 🔧 `logistics_create_shipment`, `logistics_get_shipment`
 - `messaging_create_email`, `messaging_list_emails`, `messaging_get_email`, `messaging_update_email`, `messaging_send_email`, `messaging_delete_email`
 - 🔧 `invoice_create`, `invoice_get`, `invoice_list`, 🔧 `invoice_issue`, 🔧 `invoice_record_payment`
 - 🔧 `quote_create`, `quote_get`, `quote_list`, 🔧 `quote_send`, 🔧 `quote_accept`, 🔧 `quote_reject`, 🔧 `quote_revise`
+
+### Internal Tools (1 tool) - no tags
+Tools only callable by MCP Apps, not exposed to agents:
+- 🔧 `crm_confirm_create_customer` - Called by customer confirmation dialog after user approval
 
 ### Production Tools (9 tools) - tag: `production`
 Manufacturing and materials management:
@@ -38,10 +42,11 @@ Manufacturing and materials management:
 ## Client-Side Filtering
 
 Clients should:
-1. Call `list_tools` to get all 39 tools
+1. Call `list_tools` to get all 40 tools
 2. Filter by tags based on agent type:
-   - **Sales agent**: `tags=['shared', 'sales']` → 30 tools
-   - **Production agent**: `tags=['shared', 'production']` → 22 tools
+   - **Sales agent**: `tags=['shared', 'sales']` → 31 tools (18 sales + 13 shared)
+   - **Production agent**: `tags=['shared', 'production']` → 22 tools (9 production + 13 shared)
+   - **Internal tools** with empty tags are excluded from agent contexts but remain callable by MCP Apps
 3. Only expose filtered tools to the LLM
 4. Validate tool calls match the allowed tag set
 
@@ -52,8 +57,16 @@ Clients should:
 
 Both prompts should guide the LLM to use appropriate tools, with client-side filtering as the enforcement layer.
 
+## MCP Apps (UI Extensions)
+
+The server includes MCP App support for interactive human-in-the-loop workflows:
+- **Customer Confirmation Dialog**: `crm_create_customer` returns an interactive UI for user approval before creating customers
+- UI resources served via `ui://` scheme (e.g., `ui://customer-confirm/dialog`)
+- Build MCP App UIs: `cd ui && npm run build:mcp-app`
+
 ## File Structure
 
-- `server.py`: Main server (registers all 39 tools)
+- `server.py`: Main server (registers all 40 tools + MCP App resources)
 - `mcp_tools.py`: All tool definitions with tags
+- `ui/src/mcp-apps/`: MCP App UI components
 
