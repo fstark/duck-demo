@@ -22,9 +22,7 @@ export default defineConfig(({ command, mode }) => {
       outDir: '../mcp_apps_ui',
       emptyOutDir: false,
       rollupOptions: {
-        input: {
-          'customer-confirm-dialog': resolve(__dirname, 'customer-confirm.html')
-        },
+        input: resolve(__dirname, process.env.MCP_APP_ENTRY || 'customer-confirm.html'),
         output: {
           entryFileNames: '[name].js',
           assetFileNames: '[name].[ext]'

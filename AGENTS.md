@@ -1,6 +1,6 @@
 # Agent Tool Filtering
 
-This server exposes **40 MCP tools** organized by tags for client-side filtering.
+This server exposes **53 MCP tools** organized by tags for client-side filtering.
 
 ## Architecture
 
@@ -10,18 +10,18 @@ This server exposes **40 MCP tools** organized by tags for client-side filtering
 
 > 🔧 = mutating tool (writes to database)
 
-### Shared Tools (13 tools) - tag: `shared`
+### Shared Tools (14 tools) - tag: `shared`
 Available to both agents:
 - `user_get_current`
 - `stats_get_summary`
-- `catalog_get_item`, `catalog_search_items`
+- `catalog_get_item`, `catalog_inspect_item`, `catalog_search_items`
 - `catalog_list_recipes`, `catalog_get_recipe`
 - `inventory_list_items`, `inventory_get_stock`, `inventory_check_availability`
 - `simulation_get_time`, `simulation_advance_time`
 - `chart_generate`
 - `admin_reset_database`
 
-### Sales Tools (18 tools) - tag: `sales`
+### Sales Tools (29 tools) - tag: `sales`
 Customer relationship and order management:
 - `crm_search_customers`, 🔧 `crm_create_customer` (MCP App), 🔧 `crm_update_customer`, `crm_get_customer`
 - `sales_get_quote_options`, `sales_price_order`, `sales_search_orders`, `sales_get_order`, 🔧 `sales_link_shipment`
@@ -42,10 +42,10 @@ Manufacturing and materials management:
 ## Client-Side Filtering
 
 Clients should:
-1. Call `list_tools` to get all 40 tools
+1. Call `list_tools` to get all 53 tools
 2. Filter by tags based on agent type:
-   - **Sales agent**: `tags=['shared', 'sales']` → 31 tools (18 sales + 13 shared)
-   - **Production agent**: `tags=['shared', 'production']` → 22 tools (9 production + 13 shared)
+   - **Sales agent**: `tags=['shared', 'sales']` → 43 tools (29 sales + 14 shared)
+   - **Production agent**: `tags=['shared', 'production']` → 23 tools (9 production + 14 shared)
    - **Internal tools** with empty tags are excluded from agent contexts but remain callable by MCP Apps
 3. Only expose filtered tools to the LLM
 4. Validate tool calls match the allowed tag set
@@ -61,12 +61,13 @@ Both prompts should guide the LLM to use appropriate tools, with client-side fil
 
 The server includes MCP App support for interactive human-in-the-loop workflows:
 - **Customer Confirmation Dialog**: `crm_create_customer` returns an interactive UI for user approval before creating customers
-- UI resources served via `ui://` scheme (e.g., `ui://customer-confirm/dialog`)
+- **Item Inspector**: `catalog_inspect_item` returns an interactive 3D wireframe viewer with mouse-controlled rotation for examining catalog items
+- UI resources served via `ui://` scheme (e.g., `ui://customer-confirm/dialog`, `ui://item-inspect/viewer`)
 - Build MCP App UIs: `cd ui && npm run build:mcp-app`
 
 ## File Structure
 
-- `server.py`: Main server (registers all 40 tools + MCP App resources)
+- `server.py`: Main server (registers all 53 tools + MCP App resources)
 - `mcp_tools.py`: All tool definitions with tags
 - `ui/src/mcp-apps/`: MCP App UI components
 

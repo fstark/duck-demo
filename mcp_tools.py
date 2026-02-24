@@ -3,6 +3,7 @@
 import functools
 import json
 import logging
+import os
 from typing import Any, Dict, List, Optional, Union
 
 from mcp.types import CallToolResult, TextContent
@@ -355,6 +356,58 @@ def register_tools(mcp):
             Complete item details: id, sku, name, type, unit_price, uom, reorder_qty, image_url
         """
         return catalog_service.get_item(sku)
+    
+    @mcp.tool(name="catalog_inspect_item", meta={
+        "tags": ["shared"],
+        "ui": {
+            "resourceUri": "ui://item-inspect/viewer",
+            "visibility": ["model", "app"]
+        }
+    }, structured_output=False)
+    @log_tool("catalog_inspect_item")
+    def inspect_item(sku: str) -> Dict[str, Any]:
+        """
+        Launch interactive 3D viewer to inspect an item in detail.
+        This tool returns an MCP App UI with a rotating 3D wireframe model and item details overlay.
+        
+        Parameters:
+            sku: The item SKU or item_id to inspect
+        
+        Returns:
+            UI metadata for interactive 3D viewer. The viewer displays the item as a rotating
+            wireframe model with mouse-controlled rotation and overlaid product details.
+        """
+        try:
+            item = catalog_service.get_item(sku)
+            
+            # Load the 3D model data to send to the MCP app based on SKU
+            model_path = os.path.join(os.path.dirname(__file__), "models", f"{item['sku']}.obj")
+            model_data = None
+            try:
+                with open(model_path, 'r') as f:
+                    model_data = f.read()
+            except Exception as model_error:
+                logger.warning(f"Failed to load 3D model for {item['sku']}: {model_error}")
+            
+            return {
+                "message": f"Launching 3D inspector for: **{item['name']}**",
+                "data": {
+                    **item,
+                    "model_obj": model_data
+                }
+            }
+        except Exception as e:
+            logger.error(f"Error in catalog_inspect_item for sku={sku}: {e}", exc_info=True)
+            # Return minimal valid response so UI still loads
+            return {
+                "message": f"Launching 3D inspector (item not found: {sku})",
+                "data": {
+                    "sku": sku,
+                    "name": "Item Not Found",
+                    "type": "unknown",
+                    "unit_price": 0.0
+                }
+            }
     
     @mcp.tool(name="catalog_search_items", meta={"tags": ["shared"]})
     @log_tool("catalog_search_items")

@@ -6,7 +6,9 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "build:mcp-app": "vite build --mode mcp-app",
+    "build:mcp-app": "npm run build:mcp-app:customer-confirm && npm run build:mcp-app:item-inspect",
+    "build:mcp-app:customer-confirm": "MCP_APP_ENTRY=customer-confirm.html vite build --mode mcp-app",
+    "build:mcp-app:item-inspect": "MCP_APP_ENTRY=item-inspect.html vite build --mode mcp-app",
     "preview": "vite preview",
     "lint": "eslint . --ext ts,tsx --max-warnings=0"
   },
@@ -15,11 +17,13 @@
     "@tailwindcss/typography": "^0.5.19",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "react-markdown": "^10.1.0"
+    "react-markdown": "^10.1.0",
+    "three": "^0.160.0"
   },
   "devDependencies": {
     "@types/react": "^18.3.10",
     "@types/react-dom": "^18.3.0",
+    "@types/three": "^0.160.0",
     "@vitejs/plugin-react": "^4.3.2",
     "autoprefixer": "^10.4.20",
     "eslint": "^8.57.1",

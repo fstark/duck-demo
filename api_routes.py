@@ -179,6 +179,16 @@ def register_routes(mcp):
                 return _json({"error": "Image not found"}, status_code=404)
             return Response(content=row["image"], media_type="image/png", headers=DEMO_CORS_HEADERS)
     
+    @mcp.custom_route("/api/models/duck.obj", methods=["GET", "OPTIONS"])
+    async def api_duck_model(request):
+        """Serve the duck 3D model for MCP App item inspector."""
+        if request.method == "OPTIONS":
+            return _cors_preflight(["GET"])
+        model_path = os.path.join(os.path.dirname(__file__), "ui", "public", "models", "duck.obj")
+        if not os.path.exists(model_path):
+            return _json({"error": "Model not found"}, status_code=404)
+        return FileResponse(model_path, media_type="text/plain", headers=DEMO_CORS_HEADERS)
+    
     @mcp.custom_route("/api/items/{sku}/image/base64", methods=["GET", "OPTIONS"])
     async def api_item_image_base64(request):
         if request.method == "OPTIONS":
