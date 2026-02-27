@@ -59,6 +59,14 @@ export default function ItemInspectViewer() {
                     return;
                 }
 
+                // Check for structuredContent first (new format)
+                if (params.structuredContent) {
+                    setItemData(params.structuredContent as ItemData);
+                    setStatus('ready');
+                    return;
+                }
+
+                // Fallback to old format
                 if (params.content) {
                     try {
                         for (const item of params.content) {

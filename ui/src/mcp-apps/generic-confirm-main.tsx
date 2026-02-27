@@ -1,9 +1,9 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
-import CustomerConfirmDialog from './CustomerConfirmDialog';
+import GenericConfirmDialog from './GenericConfirmDialog';
 
 createRoot(document.getElementById('root')!).render(
     <StrictMode>
-        <CustomerConfirmDialog />
+        <GenericConfirmDialog />
     </StrictMode>,
 );

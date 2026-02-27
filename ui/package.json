@@ -6,8 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "build:mcp-app": "npm run build:mcp-app:customer-confirm && npm run build:mcp-app:item-inspect",
-    "build:mcp-app:customer-confirm": "MCP_APP_ENTRY=customer-confirm.html vite build --mode mcp-app",
+    "build:mcp-app": "npm run build:mcp-app:generic-confirm && npm run build:mcp-app:item-inspect",
+    "build:mcp-app:generic-confirm": "MCP_APP_ENTRY=generic-confirm.html vite build --mode mcp-app",
     "build:mcp-app:item-inspect": "MCP_APP_ENTRY=item-inspect.html vite build --mode mcp-app",
     "preview": "vite preview",
     "lint": "eslint . --ext ts,tsx --max-warnings=0"

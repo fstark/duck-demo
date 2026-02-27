@@ -32,7 +32,7 @@ Customer relationship and order management:
 
 ### Internal Tools (1 tool) - no tags
 Tools only callable by MCP Apps, not exposed to agents:
-- 🔧 `crm_confirm_create_customer` - Called by customer confirmation dialog after user approval
+- 🔧 `generic_confirm_action` - Generic dispatcher for confirmed actions, called by confirmation dialogs after user approval
 
 ### Production Tools (9 tools) - tag: `production`
 Manufacturing and materials management:
@@ -59,15 +59,37 @@ Both prompts should guide the LLM to use appropriate tools, with client-side fil
 
 ## MCP Apps (UI Extensions)
 
-The server includes MCP App support for interactive human-in-the-loop workflows:
-- **Customer Confirmation Dialog**: `crm_create_customer` returns an interactive UI for user approval before creating customers
+The server includes MCP App support for interactive human-in-the-loop workflows using a **unified confirmation system**:
+
+### Generic Confirmation Dialog
+All 20+ mutating tools (marked with 🔧) now use a generic confirmation dialog system that:
+- **Gateway tools** return standardized confirmation metadata (field definitions, action details, original arguments)
+- **Single MCP App UI** (`ui://generic-confirm/dialog`) renders any confirmation based on field metadata
+- **Single hidden dispatcher** (`generic_confirm_action`) routes confirmations to appropriate service methods
+- **Field metadata** defines how each parameter should be displayed (label, type, grouping, validation)
+
+### Confirmed Actions
+All mutating tools trigger confirmation dialogs before execution:
+- **Customer Management**: `crm_create_customer`, `crm_update_customer`
+- **Quote Management**: `quote_create`, `quote_send`, `quote_accept`, `quote_reject`, `quote_revise`
+- **Invoice & Payment**: `invoice_create`, `invoice_issue`, `invoice_record_payment`
+- **Order & Shipping**: `sales_link_shipment`, `logistics_create_shipment`
+- **Production**: `production_create_order`, `production_start_order`, `production_complete_order`
+- **Purchasing**: `purchase_create_order`, `purchase_restock_materials`, `purchase_receive_order`
+- **Messaging**: `messaging_send_email`, `messaging_delete_email`
+
+### Other MCP Apps
 - **Item Inspector**: `catalog_inspect_item` returns an interactive 3D wireframe viewer with mouse-controlled rotation for examining catalog items
-- UI resources served via `ui://` scheme (e.g., `ui://customer-confirm/dialog`, `ui://item-inspect/viewer`)
+
+### Build Instructions
 - Build MCP App UIs: `cd ui && npm run build:mcp-app`
+- UI resources served via `ui://` scheme (e.g., `ui://generic-confirm/dialog`, `ui://item-inspect/viewer`)
 
 ## File Structure
 
 - `server.py`: Main server (registers all 53 tools + MCP App resources)
-- `mcp_tools.py`: All tool definitions with tags
+- `mcp_tools.py`: All tool definitions with tags + confirmation metadata system
 - `ui/src/mcp-apps/`: MCP App UI components
+  - `GenericConfirmDialog.tsx`: Universal confirmation UI
+  - `ItemInspectViewer.tsx`: 3D item inspector
 

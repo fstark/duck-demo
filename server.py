@@ -57,10 +57,10 @@ register_tools(mcp)
 register_routes(mcp)
 
 # Register MCP App UI resources
-@mcp.resource("ui://customer-confirm/dialog", mime_type="text/html;profile=mcp-app")
-def get_customer_confirm_ui() -> str:
-    """Serves the customer confirmation MCP App UI."""
-    ui_path = os.path.join(os.path.dirname(__file__), "mcp_apps_ui", "customer-confirm.html")
+@mcp.resource("ui://generic-confirm/dialog", mime_type="text/html;profile=mcp-app")
+def get_generic_confirm_ui() -> str:
+    """Serves the generic confirmation MCP App UI."""
+    ui_path = os.path.join(os.path.dirname(__file__), "mcp_apps_ui", "generic-confirm.html")
     if os.path.exists(ui_path):
         with open(ui_path, "r", encoding="utf-8") as f:
             return f.read()
