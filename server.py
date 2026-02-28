@@ -20,8 +20,8 @@ from mcp.server.fastmcp import FastMCP
 from mcp.server.transport_security import TransportSecuritySettings
 
 from db import init_db
-from mcp_tools import register_tools
-from api_routes import register_routes
+from mcp_tools import register_all_tools
+from api_routes import register_all_routes
 import config
 
 
@@ -51,10 +51,10 @@ mcp = FastMCP(
 # Register all tools with tags:
 #   - shared (14) + sales (29) + production (9) + internal (1) = 53 tools total
 #   - Agents see: sales=43 tools, production=23 tools (internal excluded)
-register_tools(mcp)
+register_all_tools(mcp)
 
 # Register REST API routes (for UI compatibility)
-register_routes(mcp)
+register_all_routes(mcp)
 
 # Register MCP App UI resources
 @mcp.resource("ui://generic-confirm/dialog", mime_type="text/html;profile=mcp-app")
