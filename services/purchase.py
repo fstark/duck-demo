@@ -34,7 +34,8 @@ class PurchaseService:
                 raise ValueError(f"Supplier {supplier_name} not found")
             po_id = generate_id(conn, "PO", "purchase_orders")
             sim_time = SimulationService.get_current_time()
-            expected_delivery = (datetime.utcnow().date() + timedelta(days=7)).isoformat()
+            sim_date = datetime.fromisoformat(sim_time).date()
+            expected_delivery = (sim_date + timedelta(days=supplier["lead_time_days"] if supplier["lead_time_days"] else 7)).isoformat()
             conn.execute("INSERT INTO purchase_orders (id, supplier_id, item_id, qty, status, expected_delivery, ordered_at) VALUES (?, ?, ?, ?, 'ordered', ?, ?)", (po_id, supplier["id"], item["id"], qty, expected_delivery, sim_time))
             conn.commit()
             return {"purchase_order_id": po_id, "supplier_name": supplier["name"], "item_sku": item_sku, "item_name": item["name"], "qty": qty, "status": "ordered", "expected_delivery": expected_delivery, "message": f"Purchase order {po_id} created for {qty} {item['uom']} of {item['name']} from {supplier['name']}"}
@@ -44,7 +45,7 @@ class PurchaseService:
         """Check and create purchase orders for low stock items."""
         from db import dict_rows
         with db_conn() as conn:
-            items_to_reorder = dict_rows(conn.execute("SELECT i.*, COALESCE(SUM(s.on_hand), 0) as current_stock FROM items i LEFT JOIN stock s ON i.id = s.item_id WHERE i.type IN ('raw_material', 'component') AND i.reorder_qty > 0 GROUP BY i.id HAVING current_stock < i.reorder_qty ORDER BY i.sku"))
+            items_to_reorder = dict_rows(conn.execute("SELECT i.*, COALESCE(SUM(s.on_hand), 0) as current_stock FROM items i LEFT JOIN stock s ON i.id = s.item_id WHERE i.type IN ('raw_material', 'component', 'material') AND i.reorder_qty > 0 GROUP BY i.id HAVING current_stock < i.reorder_qty ORDER BY i.sku"))
             purchase_orders = []
             for item in items_to_reorder:
                 qty_to_order = item["reorder_qty"] - item["current_stock"]

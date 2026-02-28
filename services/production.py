@@ -57,6 +57,7 @@ class ProductionService:
         """Create a new production order."""
         from services.recipe import RecipeService
         from services.inventory import InventoryService
+        from services.simulation import SimulationService
 
         with db_conn() as conn:
             recipe_data = RecipeService.get_recipe(recipe_id)
@@ -67,9 +68,11 @@ class ProductionService:
                 if not check["is_available"]:
                     shortfalls.append({"ingredient_sku": ing["ingredient_sku"], "ingredient_name": ing["ingredient_name"], "qty_needed": qty_needed, "qty_available": check["qty_available"], "shortfall": check["shortfall"]})
             status = "waiting" if shortfalls else "ready"
+            sim_time = SimulationService.get_current_time()
+            sim_date = datetime.fromisoformat(sim_time).date()
             prod_time_days = recipe_data["production_time_hours"] / 24.0
-            eta_finish = (datetime.utcnow().date() + timedelta(days=1 + int(prod_time_days))).isoformat()
-            eta_ship = (datetime.utcnow().date() + timedelta(days=2 + int(prod_time_days))).isoformat()
+            eta_finish = (sim_date + timedelta(days=1 + int(prod_time_days))).isoformat()
+            eta_ship = (sim_date + timedelta(days=2 + int(prod_time_days))).isoformat()
             order_id = generate_id(conn, "MO", "production_orders")
             conn.execute("INSERT INTO production_orders (id, recipe_id, item_id, status, eta_finish, eta_ship) VALUES (?, ?, ?, ?, ?, ?)", (order_id, recipe_id, recipe_data["output_item_id"], status, eta_finish, eta_ship))
             for op in recipe_data["operations"]:
@@ -80,33 +83,89 @@ class ProductionService:
 
     @staticmethod
     def start_order(production_order_id: str) -> Dict[str, Any]:
-        """Start a production order."""
+        """Start a production order.
+
+        Transitions status from 'ready' to 'in_progress', sets started_at,
+        and **deducts recipe ingredients** from stock.
+        """
+        from services.inventory import InventoryService
+        from services.simulation import SimulationService
+
         with db_conn() as conn:
             order = conn.execute("SELECT * FROM production_orders WHERE id = ?", (production_order_id,)).fetchone()
             if not order:
                 raise ValueError(f"Production order {production_order_id} not found")
             if order["status"] != "ready":
                 raise ValueError(f"Production order {production_order_id} is not ready (current status: {order['status']})")
+
+            # Deduct recipe ingredients from stock
+            ingredients = conn.execute(
+                "SELECT ri.input_item_id, ri.input_qty "
+                "FROM recipe_ingredients ri WHERE ri.recipe_id = ?",
+                (order["recipe_id"],)
+            ).fetchall()
+            for ing in ingredients:
+                InventoryService.deduct_stock(ing["input_item_id"], ing["input_qty"], conn=conn)
+
             first_op = conn.execute("SELECT operation_name FROM recipe_operations WHERE recipe_id = ? ORDER BY sequence_order LIMIT 1", (order["recipe_id"],)).fetchone()
             current_operation = first_op["operation_name"] if first_op else None
-            conn.execute("UPDATE production_orders SET status = 'in_progress', current_operation = ? WHERE id = ?", (current_operation, production_order_id))
+            sim_time = SimulationService.get_current_time()
+            conn.execute("UPDATE production_orders SET status = 'in_progress', started_at = ?, current_operation = ? WHERE id = ?", (sim_time, current_operation, production_order_id))
             conn.commit()
             return {"production_order_id": production_order_id, "status": "in_progress", "current_operation": current_operation, "message": f"Production order {production_order_id} started"}
 
     @staticmethod
     def complete_order(production_order_id: str, qty_produced: int, warehouse: str, location: str) -> Dict[str, Any]:
-        """Complete a production order."""
+        """Complete a production order and add finished goods to stock."""
+        from services.simulation import SimulationService
+
         with db_conn() as conn:
             order = conn.execute("SELECT * FROM production_orders WHERE id = ?", (production_order_id,)).fetchone()
             if not order:
                 raise ValueError(f"Production order {production_order_id} not found")
             if order["status"] == "completed":
                 raise ValueError(f"Production order {production_order_id} already completed")
-            conn.execute("UPDATE production_orders SET status = 'completed', qty_produced = ?, current_operation = NULL WHERE id = ?", (qty_produced, production_order_id))
+            sim_time = SimulationService.get_current_time()
+            conn.execute("UPDATE production_orders SET status = 'completed', completed_at = ?, qty_produced = ?, current_operation = NULL WHERE id = ?", (sim_time, qty_produced, production_order_id))
             stock_id = generate_id(conn, "STK", "stock")
             conn.execute("INSERT INTO stock (id, item_id, warehouse, location, on_hand) VALUES (?, ?, ?, ?, ?)", (stock_id, order["item_id"], warehouse, location, qty_produced))
             conn.commit()
             return {"production_order_id": production_order_id, "status": "completed", "qty_produced": qty_produced, "stock_id": stock_id, "warehouse": warehouse, "location": location, "message": f"Production order {production_order_id} completed, {qty_produced} units added to stock"}
+
+    @staticmethod
+    def update_readiness() -> Dict[str, Any]:
+        """Check 'waiting' production orders and promote to 'ready' if materials are now available."""
+        from services.inventory import InventoryService
+
+        with db_conn() as conn:
+            waiting = conn.execute(
+                "SELECT po.id, po.recipe_id FROM production_orders po WHERE po.status = 'waiting'"
+            ).fetchall()
+
+            promoted = []
+            for wo in waiting:
+                ingredients = conn.execute(
+                    "SELECT ri.input_item_id, ri.input_qty, i.sku as ingredient_sku "
+                    "FROM recipe_ingredients ri "
+                    "JOIN items i ON ri.input_item_id = i.id "
+                    "WHERE ri.recipe_id = ?",
+                    (wo["recipe_id"],)
+                ).fetchall()
+
+                all_available = True
+                for ing in ingredients:
+                    check = InventoryService.check_availability(ing["ingredient_sku"], ing["input_qty"])
+                    if not check["is_available"]:
+                        all_available = False
+                        break
+
+                if all_available:
+                    conn.execute("UPDATE production_orders SET status = 'ready' WHERE id = ?", (wo["id"],))
+                    promoted.append(wo["id"])
+
+            if promoted:
+                conn.commit()
+            return {"checked": len(waiting), "promoted_to_ready": promoted}
 
 
 production_service = ProductionService()

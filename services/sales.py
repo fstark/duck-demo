@@ -88,5 +88,41 @@ class SalesService:
             conn.commit()
             return {"status": "linked"}
 
+    @staticmethod
+    def confirm_order(sales_order_id: str) -> Dict[str, Any]:
+        """Confirm a draft sales order (draft -> confirmed)."""
+        with db_conn() as conn:
+            order = conn.execute("SELECT * FROM sales_orders WHERE id = ?", (sales_order_id,)).fetchone()
+            if not order:
+                raise ValueError(f"Sales order {sales_order_id} not found")
+            if order["status"] != "draft":
+                raise ValueError(f"Sales order {sales_order_id} is not draft (current status: {order['status']})")
+            conn.execute("UPDATE sales_orders SET status = 'confirmed' WHERE id = ?", (sales_order_id,))
+            conn.commit()
+            return {
+                "sales_order_id": sales_order_id,
+                "status": "confirmed",
+                "message": f"Sales order {sales_order_id} confirmed",
+                "ui_url": ui_href("orders", sales_order_id),
+            }
+
+    @staticmethod
+    def complete_order(sales_order_id: str) -> Dict[str, Any]:
+        """Mark a sales order as completed."""
+        with db_conn() as conn:
+            order = conn.execute("SELECT * FROM sales_orders WHERE id = ?", (sales_order_id,)).fetchone()
+            if not order:
+                raise ValueError(f"Sales order {sales_order_id} not found")
+            if order["status"] == "completed":
+                raise ValueError(f"Sales order {sales_order_id} already completed")
+            conn.execute("UPDATE sales_orders SET status = 'completed' WHERE id = ?", (sales_order_id,))
+            conn.commit()
+            return {
+                "sales_order_id": sales_order_id,
+                "status": "completed",
+                "message": f"Sales order {sales_order_id} completed",
+                "ui_url": ui_href("orders", sales_order_id),
+            }
+
 
 sales_service = SalesService()

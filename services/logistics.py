@@ -64,5 +64,67 @@ class LogisticsService:
             data["sales_orders"] = orders
             return data
 
+    @staticmethod
+    def dispatch_shipment(shipment_id: str) -> Dict[str, Any]:
+        """Dispatch a planned shipment: transition to in_transit and deduct stock."""
+        from services.inventory import InventoryService
+        from services.simulation import SimulationService
+
+        with db_conn() as conn:
+            row = conn.execute("SELECT * FROM shipments WHERE id = ?", (shipment_id,)).fetchone()
+            if not row:
+                raise ValueError(f"Shipment {shipment_id} not found")
+            if row["status"] != "planned":
+                raise ValueError(f"Shipment {shipment_id} is not planned (current status: {row['status']})")
+
+            # Deduct stock for each shipment line
+            lines = conn.execute(
+                "SELECT item_id, qty FROM shipment_lines WHERE shipment_id = ?",
+                (shipment_id,)
+            ).fetchall()
+            for line in lines:
+                InventoryService.deduct_stock(line["item_id"], line["qty"], conn=conn)
+
+            sim_time = SimulationService.get_current_time()
+            conn.execute(
+                "UPDATE shipments SET status = 'in_transit', tracking_ref = ? WHERE id = ?",
+                (f"TRK-{shipment_id}", shipment_id)
+            )
+            conn.commit()
+            return {
+                "shipment_id": shipment_id,
+                "status": "in_transit",
+                "dispatched_at": sim_time,
+                "lines_shipped": len(lines),
+                "message": f"Shipment {shipment_id} dispatched",
+                "ui_url": ui_href("shipments", shipment_id),
+            }
+
+    @staticmethod
+    def deliver_shipment(shipment_id: str) -> Dict[str, Any]:
+        """Mark a shipment as delivered."""
+        from services.simulation import SimulationService
+
+        with db_conn() as conn:
+            row = conn.execute("SELECT * FROM shipments WHERE id = ?", (shipment_id,)).fetchone()
+            if not row:
+                raise ValueError(f"Shipment {shipment_id} not found")
+            if row["status"] != "in_transit":
+                raise ValueError(f"Shipment {shipment_id} is not in transit (current status: {row['status']})")
+
+            sim_time = SimulationService.get_current_time()
+            conn.execute(
+                "UPDATE shipments SET status = 'delivered' WHERE id = ?",
+                (shipment_id,)
+            )
+            conn.commit()
+            return {
+                "shipment_id": shipment_id,
+                "status": "delivered",
+                "delivered_at": sim_time,
+                "message": f"Shipment {shipment_id} delivered",
+                "ui_url": ui_href("shipments", shipment_id),
+            }
+
 
 logistics_service = LogisticsService()
