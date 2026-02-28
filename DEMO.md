@@ -1,3 +1,6 @@
+Just got a Dean Forbes on the phone, he wants to buy 12 marylin ducks, to be delivered at his home at Buckingham palace, in London. His email is dean@forterro.com. Can you do everything that is needed so we can ship that asap and prepare the confirmation email for him?
+
+
 # Demo 1
 
 please reset the data using the password "kondor"
