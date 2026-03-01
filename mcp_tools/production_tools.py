@@ -107,14 +107,14 @@ def register(mcp):
         Returns:
             Confirmation metadata for starting the production order.
         """
-        order = production_service.get_order(production_order_id)
+        order = production_service.get_order_status(production_order_id)
 
         arguments = {"production_order_id": production_order_id}
 
         field_configs = [
             {"name": "production_order_id", "label": "Production Order ID", "type": "text", "value": production_order_id, "required": True, "display_order": 1},
             {"name": "recipe", "label": "Recipe", "type": "text", "value": order.get("recipe_id"), "display_order": 2},
-            {"name": "qty_to_produce", "label": "Quantity to Produce", "type": "number", "value": order.get("qty_to_produce"), "display_order": 3},
+            {"name": "qty_to_produce", "label": "Quantity to Produce", "type": "number", "value": order.get("recipe", {}).get("output_qty"), "display_order": 3},
             {"name": "status", "label": "Current Status", "type": "text", "value": order.get("status"), "display_order": 4},
         ]
 
@@ -154,7 +154,7 @@ def register(mcp):
         Returns:
             Confirmation metadata for completing the production order.
         """
-        order = production_service.get_order(production_order_id)
+        order = production_service.get_order_status(production_order_id)
 
         arguments = {
             "production_order_id": production_order_id,
@@ -166,7 +166,7 @@ def register(mcp):
         field_configs = [
             {"name": "production_order_id", "label": "Production Order ID", "type": "text", "value": production_order_id, "required": True, "display_order": 1},
             {"name": "recipe", "label": "Recipe", "type": "text", "value": order.get("recipe_id"), "display_order": 2},
-            {"name": "qty_to_produce", "label": "Planned Quantity", "type": "number", "value": order.get("qty_to_produce"), "display_order": 3},
+            {"name": "qty_to_produce", "label": "Planned Quantity", "type": "number", "value": order.get("recipe", {}).get("output_qty"), "display_order": 3},
             {"name": "qty_produced", "label": "Actual Quantity Produced", "type": "number", "value": qty_produced, "required": True, "display_order": 4},
             {"name": "warehouse", "label": "Warehouse", "type": "text", "value": warehouse, "group": "Stock Location", "display_order": 5},
             {"name": "location", "label": "Location", "type": "text", "value": location, "group": "Stock Location", "display_order": 6},

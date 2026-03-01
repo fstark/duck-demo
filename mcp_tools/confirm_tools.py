@@ -2,6 +2,7 @@
 
 from typing import Any, Dict
 
+import config
 from mcp_tools._common import log_tool
 from services import (
     customer_service,
@@ -63,48 +64,52 @@ def register(mcp):
 
         # Sales & Logistics Tools
         elif original_tool == "sales_link_shipment":
-            return sales_service.link_shipment_to_order(
+            return sales_service.link_shipment(
                 sales_order_id=arguments["sales_order_id"],
                 shipment_id=arguments["shipment_id"]
             )
         elif original_tool == "logistics_create_shipment":
             return logistics_service.create_shipment(
-                sales_order_id=arguments["sales_order_id"],
-                carrier=arguments["carrier"],
                 ship_from=arguments["ship_from"],
                 ship_to=arguments["ship_to"],
-                packages=arguments["packages"]
+                planned_departure=arguments["planned_departure"],
+                planned_arrival=arguments["planned_arrival"],
+                packages=arguments["packages"],
+                reference={"type": "sales_order", "id": arguments.get("sales_order_id")}
             )
 
         # Production Tools
         elif original_tool == "production_create_order":
-            return production_service.create_production_order(
+            return production_service.create_order(
                 recipe_id=arguments["recipe_id"],
-                quantity_to_produce=arguments["quantity_to_produce"]
+                notes=arguments.get("notes")
             )
         elif original_tool == "production_start_order":
-            return production_service.start_production_order(
+            return production_service.start_order(
                 production_order_id=arguments["production_order_id"]
             )
         elif original_tool == "production_complete_order":
-            return production_service.complete_production_order(
-                production_order_id=arguments["production_order_id"]
+            return production_service.complete_order(
+                production_order_id=arguments["production_order_id"],
+                qty_produced=arguments["qty_produced"],
+                warehouse=arguments.get("warehouse", config.WAREHOUSE_DEFAULT),
+                location=arguments.get("location", config.LOC_PRODUCTION_OUT)
             )
 
         # Purchase Tools
         elif original_tool == "purchase_create_order":
-            return purchase_service.create_purchase_order(
-                supplier_id=arguments["supplier_id"],
-                items=arguments["items"]
+            return purchase_service.create_order(
+                item_sku=arguments["item_sku"],
+                qty=arguments["qty"],
+                supplier_name=arguments.get("supplier_name")
             )
         elif original_tool == "purchase_restock_materials":
-            return purchase_service.restock_material(
-                material_id=arguments["material_id"],
-                target_quantity=arguments["target_quantity"]
-            )
+            return purchase_service.restock_materials()
         elif original_tool == "purchase_receive_order":
-            return purchase_service.receive_purchase_order(
-                purchase_order_id=arguments["purchase_order_id"]
+            return purchase_service.receive(
+                purchase_order_id=arguments["purchase_order_id"],
+                warehouse=arguments.get("warehouse", config.WAREHOUSE_DEFAULT),
+                location=arguments.get("location", config.LOC_RAW_MATERIAL_RECV)
             )
 
         # Messaging Tools
@@ -121,8 +126,11 @@ def register(mcp):
         elif original_tool == "quote_create":
             return quote_service.create_quote(
                 customer_id=arguments["customer_id"],
-                items=arguments["items"],
-                notes=arguments.get("notes")
+                requested_delivery_date=arguments.get("requested_delivery_date"),
+                ship_to=arguments.get("ship_to"),
+                lines=arguments["lines"],
+                note=arguments.get("note"),
+                valid_days=arguments.get("valid_days", config.QUOTE_VALIDITY_DAYS)
             )
         elif original_tool == "quote_send":
             return quote_service.send_quote(
@@ -151,8 +159,7 @@ def register(mcp):
             )
         elif original_tool == "invoice_issue":
             return invoice_service.issue_invoice(
-                invoice_id=arguments["invoice_id"],
-                payment_due_days=arguments.get("payment_due_days", 30)
+                invoice_id=arguments["invoice_id"]
             )
         elif original_tool == "invoice_record_payment":
             return invoice_service.record_payment(

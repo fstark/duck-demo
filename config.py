@@ -16,6 +16,9 @@ SUBSTITUTION_PRICE_SLACK_PCT = 0.15  # within ±15% of requested SKU
 # Invoice constants
 INVOICE_PAYMENT_TERMS_DAYS = 30
 
+# Quote constants
+QUOTE_VALIDITY_DAYS = 30
+
 # Lead time constants
 TRANSIT_DAYS_DEFAULT = 2
 PRODUCTION_LEAD_DAYS_DEFAULT = 30
