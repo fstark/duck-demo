@@ -38,3 +38,10 @@ Update with new rules as needed, but avoid over-engineering or nitpicking.
 ### Shared Data Structures
 
 - **Centralize dict↔column mappings.** When a dict is stored across prefixed DB columns (e.g. `ship_to_*`), use shared helpers (`utils.py`) instead of inline `.get()` calls in every service.
+
+### Quantities
+
+- **All quantity columns are `INTEGER`.** Store in the smallest base unit (grams for `"g"` items, millilitres for `"ml"` items, pieces for `"ea"` items). Never use `REAL` for quantities.
+- **Use `format_qty(value, uom)` (Python) or `formatQtyWithUom(value, uom)` (TypeScript) for display.** Raw integers are converted to human-readable strings (e.g. `2400` + `"g"` → `"2.4 kg"`).
+- **No `float()` casts on qty columns.** Use `int()` when accepting values from external inputs. All service function signatures that accept a quantity use `int`, not `float`.
+- **No float-tolerance checks** (e.g. `> 0.001`). With integer quantities, use plain `> 0`.

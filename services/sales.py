@@ -29,8 +29,8 @@ class SalesService:
                 if not item:
                     raise ValueError(f"Unknown SKU {line['sku']}")
                 line_id = f"{so_id}-{idx:02d}"
-                conn.execute("INSERT INTO sales_order_lines (id, sales_order_id, item_id, qty) VALUES (?, ?, ?, ?)", (line_id, so_id, item["id"], float(line["qty"])))
-                line_results.append({"line_id": line_id, "sku": line["sku"], "qty": float(line["qty"])})
+                conn.execute("INSERT INTO sales_order_lines (id, sales_order_id, item_id, qty) VALUES (?, ?, ?, ?)", (line_id, so_id, item["id"], int(line["qty"])))
+                line_results.append({"line_id": line_id, "sku": line["sku"], "qty": int(line["qty"])})
             conn.commit()
             return {"sales_order_id": so_id, "status": "draft", "lines": line_results, "ui_url": ui_href("orders", so_id)}
 

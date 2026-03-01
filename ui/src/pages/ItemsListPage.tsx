@@ -154,19 +154,19 @@ export function ItemsListPage() {
                             key: 'on_hand_total',
                             label: 'On hand',
                             sortable: true,
-                            render: (row) => <Quantity value={row.on_hand_total} />,
+                            render: (row) => <Quantity value={row.on_hand_total} uom={row.uom} />,
                         },
                         {
                             key: 'reserved_total',
                             label: 'Reserved',
                             sortable: true,
-                            render: (row) => <Quantity value={row.reserved_total} />,
+                            render: (row) => <Quantity value={row.reserved_total} uom={row.uom} />,
                         },
                         {
                             key: 'available_total',
                             label: 'Available',
                             sortable: true,
-                            render: (row) => <Quantity value={row.available_total} />,
+                            render: (row) => <Quantity value={row.available_total} uom={row.uom} />,
                         },
                     ]}
                 />

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { Card } from '../components/Card'
 import { Table } from '../components/Table'
 import { Recipe, RecipeIngredient, RecipeOperation } from '../types'
+import { formatQtyWithUom } from '../utils/quantity.tsx'
 import { api } from '../api'
 import { useNavigation } from '../contexts/NavigationContext'
 
@@ -164,7 +165,7 @@ export function RecipeDetailPage({ recipeId }: RecipeDetailPageProps) {
                         </div>
                         <div>
                             <dt className="text-sm font-medium text-gray-500">Batch Size</dt>
-                            <dd className="text-sm text-gray-900">{recipe.output_qty} ea</dd>
+                            <dd className="text-sm text-gray-900">{formatQtyWithUom(recipe.output_qty, recipe.output_uom || 'ea')}</dd>
                         </div>
                         <div>
                             <dt className="text-sm font-medium text-gray-500">Production Time</dt>
@@ -190,7 +191,7 @@ export function RecipeDetailPage({ recipeId }: RecipeDetailPageProps) {
                                     key: 'input_qty',
                                     label: 'Qty per Batch',
                                     sortable: true,
-                                    render: (row) => `${row.input_qty} ${row.input_uom}`
+                                    render: (row) => formatQtyWithUom(row.input_qty, row.input_uom)
                                 },
                             ]}
                             sortKey={ingredientSort?.key}

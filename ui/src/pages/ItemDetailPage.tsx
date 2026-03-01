@@ -6,7 +6,7 @@ import { Item, StockSummary } from '../types'
 import { api } from '../api'
 import { useNavigation } from '../contexts/NavigationContext'
 import { formatCurrency } from '../utils/currency'
-import { formatQuantity, Quantity } from '../utils/quantity.tsx'
+import { formatQuantity, Quantity, formatQtyWithUom } from '../utils/quantity.tsx'
 
 function setHash(page: string, id?: string) {
     const path = id ? `#/${page}/${encodeURIComponent(id)}` : `#/${page}`
@@ -187,14 +187,14 @@ export function ItemDetailPage({ sku }: ItemDetailPageProps) {
                                     role: 'output',
                                     recipe_id: r.id,
                                     item_name: item.name,
-                                    batch_qty: `${r.output_qty} ${item.uom || 'ea'}`,
+                                    batch_qty: formatQtyWithUom(r.output_qty, item.uom || 'ea'),
                                 })),
                                 ...(item.used_in_recipes || []).map(r => ({
                                     ...r,
                                     role: 'ingredient',
                                     id: r.recipe_id,
                                     item_name: r.output_name,
-                                    batch_qty: `${r.qty_per_batch} ${item.uom || ''}`,
+                                    batch_qty: formatQtyWithUom(r.qty_per_batch, item.uom),
                                     production_time_hours: undefined,
                                     ingredient_count: undefined,
                                     operation_count: undefined,
@@ -221,18 +221,18 @@ export function ItemDetailPage({ sku }: ItemDetailPageProps) {
                 {stock && stock.by_location.length > 0 && (
                     <Card title="Stock Summary">
                         <div className="flex gap-3 text-slate-600 text-sm mb-3">
-                            <span>On hand: <Quantity value={stock.on_hand_total} /></span>
-                            <span>Reserved: <Quantity value={stock.reserved_total} /></span>
-                            <span>Available: <Quantity value={stock.available_total} /></span>
+                            <span>On hand: <Quantity value={stock.on_hand_total} uom={item.uom} /></span>
+                            <span>Reserved: <Quantity value={stock.reserved_total} uom={item.uom} /></span>
+                            <span>Available: <Quantity value={stock.available_total} uom={item.uom} /></span>
                         </div>
                         <Table
                             rows={stock.by_location as any}
                             columns={[
                                 { key: 'warehouse', label: 'Wh' },
                                 { key: 'location', label: 'Loc' },
-                                { key: 'on_hand', label: 'On hand', render: (row) => <Quantity value={row.on_hand} /> },
-                                { key: 'reserved', label: 'Reserved', render: (row) => <Quantity value={row.reserved} /> },
-                                { key: 'available', label: 'Available', render: (row) => <Quantity value={row.available} /> },
+                                { key: 'on_hand', label: 'On hand', render: (row) => <Quantity value={row.on_hand} uom={item.uom} /> },
+                                { key: 'reserved', label: 'Reserved', render: (row) => <Quantity value={row.reserved} uom={item.uom} /> },
+                                { key: 'available', label: 'Available', render: (row) => <Quantity value={row.available} uom={item.uom} /> },
                             ]}
                             onRowClick={(row, index) => {
                                 setListContext({
@@ -253,7 +253,7 @@ export function ItemDetailPage({ sku }: ItemDetailPageProps) {
                             columns={[
                                 { key: 'id', label: 'Order ID', sortable: true },
                                 { key: 'recipe_id', label: 'Recipe', sortable: true },
-                                { key: 'output_qty', label: 'Qty', sortable: true, render: (row) => <Quantity value={row.output_qty} /> },
+                                { key: 'output_qty', label: 'Qty', sortable: true, render: (row) => <Quantity value={row.output_qty} uom="ea" /> },
                                 { key: 'status', label: 'Status', sortable: true, render: (row) => <Badge>{row.status}</Badge> },
                                 { key: 'started_at', label: 'Started', sortable: true },
                                 { key: 'eta_finish', label: 'ETA Finish', sortable: true },
@@ -272,7 +272,7 @@ export function ItemDetailPage({ sku }: ItemDetailPageProps) {
                             columns={[
                                 { key: 'id', label: 'PO ID', sortable: true },
                                 { key: 'supplier_name', label: 'Supplier', sortable: true },
-                                { key: 'qty', label: 'Qty', sortable: true, render: (row) => <Quantity value={row.qty} /> },
+                                { key: 'qty', label: 'Qty', sortable: true, render: (row) => <Quantity value={row.qty} uom={item.uom} /> },
                                 { key: 'status', label: 'Status', sortable: true, render: (row) => <Badge>{row.status}</Badge> },
                                 { key: 'ordered_at', label: 'Ordered', sortable: true },
                                 { key: 'expected_delivery', label: 'Expected', sortable: true },

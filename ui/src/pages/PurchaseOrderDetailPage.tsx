@@ -4,7 +4,7 @@ import { Badge } from '../components/Badge'
 import { PurchaseOrder } from '../types'
 import { api } from '../api'
 import { useNavigation } from '../contexts/NavigationContext'
-import { formatQuantity } from '../utils/quantity'
+import { formatQtyWithUom } from '../utils/quantity'
 
 interface PurchaseOrderDetailPageProps {
     purchaseOrderId: string
@@ -133,7 +133,7 @@ export function PurchaseOrderDetailPage({ purchaseOrderId }: PurchaseOrderDetail
                         <div>
                             <dt className="text-sm font-medium text-gray-500">Quantity</dt>
                             <dd className="text-sm text-gray-900">
-                                {formatQuantity(purchaseOrder.qty)} {purchaseOrder.uom || 'ea'}
+                                {formatQtyWithUom(purchaseOrder.qty, purchaseOrder.uom)}
                             </dd>
                         </div>
                     </dl>

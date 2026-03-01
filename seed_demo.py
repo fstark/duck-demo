@@ -76,7 +76,7 @@ def seed(from_admin=False):
             ("ITEM-BALLERINA-12", "BALLERINA-DUCK-12CM", "Ballerina Duck 12cm", "finished_good", 11.0, "ea", 0, None),
             ("ITEM-GARDEN-GNOME-30", "GNOME-DUCK-30CM", "Garden Gnome Duck 30cm", "finished_good", 25.0, "ea", 0, None),
             ("ITEM-PARROT-18", "PARROT-DUCK-18CM", "Parrot Duck 18cm", "finished_good", 16.5, "ea", 0, None),
-            ("ITEM-PVC", "PVC-PELLETS", "PVC Pellets", "material", None, "kg", 0, "SUP-001"),
+            ("ITEM-PVC", "PVC-PELLETS", "PVC Pellets", "raw_material", None, "g", 0, "SUP-001"),
             ("ITEM-BLACK-DYE", "BLACK-DYE", "Black Dye", "material", None, "ml", 0, "SUP-002"),
             ("ITEM-YELLOW-DYE", "YELLOW-DYE", "Yellow Dye", "material", None, "ml", 0, "SUP-002"),
             ("ITEM-BOX-SMALL", "BOX-SMALL", "Small Box", "material", None, "ea", 0, "SUP-003"),
@@ -120,7 +120,7 @@ def seed(from_admin=False):
                 ("STK-0010", "ITEM-UNICORN-25", config.WAREHOUSE_DEFAULT, "FG/BIN-09", 94),  # Additional stock to compensate
                 
                 # Raw materials
-                ("STK-0011", "ITEM-PVC", config.WAREHOUSE_DEFAULT, "RM/BULK-01", 987),
+                ("STK-0011", "ITEM-PVC", config.WAREHOUSE_DEFAULT, "RM/BULK-01", 987000),
                 ("STK-0012", "ITEM-BLACK-DYE", config.WAREHOUSE_DEFAULT, "RM/SHELF-01", 43),
                 ("STK-0013", "ITEM-YELLOW-DYE", config.WAREHOUSE_DEFAULT, "RM/SHELF-02", 56),
                 ("STK-0014", "ITEM-BOX-SMALL", config.WAREHOUSE_DEFAULT, "PK/BIN-01", 218),
@@ -214,7 +214,7 @@ def seed(from_admin=False):
         conn.executemany(
             "INSERT INTO recipe_ingredients (id, recipe_id, sequence_order, input_item_id, input_qty, input_uom) VALUES (?, ?, ?, ?, ?, ?)",
             [
-                ("ING-ELVIS-1", "RCP-ELVIS-20", 1, "ITEM-PVC", 2.4, "kg"),
+                ("ING-ELVIS-1", "RCP-ELVIS-20", 1, "ITEM-PVC", 2400, "g"),
                 ("ING-ELVIS-2", "RCP-ELVIS-20", 2, "ITEM-BLACK-DYE", 180, "ml"),
                 ("ING-ELVIS-3", "RCP-ELVIS-20", 3, "ITEM-YELLOW-DYE", 50, "ml"),
                 ("ING-ELVIS-4", "RCP-ELVIS-20", 4, "ITEM-BOX-SMALL", 1, "ea"),
@@ -239,7 +239,7 @@ def seed(from_admin=False):
         conn.executemany(
             "INSERT INTO recipe_ingredients (id, recipe_id, sequence_order, input_item_id, input_qty, input_uom) VALUES (?, ?, ?, ?, ?, ?)",
             [
-                ("ING-CLASSIC-1", "RCP-CLASSIC-10", 1, "ITEM-PVC", 1.2, "kg"),
+                ("ING-CLASSIC-1", "RCP-CLASSIC-10", 1, "ITEM-PVC", 1200, "g"),
                 ("ING-CLASSIC-2", "RCP-CLASSIC-10", 2, "ITEM-YELLOW-DYE", 150, "ml"),
                 ("ING-CLASSIC-3", "RCP-CLASSIC-10", 3, "ITEM-BOX-SMALL", 2, "ea"),
             ],
@@ -262,7 +262,7 @@ def seed(from_admin=False):
         conn.executemany(
             "INSERT INTO recipe_ingredients (id, recipe_id, sequence_order, input_item_id, input_qty, input_uom) VALUES (?, ?, ?, ?, ?, ?)",
             [
-                ("ING-ROBOT-1", "RCP-ROBOT-25", 1, "ITEM-PVC", 3.2, "kg"),
+                ("ING-ROBOT-1", "RCP-ROBOT-25", 1, "ITEM-PVC", 3200, "g"),
                 ("ING-ROBOT-2", "RCP-ROBOT-25", 2, "ITEM-BLACK-DYE", 200, "ml"),
                 ("ING-ROBOT-3", "RCP-ROBOT-25", 3, "ITEM-YELLOW-DYE", 80, "ml"),
                 ("ING-ROBOT-4", "RCP-ROBOT-25", 4, "ITEM-BOX-SMALL", 1, "ea"),
@@ -289,7 +289,7 @@ def seed(from_admin=False):
         conn.executemany(
             "INSERT INTO recipe_ingredients (id, recipe_id, sequence_order, input_item_id, input_qty, input_uom) VALUES (?, ?, ?, ?, ?, ?)",
             [
-                ("ING-PIRATE-1", "RCP-PIRATE-15", 1, "ITEM-PVC", 1.8, "kg"),
+                ("ING-PIRATE-1", "RCP-PIRATE-15", 1, "ITEM-PVC", 1800, "g"),
                 ("ING-PIRATE-2", "RCP-PIRATE-15", 2, "ITEM-BLACK-DYE", 150, "ml"),
                 ("ING-PIRATE-3", "RCP-PIRATE-15", 3, "ITEM-YELLOW-DYE", 60, "ml"),
                 ("ING-PIRATE-4", "RCP-PIRATE-15", 4, "ITEM-BOX-SMALL", 1, "ea"),
@@ -315,7 +315,7 @@ def seed(from_admin=False):
         conn.executemany(
             "INSERT INTO recipe_ingredients (id, recipe_id, sequence_order, input_item_id, input_qty, input_uom) VALUES (?, ?, ?, ?, ?, ?)",
             [
-                ("ING-NINJA-1", "RCP-NINJA-12", 1, "ITEM-PVC", 1.4, "kg"),
+                ("ING-NINJA-1", "RCP-NINJA-12", 1, "ITEM-PVC", 1400, "g"),
                 ("ING-NINJA-2", "RCP-NINJA-12", 2, "ITEM-BLACK-DYE", 160, "ml"),
                 ("ING-NINJA-3", "RCP-NINJA-12", 3, "ITEM-YELLOW-DYE", 40, "ml"),
                 ("ING-NINJA-4", "RCP-NINJA-12", 4, "ITEM-BOX-SMALL", 1, "ea"),
@@ -340,7 +340,7 @@ def seed(from_admin=False):
         conn.executemany(
             "INSERT INTO recipe_ingredients (id, recipe_id, sequence_order, input_item_id, input_qty, input_uom) VALUES (?, ?, ?, ?, ?, ?)",
             [
-                ("ING-UNICORN-1", "RCP-UNICORN-25", 1, "ITEM-PVC", 2.5, "kg"),
+                ("ING-UNICORN-1", "RCP-UNICORN-25", 1, "ITEM-PVC", 2500, "g"),
                 ("ING-UNICORN-2", "RCP-UNICORN-25", 2, "ITEM-BLACK-DYE", 100, "ml"),
                 ("ING-UNICORN-3", "RCP-UNICORN-25", 3, "ITEM-YELLOW-DYE", 120, "ml"),
                 ("ING-UNICORN-4", "RCP-UNICORN-25", 4, "ITEM-BOX-SMALL", 1, "ea"),
@@ -362,12 +362,12 @@ def seed(from_admin=False):
         conn.executemany(
             "INSERT INTO purchase_orders (id, item_id, qty, supplier_id, status, ordered_at, expected_delivery, received_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
             [
-                ("PO-1001", "ITEM-PVC", 500, "SUP-001", "received", "2025-12-01", "2025-12-08", "2025-12-07"),
+                ("PO-1001", "ITEM-PVC", 500000, "SUP-001", "received", "2025-12-01", "2025-12-08", "2025-12-07"),
                 ("PO-1002", "ITEM-BLACK-DYE", 50, "SUP-002", "received", "2025-12-01", "2025-12-06", "2025-12-06"),
                 ("PO-1003", "ITEM-YELLOW-DYE", 30, "SUP-002", "received", "2025-12-01", "2025-12-06", "2025-12-06"),
                 ("PO-1004", "ITEM-BLACK-DYE", 25, "SUP-002", "received", "2025-12-05", "2025-12-10", "2025-12-10"),
                 ("PO-1005", "ITEM-BOX-SMALL", 1000, "SUP-003", "received", "2025-12-10", "2025-12-17", "2025-12-16"),
-                ("PO-1006", "ITEM-PVC", 750, "SUP-001", "ordered", "2025-12-20", "2025-12-27", None),
+                ("PO-1006", "ITEM-PVC", 750000, "SUP-001", "ordered", "2025-12-20", "2025-12-27", None),
                 ("PO-1007", "ITEM-YELLOW-DYE", 40, "SUP-002", "ordered", "2025-12-22", "2025-12-29", None),
                 ("PO-1008", "ITEM-BLACK-DYE", 60, "SUP-002", "ordered", "2025-12-23", "2025-12-30", None),
                 ("PO-1009", "ITEM-BOX-SMALL", 1500, "SUP-003", "ordered", "2025-12-24", "2026-01-02", None),

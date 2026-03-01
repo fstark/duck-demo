@@ -43,7 +43,7 @@ class LogisticsService:
                     if not item:
                         raise ValueError(f"Unknown SKU {content['sku']}")
                     line_id = f"{shipment_id}-{line_counter:02d}"
-                    conn.execute("INSERT INTO shipment_lines (id, shipment_id, item_id, qty) VALUES (?, ?, ?, ?)", (line_id, shipment_id, item["id"], float(content["qty"])))
+                    conn.execute("INSERT INTO shipment_lines (id, shipment_id, item_id, qty) VALUES (?, ?, ?, ?)", (line_id, shipment_id, item["id"], int(content["qty"])))
                     line_counter += 1
             if reference and reference.get("type") == "sales_order" and reference.get("id"):
                 conn.execute("INSERT OR IGNORE INTO sales_order_shipments (sales_order_id, shipment_id) VALUES (?, ?)", (reference["id"], shipment_id))

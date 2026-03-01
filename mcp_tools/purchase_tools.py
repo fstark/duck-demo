@@ -18,7 +18,7 @@ def register(mcp):
         }
     }, structured_output=False)
     @log_tool("purchase_create_order")
-    def purchase_create_order(item_sku: str, qty: float, supplier_name: Optional[str] = None) -> Dict[str, Any]:
+    def purchase_create_order(item_sku: str, qty: int, supplier_name: Optional[str] = None) -> Dict[str, Any]:
         """
         Create a purchase order for raw materials or components with user confirmation.
         If supplier_name not provided, auto-selects based on item type.

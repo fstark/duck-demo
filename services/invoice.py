@@ -7,7 +7,7 @@ from typing import Any, Dict, List, Optional
 
 import config
 from db import dict_rows, generate_id
-from utils import ui_href
+from utils import ui_href, format_qty
 from services._base import db_conn
 
 from reportlab.lib.pagesizes import letter
@@ -145,7 +145,7 @@ class InvoiceService:
                 customer_dict["ui_url"] = ui_href("customers", customer_dict["id"])
 
             lines = dict_rows(conn.execute(
-                "SELECT i.sku, sol.qty FROM sales_order_lines sol "
+                "SELECT i.sku, i.uom, sol.qty FROM sales_order_lines sol "
                 "JOIN items i ON sol.item_id = i.id "
                 "WHERE sol.sales_order_id = ?",
                 (inv["sales_order_id"],),
@@ -351,7 +351,7 @@ class InvoiceService:
                     line_total = unit_price * line['qty']
                     line_items_data.append([
                         f"{item['name']} ({line['sku']})",
-                        f"{line['qty']:g}",
+                        f"{format_qty(line['qty'], line.get('uom', 'ea'))}",
                         f"{inv['currency']} {unit_price:.2f}",
                         f"{inv['currency']} {line_total:.2f}"
                     ])

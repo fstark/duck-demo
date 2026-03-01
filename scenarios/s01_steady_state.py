@@ -152,7 +152,7 @@ def _ship_ready_orders(so_ids: List[str]) -> List[str]:
             ).fetchall()
 
         can_ship = all(
-            inventory_service.check_availability(ln["sku"], float(ln["qty"]))["is_available"]
+            inventory_service.check_availability(ln["sku"], int(ln["qty"]))["is_available"]
             for ln in lines
         )
         if not can_ship:
@@ -164,7 +164,7 @@ def _ship_ready_orders(so_ids: List[str]) -> List[str]:
             "postal_code": "75001",
             "country": "FR",
         }
-        pkgs = [{"contents": [{"sku": l["sku"], "qty": float(l["qty"])} for l in lines]}]
+        pkgs = [{"contents": [{"sku": l["sku"], "qty": int(l["qty"])} for l in lines]}]
         try:
             ship = logistics_service.create_shipment(
                 ship_from={"warehouse": config.WAREHOUSE_DEFAULT},

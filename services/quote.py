@@ -8,7 +8,7 @@ from typing import Any, Dict, List, Optional
 
 import config
 from db import dict_rows, generate_id
-from utils import ship_to_columns, ship_to_dict, ui_href
+from utils import ship_to_columns, ship_to_dict, ui_href, format_qty
 from services._base import db_conn
 
 from reportlab.lib.pagesizes import letter
@@ -497,7 +497,7 @@ class QuoteService:
         for line in lines:
             line_items_data.append([
                 f"{line['name']} ({line['sku']})",
-                f"{line['qty']:g} {line.get('uom', 'ea')}",
+                f"{format_qty(line['qty'], line.get('uom', 'ea'))}",
                 f"{quote['currency']} {line['unit_price']:.2f}",
                 f"{quote['currency']} {line['line_total']:.2f}"
             ])

@@ -145,7 +145,7 @@ class ProductionService:
             return {"production_order_id": production_order_id, "status": "in_progress", "current_operation": current_operation, "message": f"Production order {production_order_id} started"}
 
     @staticmethod
-    def complete_order(production_order_id: str, qty_produced: float, warehouse: str, location: str) -> Dict[str, Any]:
+    def complete_order(production_order_id: str, qty_produced: int, warehouse: str, location: str) -> Dict[str, Any]:
         """Complete a production order and add finished goods to stock."""
         from services.simulation import SimulationService
 

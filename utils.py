@@ -60,3 +60,24 @@ def ui_href(page: str, identifier: str) -> str:
     """Generate UI deep link URL."""
     safe_id = quote(str(identifier), safe="")
     return f"{config.API_BASE}#/{page}/{safe_id}"
+
+
+def format_qty(value: int, uom: str) -> str:
+    """Format an integer quantity for human-readable display.
+
+    All quantities are stored in their smallest base unit:
+    - grams ("g")  → displayed as kg when ≥ 1000 (e.g. 2400 → "2.4 kg")
+    - millilitres ("ml") → displayed as L when ≥ 1000 (e.g. 1500 → "1.5 L")
+    - anything else (e.g. "ea") → "{value} {uom}"
+
+    Always returns an integer-clean number (no trailing ".0").
+    """
+    if uom == "g" and value >= 1000:
+        kg = value / 1000
+        fmt = f"{kg:g}"
+        return f"{fmt} kg"
+    if uom == "ml" and value >= 1000:
+        litres = value / 1000
+        fmt = f"{litres:g}"
+        return f"{fmt} L"
+    return f"{value} {uom}"

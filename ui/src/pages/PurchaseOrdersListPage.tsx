@@ -5,7 +5,7 @@ import { Badge } from '../components/Badge'
 import { PurchaseOrder } from '../types'
 import { api } from '../api'
 import { useNavigation } from '../contexts/NavigationContext'
-import { formatQuantity } from '../utils/quantity'
+import { formatQtyWithUom } from '../utils/quantity'
 
 type SortDir = 'asc' | 'desc'
 type SortState = { key: keyof PurchaseOrder; dir: SortDir }
@@ -136,7 +136,7 @@ export function PurchaseOrdersListPage() {
                             key: 'qty',
                             label: 'Quantity',
                             sortable: true,
-                            render: (row) => `${formatQuantity(row.qty)} ${row.uom || 'ea'}`
+                            render: (row) => formatQtyWithUom(row.qty, row.uom)
                         },
                         {
                             key: 'status',

@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 # -- Raw materials & components ----------------------------------------------
 MATERIALS = [
     # (id, sku, name, type, unit_price, uom, reorder_qty, default_supplier_id)
-    ("ITEM-PVC",        "PVC-PELLETS",   "PVC Pellets",               "raw_material", None,  "kg",  1500, "SUP-001"),
+    ("ITEM-PVC",        "PVC-PELLETS",   "PVC Pellets",               "raw_material", None,  "g",  1500000, "SUP-001"),
     ("ITEM-BLACK-DYE",  "BLACK-DYE",     "Black Dye",                 "raw_material", None,  "ml",  800,  "SUP-002"),
     ("ITEM-YELLOW-DYE", "YELLOW-DYE",    "Yellow Dye",                "raw_material", None,  "ml",  800,  "SUP-002"),
     ("ITEM-RED-DYE",    "RED-DYE",       "Red Dye",                   "raw_material", None,  "ml",  600,  "SUP-002"),
@@ -108,12 +108,12 @@ def _std_recipe(item_id: str, size_cm: int, dyes: list, extra_materials: list = 
 
     Scales PVC, box size, and production time by duck size.
     """
-    # PVC scales roughly with size
-    pvc_kg = round(size_cm * 0.12, 1)
+    # PVC scales roughly with size; stored in grams
+    pvc_g = round(size_cm * 0.12 * 1000)
     box = "ITEM-BOX-MEDIUM" if size_cm >= 20 else "ITEM-BOX-SMALL"
     base_time = round(1.5 + size_cm * 0.1, 1)
 
-    ingredients = [("ITEM-PVC", pvc_kg, "kg")]
+    ingredients = [("ITEM-PVC", pvc_g, "g")]
     ingredients.extend(dyes)
     ingredients.extend(extra_materials or [])
     ingredients.append((box, 1, "ea"))
@@ -151,37 +151,37 @@ def _build_recipe_defs():
     defs["ITEM-ELVIS-20"] = {
         "output_qty": 12, "prod_hours": 3.5,
         "notes": "Elvis Duck 20cm - signature black hair and white jumpsuit",
-        "ingredients": [("ITEM-PVC", 2.4, "kg"), ("ITEM-BLACK-DYE", 180, "ml"), ("ITEM-YELLOW-DYE", 50, "ml"), ("ITEM-BOX-MEDIUM", 1, "ea")],
+        "ingredients": [("ITEM-PVC", 2400, "g"), ("ITEM-BLACK-DYE", 180, "ml"), ("ITEM-YELLOW-DYE", 50, "ml"), ("ITEM-BOX-MEDIUM", 1, "ea")],
         "operations": [("Mold injection", 1.5), ("Cooling", 0.5), ("Paint hair black", 0.75), ("Paint details yellow", 0.5), ("Pack into box", 0.25)],
     }
     defs["ITEM-CLASSIC-10"] = {
         "output_qty": 24, "prod_hours": 2.5,
         "notes": "Classic yellow duck - high volume simple design",
-        "ingredients": [("ITEM-PVC", 1.2, "kg"), ("ITEM-YELLOW-DYE", 150, "ml"), ("ITEM-BOX-SMALL", 2, "ea")],
+        "ingredients": [("ITEM-PVC", 1200, "g"), ("ITEM-YELLOW-DYE", 150, "ml"), ("ITEM-BOX-SMALL", 2, "ea")],
         "operations": [("Mold injection", 1.0), ("Paint yellow", 0.75), ("Quality check", 0.5), ("Pack into boxes", 0.25)],
     }
     defs["ITEM-ROBOT-25"] = {
         "output_qty": 8, "prod_hours": 6.5,
         "notes": "Robot Duck - metallic finish, most complex design",
-        "ingredients": [("ITEM-PVC", 3.2, "kg"), ("ITEM-BLACK-DYE", 200, "ml"), ("ITEM-YELLOW-DYE", 80, "ml"), ("ITEM-BOX-MEDIUM", 1, "ea")],
+        "ingredients": [("ITEM-PVC", 3200, "g"), ("ITEM-BLACK-DYE", 200, "ml"), ("ITEM-YELLOW-DYE", 80, "ml"), ("ITEM-BOX-MEDIUM", 1, "ea")],
         "operations": [("Mold injection", 2.0), ("Curing process", 1.0), ("Base coat", 1.5), ("Paint robot details", 1.0), ("Assemble parts", 0.5), ("Quality check", 0.25), ("Pack into box", 0.25)],
     }
     defs["ITEM-PIRATE-15"] = {
         "output_qty": 12, "prod_hours": 4.0,
         "notes": "Pirate Duck with eye patch and hat",
-        "ingredients": [("ITEM-PVC", 1.8, "kg"), ("ITEM-BLACK-DYE", 150, "ml"), ("ITEM-YELLOW-DYE", 60, "ml"), ("ITEM-BOX-SMALL", 1, "ea")],
+        "ingredients": [("ITEM-PVC", 1800, "g"), ("ITEM-BLACK-DYE", 150, "ml"), ("ITEM-YELLOW-DYE", 60, "ml"), ("ITEM-BOX-SMALL", 1, "ea")],
         "operations": [("Mold injection", 1.5), ("Cooling", 0.5), ("Paint base yellow", 0.75), ("Paint pirate details", 0.75), ("Quality check", 0.25), ("Pack into box", 0.25)],
     }
     defs["ITEM-NINJA-12"] = {
         "output_qty": 12, "prod_hours": 3.75,
         "notes": "Ninja Duck with mask and ninja outfit",
-        "ingredients": [("ITEM-PVC", 1.4, "kg"), ("ITEM-BLACK-DYE", 160, "ml"), ("ITEM-YELLOW-DYE", 40, "ml"), ("ITEM-BOX-SMALL", 1, "ea")],
+        "ingredients": [("ITEM-PVC", 1400, "g"), ("ITEM-BLACK-DYE", 160, "ml"), ("ITEM-YELLOW-DYE", 40, "ml"), ("ITEM-BOX-SMALL", 1, "ea")],
         "operations": [("Mold injection", 1.25), ("Cooling", 0.5), ("Paint ninja outfit", 1.0), ("Quality check", 0.75), ("Pack into box", 0.25)],
     }
     defs["ITEM-UNICORN-25"] = {
         "output_qty": 10, "prod_hours": 5.0,
         "notes": "Unicorn Duck with horn and rainbow colors",
-        "ingredients": [("ITEM-PVC", 2.5, "kg"), ("ITEM-BLACK-DYE", 100, "ml"), ("ITEM-YELLOW-DYE", 120, "ml"), ("ITEM-BOX-MEDIUM", 1, "ea")],
+        "ingredients": [("ITEM-PVC", 2500, "g"), ("ITEM-BLACK-DYE", 100, "ml"), ("ITEM-YELLOW-DYE", 120, "ml"), ("ITEM-BOX-MEDIUM", 1, "ea")],
         "operations": [("Mold injection", 1.75), ("Cooling", 0.75), ("Paint rainbow colors", 1.5), ("Attach horn", 0.5), ("Quality check", 0.25), ("Pack into box", 0.25)],
     }
 
@@ -231,7 +231,7 @@ def _build_recipe_defs():
 # -- Initial stock (raw materials) -------------------------------------------
 INITIAL_STOCK = [
     # (item_id, warehouse, location, on_hand)
-    ("ITEM-PVC",        config.WAREHOUSE_DEFAULT, "RM/BULK-01",  2500),
+    ("ITEM-PVC",        config.WAREHOUSE_DEFAULT, "RM/BULK-01",  2500000),
     ("ITEM-BLACK-DYE",  config.WAREHOUSE_DEFAULT, "RM/SHELF-01", 1200),
     ("ITEM-YELLOW-DYE", config.WAREHOUSE_DEFAULT, "RM/SHELF-02", 1200),
     ("ITEM-RED-DYE",    config.WAREHOUSE_DEFAULT, "RM/SHELF-03",  800),

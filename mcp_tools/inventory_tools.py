@@ -30,7 +30,6 @@ def register(mcp):
         # Strip extra fields to keep response minimal for LLMs
         for item in result.get("items", []):
             item.pop("image_url", None)
-            item.pop("uom", None)
             item.pop("reorder_qty", None)
         return result
 
@@ -58,7 +57,7 @@ def register(mcp):
 
     @mcp.tool(name="inventory_check_availability", meta={"tags": ["shared"]})
     @log_tool("inventory_check_availability")
-    def inventory_check_availability(item_sku: str, quantity: float) -> Dict[str, Any]:
+    def inventory_check_availability(item_sku: str, quantity: int) -> Dict[str, Any]:
         """
         Check if sufficient inventory is available for an item.
         Returns availability status, on_hand total, and shortfall if any.

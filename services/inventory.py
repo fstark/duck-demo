@@ -28,7 +28,7 @@ class InventoryService:
             }
 
     @staticmethod
-    def check_availability(item_sku: str, quantity: float) -> Dict[str, Any]:
+    def check_availability(item_sku: str, quantity: int) -> Dict[str, Any]:
         """Check if sufficient inventory is available for an item."""
         from services.catalog import CatalogService
 
@@ -39,7 +39,7 @@ class InventoryService:
         summary = InventoryService.get_stock_summary(item["id"])
         available = summary["available_total"]
         is_available = available >= quantity
-        shortfall = 0.0 if is_available else (quantity - available)
+        shortfall = 0 if is_available else (quantity - available)
 
         return {
             "item_sku": item_sku,
@@ -52,7 +52,7 @@ class InventoryService:
         }
 
     @staticmethod
-    def deduct_stock(item_id: str, qty: float, conn=None) -> Dict[str, Any]:
+    def deduct_stock(item_id: str, qty: int, conn=None) -> Dict[str, Any]:
         """Deduct stock for an item using FIFO across locations.
 
         Reduces on_hand across stock rows (oldest/first rows first) until
@@ -91,10 +91,10 @@ class InventoryService:
                     "qty_taken": take,
                 })
 
-            if remaining > 0.001:  # tolerance for float rounding
+            if remaining > 0:  # all stock deducted
                 raise ValueError(
                     f"Insufficient stock for item {item_id}: "
-                    f"needed {qty}, could only deduct {qty - remaining:.2f}"
+                    f"needed {qty}, could only deduct {qty - remaining}"
                 )
             return {"item_id": item_id, "qty_deducted": qty, "deducted_from": deducted_from}
 

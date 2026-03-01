@@ -32,7 +32,7 @@ CREATE TABLE IF NOT EXISTS items (
     type TEXT NOT NULL,
     unit_price REAL,
     uom TEXT DEFAULT 'ea',
-    reorder_qty REAL DEFAULT 0,
+    reorder_qty INTEGER DEFAULT 0,
     default_supplier_id TEXT,
     image BLOB
 );
@@ -42,7 +42,7 @@ CREATE TABLE IF NOT EXISTS stock (
     item_id TEXT NOT NULL,
     warehouse TEXT NOT NULL,
     location TEXT NOT NULL,
-    on_hand REAL NOT NULL
+    on_hand INTEGER NOT NULL
 );
 
 -- Quotes: customer quotations with pricing frozen at creation time
@@ -77,7 +77,7 @@ CREATE TABLE IF NOT EXISTS quote_lines (
     id TEXT PRIMARY KEY,
     quote_id TEXT NOT NULL,
     item_id TEXT NOT NULL,
-    qty REAL NOT NULL,
+    qty INTEGER NOT NULL,
     unit_price REAL NOT NULL,
     line_total REAL NOT NULL
 );
@@ -101,7 +101,7 @@ CREATE TABLE IF NOT EXISTS sales_order_lines (
     id TEXT PRIMARY KEY,
     sales_order_id TEXT NOT NULL,
     item_id TEXT NOT NULL,
-    qty REAL NOT NULL
+    qty INTEGER NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS shipments (
@@ -122,7 +122,7 @@ CREATE TABLE IF NOT EXISTS shipment_lines (
     id TEXT PRIMARY KEY,
     shipment_id TEXT NOT NULL,
     item_id TEXT NOT NULL,
-    qty REAL NOT NULL
+    qty INTEGER NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS sales_order_shipments (
@@ -140,7 +140,7 @@ CREATE TABLE IF NOT EXISTS production_orders (
     status TEXT DEFAULT 'planned',
     parent_production_order_id TEXT,
     current_operation TEXT,
-    qty_produced REAL,
+    qty_produced INTEGER,
     started_at TEXT,
     completed_at TEXT,
     eta_finish TEXT,
@@ -173,7 +173,7 @@ CREATE TABLE IF NOT EXISTS suppliers (
 CREATE TABLE IF NOT EXISTS recipes (
     id TEXT PRIMARY KEY,
     output_item_id TEXT NOT NULL,
-    output_qty REAL NOT NULL,
+    output_qty INTEGER NOT NULL,
     output_uom TEXT NOT NULL DEFAULT 'ea',
     production_time_hours REAL NOT NULL,
     notes TEXT
@@ -185,7 +185,7 @@ CREATE TABLE IF NOT EXISTS recipe_ingredients (
     recipe_id TEXT NOT NULL,
     sequence_order INTEGER NOT NULL,
     input_item_id TEXT NOT NULL,
-    input_qty REAL NOT NULL,
+    input_qty INTEGER NOT NULL,
     input_uom TEXT NOT NULL,
     notes TEXT
 );
@@ -206,7 +206,7 @@ CREATE TABLE IF NOT EXISTS recipe_operations (
 CREATE TABLE IF NOT EXISTS purchase_orders (
     id TEXT PRIMARY KEY,
     item_id TEXT NOT NULL,
-    qty REAL NOT NULL,
+    qty INTEGER NOT NULL,
     supplier_id TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'ordered',
     ordered_at TEXT,

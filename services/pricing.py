@@ -75,7 +75,7 @@ class PricingService:
             total_qty = 0
             subtotal = 0.0
             for row in lines:
-                qty = float(row["qty"])
+                qty = int(row["qty"])
                 total_qty += qty
                 unit_price = PricingService.get_unit_price(row["item_id"])
                 line_total = qty * unit_price

@@ -190,6 +190,7 @@ export type Recipe = {
   output_name?: string
   output_type?: string
   output_qty: number
+  output_uom?: string
   production_time_hours: number
   ingredients?: RecipeIngredient[]
   operations?: RecipeOperation[]

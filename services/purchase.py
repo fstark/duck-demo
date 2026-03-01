@@ -11,7 +11,7 @@ class PurchaseService:
     """Service for purchase order operations."""
 
     @staticmethod
-    def create_order(item_sku: str, qty: float, supplier_name: Optional[str]) -> Dict[str, Any]:
+    def create_order(item_sku: str, qty: int, supplier_name: Optional[str]) -> Dict[str, Any]:
         """Create a purchase order."""
         from services.catalog import CatalogService
         from services.simulation import SimulationService
