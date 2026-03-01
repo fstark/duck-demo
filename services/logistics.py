@@ -3,7 +3,7 @@
 from typing import Any, Dict, List, Optional
 
 from db import dict_rows, generate_id
-from utils import ui_href
+from utils import ship_to_columns, ui_href
 from services._base import db_conn
 
 
@@ -35,7 +35,7 @@ class LogisticsService:
 
         with db_conn() as conn:
             shipment_id = generate_id(conn, "SHIP", "shipments")
-            conn.execute("INSERT INTO shipments (id, ship_from_warehouse, ship_to_line1, ship_to_postal_code, ship_to_city, ship_to_country, planned_departure, planned_arrival, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", (shipment_id, ship_from.get("warehouse"), ship_to.get("line1"), ship_to.get("postal_code"), ship_to.get("city"), ship_to.get("country"), planned_departure, planned_arrival, "planned"))
+            conn.execute("INSERT INTO shipments (id, ship_from_warehouse, ship_to_line1, ship_to_line2, ship_to_postal_code, ship_to_city, ship_to_country, planned_departure, planned_arrival, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", (shipment_id, ship_from.get("warehouse"), *ship_to_columns(ship_to), planned_departure, planned_arrival, "planned"))
             line_counter = 1
             for pkg in packages:
                 for content in pkg.get("contents", []):

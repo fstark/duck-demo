@@ -8,6 +8,8 @@ from PIL import Image
 
 from db import DB_PATH, init_db
 
+import config
+
 
 def seed(from_admin=False):
     # When called standalone, delete file and start fresh
@@ -52,39 +54,39 @@ def seed(from_admin=False):
 
         # Items - prepare items with image loading
         items_data = [
-            ("ITEM-ELVIS-20", "ELVIS-DUCK-20CM", "Elvis Duck 20cm", "finished_good", 12.0, "ea", 0),
-            ("ITEM-MARILYN-20", "MARILYN-DUCK-20CM", "Marilyn Duck 20cm", "finished_good", 12.0, "ea", 0),
-            ("ITEM-CLASSIC-10", "CLASSIC-DUCK-10CM", "Classic Duck 10cm", "finished_good", 10.0, "ea", 0),
-            ("ITEM-PIRATE-15", "PIRATE-DUCK-15CM", "Pirate Duck 15cm", "finished_good", 14.5, "ea", 0),
-            ("ITEM-NINJA-12", "NINJA-DUCK-12CM", "Ninja Duck 12cm", "finished_good", 13.0, "ea", 0),
-            ("ITEM-UNICORN-25", "UNICORN-DUCK-25CM", "Unicorn Duck 25cm", "finished_good", 18.0, "ea", 0),
-            ("ITEM-DISCO-18", "DISCO-DUCK-18CM", "Disco Duck 18cm", "finished_good", 15.5, "ea", 0),
-            ("ITEM-WIZARD-20", "WIZARD-DUCK-20CM", "Wizard Duck 20cm", "finished_good", 16.0, "ea", 0),
-            ("ITEM-ASTRONAUT-22", "ASTRONAUT-DUCK-22CM", "Astronaut Duck 22cm", "finished_good", 19.0, "ea", 0),
-            ("ITEM-SUPERHERO-20", "SUPERHERO-DUCK-20CM", "Superhero Duck 20cm", "finished_good", 17.5, "ea", 0),
-            ("ITEM-ZOMBIE-15", "ZOMBIE-DUCK-15CM", "Zombie Duck 15cm", "finished_good", 11.5, "ea", 0),
-            ("ITEM-VIKING-18", "VIKING-DUCK-18CM", "Viking Duck 18cm", "finished_good", 16.5, "ea", 0),
-            ("ITEM-MERMAID-20", "MERMAID-DUCK-20CM", "Mermaid Duck 20cm", "finished_good", 14.0, "ea", 0),
-            ("ITEM-ROBOT-25", "ROBOT-DUCK-25CM", "Robot Duck 25cm", "finished_good", 22.0, "ea", 0),
-            ("ITEM-CHEF-15", "CHEF-DUCK-15CM", "Chef Duck 15cm", "finished_good", 13.5, "ea", 0),
-            ("ITEM-ROCKSTAR-20", "ROCKSTAR-DUCK-20CM", "Rockstar Duck 20cm", "finished_good", 15.0, "ea", 0),
-            ("ITEM-DETECTIVE-18", "DETECTIVE-DUCK-18CM", "Detective Duck 18cm", "finished_good", 14.5, "ea", 0),
-            ("ITEM-SURFER-15", "SURFER-DUCK-15CM", "Surfer Duck 15cm", "finished_good", 12.5, "ea", 0),
-            ("ITEM-COWBOY-20", "COWBOY-DUCK-20CM", "Cowboy Duck 20cm", "finished_good", 16.0, "ea", 0),
-            ("ITEM-BALLERINA-12", "BALLERINA-DUCK-12CM", "Ballerina Duck 12cm", "finished_good", 11.0, "ea", 0),
-            ("ITEM-GARDEN-GNOME-30", "GNOME-DUCK-30CM", "Garden Gnome Duck 30cm", "finished_good", 25.0, "ea", 0),
-            ("ITEM-PARROT-18", "PARROT-DUCK-18CM", "Parrot Duck 18cm", "finished_good", 16.5, "ea", 0),
-            ("ITEM-PVC", "PVC-PELLETS", "PVC Pellets", "material", None, "kg", 0),
-            ("ITEM-BLACK-DYE", "BLACK-DYE", "Black Dye", "material", None, "ml", 0),
-            ("ITEM-YELLOW-DYE", "YELLOW-DYE", "Yellow Dye", "material", None, "ml", 0),
-            ("ITEM-BOX-SMALL", "BOX-SMALL", "Small Box", "material", None, "ea", 0),
+            ("ITEM-ELVIS-20", "ELVIS-DUCK-20CM", "Elvis Duck 20cm", "finished_good", 12.0, "ea", 0, None),
+            ("ITEM-MARILYN-20", "MARILYN-DUCK-20CM", "Marilyn Duck 20cm", "finished_good", 12.0, "ea", 0, None),
+            ("ITEM-CLASSIC-10", "CLASSIC-DUCK-10CM", "Classic Duck 10cm", "finished_good", 10.0, "ea", 0, None),
+            ("ITEM-PIRATE-15", "PIRATE-DUCK-15CM", "Pirate Duck 15cm", "finished_good", 14.5, "ea", 0, None),
+            ("ITEM-NINJA-12", "NINJA-DUCK-12CM", "Ninja Duck 12cm", "finished_good", 13.0, "ea", 0, None),
+            ("ITEM-UNICORN-25", "UNICORN-DUCK-25CM", "Unicorn Duck 25cm", "finished_good", 18.0, "ea", 0, None),
+            ("ITEM-DISCO-18", "DISCO-DUCK-18CM", "Disco Duck 18cm", "finished_good", 15.5, "ea", 0, None),
+            ("ITEM-WIZARD-20", "WIZARD-DUCK-20CM", "Wizard Duck 20cm", "finished_good", 16.0, "ea", 0, None),
+            ("ITEM-ASTRONAUT-22", "ASTRONAUT-DUCK-22CM", "Astronaut Duck 22cm", "finished_good", 19.0, "ea", 0, None),
+            ("ITEM-SUPERHERO-20", "SUPERHERO-DUCK-20CM", "Superhero Duck 20cm", "finished_good", 17.5, "ea", 0, None),
+            ("ITEM-ZOMBIE-15", "ZOMBIE-DUCK-15CM", "Zombie Duck 15cm", "finished_good", 11.5, "ea", 0, None),
+            ("ITEM-VIKING-18", "VIKING-DUCK-18CM", "Viking Duck 18cm", "finished_good", 16.5, "ea", 0, None),
+            ("ITEM-MERMAID-20", "MERMAID-DUCK-20CM", "Mermaid Duck 20cm", "finished_good", 14.0, "ea", 0, None),
+            ("ITEM-ROBOT-25", "ROBOT-DUCK-25CM", "Robot Duck 25cm", "finished_good", 22.0, "ea", 0, None),
+            ("ITEM-CHEF-15", "CHEF-DUCK-15CM", "Chef Duck 15cm", "finished_good", 13.5, "ea", 0, None),
+            ("ITEM-ROCKSTAR-20", "ROCKSTAR-DUCK-20CM", "Rockstar Duck 20cm", "finished_good", 15.0, "ea", 0, None),
+            ("ITEM-DETECTIVE-18", "DETECTIVE-DUCK-18CM", "Detective Duck 18cm", "finished_good", 14.5, "ea", 0, None),
+            ("ITEM-SURFER-15", "SURFER-DUCK-15CM", "Surfer Duck 15cm", "finished_good", 12.5, "ea", 0, None),
+            ("ITEM-COWBOY-20", "COWBOY-DUCK-20CM", "Cowboy Duck 20cm", "finished_good", 16.0, "ea", 0, None),
+            ("ITEM-BALLERINA-12", "BALLERINA-DUCK-12CM", "Ballerina Duck 12cm", "finished_good", 11.0, "ea", 0, None),
+            ("ITEM-GARDEN-GNOME-30", "GNOME-DUCK-30CM", "Garden Gnome Duck 30cm", "finished_good", 25.0, "ea", 0, None),
+            ("ITEM-PARROT-18", "PARROT-DUCK-18CM", "Parrot Duck 18cm", "finished_good", 16.5, "ea", 0, None),
+            ("ITEM-PVC", "PVC-PELLETS", "PVC Pellets", "material", None, "kg", 0, "SUP-001"),
+            ("ITEM-BLACK-DYE", "BLACK-DYE", "Black Dye", "material", None, "ml", 0, "SUP-002"),
+            ("ITEM-YELLOW-DYE", "YELLOW-DYE", "Yellow Dye", "material", None, "ml", 0, "SUP-002"),
+            ("ITEM-BOX-SMALL", "BOX-SMALL", "Small Box", "material", None, "ea", 0, "SUP-003"),
         ]
         
         # Insert items with images
         script_dir = Path(__file__).parent
         images_dir = script_dir / "images"
         
-        for item_id, sku, name, item_type, unit_price, uom, reorder_qty in items_data:
+        for item_id, sku, name, item_type, unit_price, uom, reorder_qty, default_supplier_id in items_data:
             image_data = None
             image_path = images_dir / f"{sku}.png"
             if image_path.exists():
@@ -97,8 +99,8 @@ def seed(from_admin=False):
                     image_data = buffer.getvalue()
             
             conn.execute(
-                "INSERT INTO items (id, sku, name, type, unit_price, uom, reorder_qty, image) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                (item_id, sku, name, item_type, unit_price, uom, reorder_qty, image_data)
+                "INSERT INTO items (id, sku, name, type, unit_price, uom, reorder_qty, default_supplier_id, image) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (item_id, sku, name, item_type, unit_price, uom, reorder_qty, default_supplier_id, image_data)
             )
 
         # Stock - diverse levels for interesting bar chart
@@ -106,22 +108,22 @@ def seed(from_admin=False):
             "INSERT INTO stock (id, item_id, warehouse, location, on_hand) VALUES (?, ?, ?, ?, ?)",
             [
                 # Finished goods - varied stock levels
-                ("STK-0001", "ITEM-ELVIS-20", "WH-LYON", "FG/BIN-12", 12),  # Total: 12 (critical low)
-                ("STK-0002", "ITEM-MARILYN-20", "WH-LYON", "FG/BIN-14", 18),
-                ("STK-0003", "ITEM-CLASSIC-10", "WH-LYON", "FG/BIN-02", 571),
-                ("STK-0004", "ITEM-CLASSIC-10", "WH-LYON", "FG/BIN-03", 412),  # Total: 983 (high stock)
-                ("STK-0005", "ITEM-ROBOT-25", "WH-LYON", "FG/BIN-05", 47),  # Low stock
-                ("STK-0006", "ITEM-PIRATE-15", "WH-LYON", "FG/BIN-06", 94),  # Medium
-                ("STK-0007", "ITEM-PIRATE-15", "WH-LYON", "FG/BIN-10", 100),  # Additional stock to compensate
-                ("STK-0008", "ITEM-NINJA-12", "WH-LYON", "FG/BIN-07", 8),  # Critical low
-                ("STK-0009", "ITEM-UNICORN-25", "WH-LYON", "FG/BIN-08", 53),  # Low
-                ("STK-0010", "ITEM-UNICORN-25", "WH-LYON", "FG/BIN-09", 94),  # Additional stock to compensate
+                ("STK-0001", "ITEM-ELVIS-20", config.WAREHOUSE_DEFAULT, "FG/BIN-12", 12),  # Total: 12 (critical low)
+                ("STK-0002", "ITEM-MARILYN-20", config.WAREHOUSE_DEFAULT, "FG/BIN-14", 18),
+                ("STK-0003", "ITEM-CLASSIC-10", config.WAREHOUSE_DEFAULT, "FG/BIN-02", 571),
+                ("STK-0004", "ITEM-CLASSIC-10", config.WAREHOUSE_DEFAULT, "FG/BIN-03", 412),  # Total: 983 (high stock)
+                ("STK-0005", "ITEM-ROBOT-25", config.WAREHOUSE_DEFAULT, "FG/BIN-05", 47),  # Low stock
+                ("STK-0006", "ITEM-PIRATE-15", config.WAREHOUSE_DEFAULT, "FG/BIN-06", 94),  # Medium
+                ("STK-0007", "ITEM-PIRATE-15", config.WAREHOUSE_DEFAULT, "FG/BIN-10", 100),  # Additional stock to compensate
+                ("STK-0008", "ITEM-NINJA-12", config.WAREHOUSE_DEFAULT, "FG/BIN-07", 8),  # Critical low
+                ("STK-0009", "ITEM-UNICORN-25", config.WAREHOUSE_DEFAULT, "FG/BIN-08", 53),  # Low
+                ("STK-0010", "ITEM-UNICORN-25", config.WAREHOUSE_DEFAULT, "FG/BIN-09", 94),  # Additional stock to compensate
                 
                 # Raw materials
-                ("STK-0011", "ITEM-PVC", "WH-LYON", "RM/BULK-01", 987),
-                ("STK-0012", "ITEM-BLACK-DYE", "WH-LYON", "RM/SHELF-01", 43),
-                ("STK-0013", "ITEM-YELLOW-DYE", "WH-LYON", "RM/SHELF-02", 56),
-                ("STK-0014", "ITEM-BOX-SMALL", "WH-LYON", "PK/BIN-01", 218),
+                ("STK-0011", "ITEM-PVC", config.WAREHOUSE_DEFAULT, "RM/BULK-01", 987),
+                ("STK-0012", "ITEM-BLACK-DYE", config.WAREHOUSE_DEFAULT, "RM/SHELF-01", 43),
+                ("STK-0013", "ITEM-YELLOW-DYE", config.WAREHOUSE_DEFAULT, "RM/SHELF-02", 56),
+                ("STK-0014", "ITEM-BOX-SMALL", config.WAREHOUSE_DEFAULT, "PK/BIN-01", 218),
             ],
         )
 
@@ -170,7 +172,7 @@ def seed(from_admin=False):
             "INSERT INTO shipments (id, ship_from_warehouse, ship_to_line1, ship_to_postal_code, ship_to_city, ship_to_country, planned_departure, planned_arrival, status, tracking_ref) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 "SHIP-870",
-                "WH-LYON",
+                config.WAREHOUSE_DEFAULT,
                 "12 Rue Client",
                 "75002",
                 "Paris",

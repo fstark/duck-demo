@@ -18,7 +18,7 @@ class CatalogService:
         """Load item by SKU or item_id."""
         with db_conn() as conn:
             cur = conn.execute(
-                "SELECT id, sku, name, type, unit_price, uom, reorder_qty, image FROM items WHERE sku = ? OR id = ?",
+                "SELECT id, sku, name, type, unit_price, uom, reorder_qty, default_supplier_id, image FROM items WHERE sku = ? OR id = ?",
                 (sku_or_id, sku_or_id)
             )
             row = cur.fetchone()

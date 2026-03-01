@@ -21,14 +21,12 @@ class PurchaseService:
             if not item:
                 raise ValueError(f"Item {item_sku} not found")
             if not supplier_name:
-                if "pvc" in item["name"].lower() or "plastic" in item["name"].lower():
-                    supplier_name = "PlasticCorp"
-                elif "dye" in item["name"].lower() or "color" in item["name"].lower():
-                    supplier_name = "ColorMaster"
-                elif "box" in item["name"].lower() or "packaging" in item["name"].lower():
-                    supplier_name = "PackagingPlus"
-                else:
-                    supplier_name = "PlasticCorp"
+                if item.get("default_supplier_id"):
+                    supplier = conn.execute("SELECT * FROM suppliers WHERE id = ?", (item["default_supplier_id"],)).fetchone()
+                    if supplier:
+                        supplier_name = supplier["name"]
+            if not supplier_name:
+                raise ValueError(f"No supplier specified and no default supplier configured for item {item_sku}")
             supplier = conn.execute("SELECT * FROM suppliers WHERE name = ?", (supplier_name,)).fetchone()
             if not supplier:
                 raise ValueError(f"Supplier {supplier_name} not found")

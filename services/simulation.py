@@ -2,6 +2,7 @@
 
 from typing import Any, Dict, Optional
 
+import config
 from services._base import db_conn
 
 
@@ -109,8 +110,8 @@ class SimulationService:
                 stock_id = generate_id(conn, "STK", "stock")
                 conn.execute(
                     "INSERT INTO stock (id, item_id, warehouse, location, on_hand) "
-                    "VALUES (?, ?, 'FG', 'PROD-OUT', ?)",
-                    (stock_id, mo["item_id"], mo["output_qty"]),
+                    "VALUES (?, ?, ?, ?, ?)",
+                    (stock_id, mo["item_id"], config.LOC_FINISHED_GOODS, config.LOC_PRODUCTION_OUT, mo["output_qty"]),
                 )
                 completed_mos.append(mo["id"])
             if completed_mos:
@@ -141,8 +142,8 @@ class SimulationService:
                 (new_date,)
             ).rowcount
             if expired_count > 0:
-                conn.commit()
                 result["quotes_expired"] = expired_count
+            conn.commit()  # release write lock before update_readiness opens a new connection
 
             # --- Side-effect 5: promote waiting → ready production orders ---
             from services.production import ProductionService

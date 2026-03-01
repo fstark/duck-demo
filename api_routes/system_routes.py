@@ -88,7 +88,7 @@ def register(mcp):
                     if diff.days < 7:
                         return f"{diff.days}d ago"
                     return f"{diff.days // 7}w ago"
-                except:
+                except Exception:
                     return ""
 
             def days_until(dt_str: str) -> str:
@@ -106,7 +106,7 @@ def register(mcp):
                     if days == 1:
                         return "tomorrow"
                     return f"in {days}d"
-                except:
+                except Exception:
                     return ""
 
             result = {}

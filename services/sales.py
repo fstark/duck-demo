@@ -3,7 +3,7 @@
 from typing import Any, Dict, List, Optional
 
 from db import dict_rows, generate_id
-from utils import ui_href
+from utils import ship_to_columns, ui_href
 from services._base import db_conn
 from services.catalog import CatalogService
 from services.simulation import SimulationService
@@ -22,7 +22,7 @@ class SalesService:
         with db_conn() as conn:
             so_id = generate_id(conn, "SO", "sales_orders")
             sim_time = SimulationService.get_current_time()
-            conn.execute("INSERT INTO sales_orders (id, customer_id, requested_delivery_date, ship_to_line1, ship_to_postal_code, ship_to_city, ship_to_country, note, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", (so_id, customer_id, requested_delivery_date, ship_to.get("line1"), ship_to.get("postal_code"), ship_to.get("city"), ship_to.get("country"), note, "draft", sim_time))
+            conn.execute("INSERT INTO sales_orders (id, customer_id, requested_delivery_date, ship_to_line1, ship_to_line2, ship_to_postal_code, ship_to_city, ship_to_country, note, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", (so_id, customer_id, requested_delivery_date, *ship_to_columns(ship_to), note, "draft", sim_time))
             line_results = []
             for idx, line in enumerate(lines, start=1):
                 item = CatalogService.load_item(line["sku"])

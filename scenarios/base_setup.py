@@ -11,6 +11,8 @@ from typing import List
 from services._base import db_conn
 from services import customer_service, simulation_service
 
+import config
+
 logger = logging.getLogger(__name__)
 
 # ============================================================================
@@ -19,20 +21,20 @@ logger = logging.getLogger(__name__)
 
 # -- Raw materials & components ----------------------------------------------
 MATERIALS = [
-    # (id, sku, name, type, unit_price, uom, reorder_qty)
-    ("ITEM-PVC",        "PVC-PELLETS",   "PVC Pellets",               "raw_material", None,  "kg",  1500),
-    ("ITEM-BLACK-DYE",  "BLACK-DYE",     "Black Dye",                 "raw_material", None,  "ml",  800),
-    ("ITEM-YELLOW-DYE", "YELLOW-DYE",    "Yellow Dye",                "raw_material", None,  "ml",  800),
-    ("ITEM-RED-DYE",    "RED-DYE",       "Red Dye",                   "raw_material", None,  "ml",  600),
-    ("ITEM-GREEN-DYE",  "GREEN-DYE",     "Green Dye",                 "raw_material", None,  "ml",  500),
-    ("ITEM-WHITE-DYE",  "WHITE-DYE",     "White Dye",                 "raw_material", None,  "ml",  600),
-    ("ITEM-ORANGE-DYE", "ORANGE-DYE",    "Orange Dye",                "raw_material", None,  "ml",  500),
-    ("ITEM-BLUE-DYE",   "BLUE-DYE",      "Blue Dye",                  "raw_material", None,  "ml",  500),
-    ("ITEM-PINK-DYE",   "PINK-DYE",      "Pink Dye",                  "raw_material", None,  "ml",  400),
-    ("ITEM-BOX-SMALL",  "BOX-SMALL",     "Small Box",                 "raw_material", None,  "ea",  1000),
-    ("ITEM-BOX-MEDIUM", "BOX-MEDIUM",    "Medium Box",                "raw_material", None,  "ea",  500),
-    ("ITEM-FOAM-SHEET", "FOAM-SHEET",    "Foam Padding Sheet",        "raw_material", None,  "ea",  600),
-    ("ITEM-PAINT-GLOSS","PAINT-GLOSS",   "Gloss Finish Paint",        "raw_material", None,  "ml",  400),
+    # (id, sku, name, type, unit_price, uom, reorder_qty, default_supplier_id)
+    ("ITEM-PVC",        "PVC-PELLETS",   "PVC Pellets",               "raw_material", None,  "kg",  1500, "SUP-001"),
+    ("ITEM-BLACK-DYE",  "BLACK-DYE",     "Black Dye",                 "raw_material", None,  "ml",  800,  "SUP-002"),
+    ("ITEM-YELLOW-DYE", "YELLOW-DYE",    "Yellow Dye",                "raw_material", None,  "ml",  800,  "SUP-002"),
+    ("ITEM-RED-DYE",    "RED-DYE",       "Red Dye",                   "raw_material", None,  "ml",  600,  "SUP-002"),
+    ("ITEM-GREEN-DYE",  "GREEN-DYE",     "Green Dye",                 "raw_material", None,  "ml",  500,  "SUP-002"),
+    ("ITEM-WHITE-DYE",  "WHITE-DYE",     "White Dye",                 "raw_material", None,  "ml",  600,  "SUP-002"),
+    ("ITEM-ORANGE-DYE", "ORANGE-DYE",    "Orange Dye",                "raw_material", None,  "ml",  500,  "SUP-002"),
+    ("ITEM-BLUE-DYE",   "BLUE-DYE",      "Blue Dye",                  "raw_material", None,  "ml",  500,  "SUP-002"),
+    ("ITEM-PINK-DYE",   "PINK-DYE",      "Pink Dye",                  "raw_material", None,  "ml",  400,  "SUP-002"),
+    ("ITEM-BOX-SMALL",  "BOX-SMALL",     "Small Box",                 "raw_material", None,  "ea",  1000, "SUP-003"),
+    ("ITEM-BOX-MEDIUM", "BOX-MEDIUM",    "Medium Box",                "raw_material", None,  "ea",  500,  "SUP-003"),
+    ("ITEM-FOAM-SHEET", "FOAM-SHEET",    "Foam Padding Sheet",        "raw_material", None,  "ea",  600,  "SUP-003"),
+    ("ITEM-PAINT-GLOSS","PAINT-GLOSS",   "Gloss Finish Paint",        "raw_material", None,  "ml",  400,  "SUP-002"),
 ]
 
 # -- Finished goods ----------------------------------------------------------
@@ -83,7 +85,7 @@ FINISHED_GOODS = [
 SUPPLIERS = [
     # (id, name, contact_email, lead_time_days)
     ("SUP-001", "PlasticCorp",              "orders@plasticcorp.example",          10),
-    ("SUP-002", "ColorMaster Dyes",         "sales@colormaster.example",           7),
+    ("SUP-002", "ColorMaster",               "sales@colormaster.example",           7),
     ("SUP-003", "PackagingPlus",            "contact@packagingplus.example",       5),
     ("SUP-004", "EuroPlast GmbH",           "bestellung@europlast.example",       12),
     ("SUP-005", "Pigment Express",          "orders@pigmentexpress.example",       6),
@@ -229,19 +231,19 @@ def _build_recipe_defs():
 # -- Initial stock (raw materials) -------------------------------------------
 INITIAL_STOCK = [
     # (item_id, warehouse, location, on_hand)
-    ("ITEM-PVC",        "WH-LYON", "RM/BULK-01",  2500),
-    ("ITEM-BLACK-DYE",  "WH-LYON", "RM/SHELF-01", 1200),
-    ("ITEM-YELLOW-DYE", "WH-LYON", "RM/SHELF-02", 1200),
-    ("ITEM-RED-DYE",    "WH-LYON", "RM/SHELF-03",  800),
-    ("ITEM-GREEN-DYE",  "WH-LYON", "RM/SHELF-04",  700),
-    ("ITEM-WHITE-DYE",  "WH-LYON", "RM/SHELF-05",  900),
-    ("ITEM-ORANGE-DYE", "WH-LYON", "RM/SHELF-06",  600),
-    ("ITEM-BLUE-DYE",   "WH-LYON", "RM/SHELF-07",  700),
-    ("ITEM-PINK-DYE",   "WH-LYON", "RM/SHELF-08",  500),
-    ("ITEM-BOX-SMALL",  "WH-LYON", "PK/BIN-01",   2000),
-    ("ITEM-BOX-MEDIUM", "WH-LYON", "PK/BIN-02",   1000),
-    ("ITEM-FOAM-SHEET", "WH-LYON", "PK/BIN-03",    800),
-    ("ITEM-PAINT-GLOSS","WH-LYON", "PK/BIN-04",    500),
+    ("ITEM-PVC",        config.WAREHOUSE_DEFAULT, "RM/BULK-01",  2500),
+    ("ITEM-BLACK-DYE",  config.WAREHOUSE_DEFAULT, "RM/SHELF-01", 1200),
+    ("ITEM-YELLOW-DYE", config.WAREHOUSE_DEFAULT, "RM/SHELF-02", 1200),
+    ("ITEM-RED-DYE",    config.WAREHOUSE_DEFAULT, "RM/SHELF-03",  800),
+    ("ITEM-GREEN-DYE",  config.WAREHOUSE_DEFAULT, "RM/SHELF-04",  700),
+    ("ITEM-WHITE-DYE",  config.WAREHOUSE_DEFAULT, "RM/SHELF-05",  900),
+    ("ITEM-ORANGE-DYE", config.WAREHOUSE_DEFAULT, "RM/SHELF-06",  600),
+    ("ITEM-BLUE-DYE",   config.WAREHOUSE_DEFAULT, "RM/SHELF-07",  700),
+    ("ITEM-PINK-DYE",   config.WAREHOUSE_DEFAULT, "RM/SHELF-08",  500),
+    ("ITEM-BOX-SMALL",  config.WAREHOUSE_DEFAULT, "PK/BIN-01",   2000),
+    ("ITEM-BOX-MEDIUM", config.WAREHOUSE_DEFAULT, "PK/BIN-02",   1000),
+    ("ITEM-FOAM-SHEET", config.WAREHOUSE_DEFAULT, "PK/BIN-03",    800),
+    ("ITEM-PAINT-GLOSS",config.WAREHOUSE_DEFAULT, "PK/BIN-04",    500),
 ]
 
 
@@ -295,10 +297,10 @@ def populate() -> dict:
 
     with db_conn() as conn:
         # ---- Items (materials) ----
-        for item_id, sku, name, itype, price, uom, reorder in MATERIALS:
+        for item_id, sku, name, itype, price, uom, reorder, default_supplier_id in MATERIALS:
             conn.execute(
-                "INSERT INTO items (id, sku, name, type, unit_price, uom, reorder_qty) VALUES (?,?,?,?,?,?,?)",
-                (item_id, sku, name, itype, price, uom, reorder),
+                "INSERT INTO items (id, sku, name, type, unit_price, uom, reorder_qty, default_supplier_id) VALUES (?,?,?,?,?,?,?,?)",
+                (item_id, sku, name, itype, price, uom, reorder, default_supplier_id),
             )
         logger.info("Inserted %d raw materials", len(MATERIALS))
 
@@ -319,8 +321,8 @@ def populate() -> dict:
                         buf = BytesIO()
                         img_resized.save(buf, format="PNG")
                         image_data = buf.getvalue()
-                except Exception:
-                    pass  # PIL not available or image corrupt — skip
+                except Exception as e:
+                    logger.debug("Could not load image for %s: %s", sku, e)
             conn.execute(
                 "INSERT INTO items (id, sku, name, type, unit_price, uom, reorder_qty, image) VALUES (?,?,?,?,?,?,?,?)",
                 (item_id, sku, name, "finished_good", price, "ea", 0, image_data),

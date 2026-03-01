@@ -1,9 +1,44 @@
 """Utility functions for the duck-demo application."""
 
 from datetime import datetime, timedelta
-from typing import Optional
+from typing import Any, Dict, Optional, Tuple
 from urllib.parse import quote
 import config
+
+
+# ---------------------------------------------------------------------------
+# Address helpers — single source of truth for dict ↔ DB column mapping
+# ---------------------------------------------------------------------------
+
+_SHIP_TO_FIELDS = ("line1", "line2", "postal_code", "city", "country")
+"""Canonical dict keys for a ship-to address."""
+
+
+def ship_to_columns(ship_to: Optional[Dict[str, Any]]) -> Tuple:
+    """Return a tuple of DB values (line1, line2, postal_code, city, country)
+    ready to splice into an INSERT statement."""
+    if not ship_to:
+        return (None, None, None, None, None)
+    return tuple(ship_to.get(k) for k in _SHIP_TO_FIELDS)
+
+
+def ship_to_dict(row: Any) -> Optional[Dict[str, str]]:
+    """Reconstruct a ship-to dict from a DB row with ``ship_to_*`` columns.
+    Returns *None* if ``ship_to_line1`` is empty."""
+    if not row["ship_to_line1"]:
+        return None
+    return {k: row[f"ship_to_{k}"] for k in _SHIP_TO_FIELDS}
+
+
+def customer_to_ship_to(row: Any) -> Dict[str, str]:
+    """Build a ship-to dict from a customers DB row."""
+    return {
+        "line1": row["address_line1"] or "",
+        "line2": row["address_line2"] or "",
+        "postal_code": row["postal_code"] or "",
+        "city": row["city"] or "",
+        "country": row["country"] or "FR",
+    }
 
 
 def parse_date(value: Optional[str]) -> Optional[datetime]:

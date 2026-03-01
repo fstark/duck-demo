@@ -10,7 +10,7 @@ class RecipeService:
     """Service for recipe operations."""
 
     @staticmethod
-    def list_recipes(output_item_sku: Optional[str], limit: int) -> Dict[str, Any]:
+    def list_recipes(output_item_sku: Optional[str] = None, limit: int = 50) -> Dict[str, Any]:
         """List recipes."""
         with db_conn() as conn:
             if output_item_sku:

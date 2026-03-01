@@ -87,6 +87,10 @@ class ProductionService:
 
         Transitions status from 'ready' to 'in_progress', sets started_at,
         and **deducts recipe ingredients** from stock.
+
+        Returns a dict with ``status`` of ``'in_progress'`` on success, or
+        ``'waiting_for_stock'`` with ``shortfalls`` when materials are
+        insufficient (no exception raised for stock shortages).
         """
         from services.inventory import InventoryService
         from services.simulation import SimulationService
@@ -98,12 +102,38 @@ class ProductionService:
             if order["status"] != "ready":
                 raise ValueError(f"Production order {production_order_id} is not ready (current status: {order['status']})")
 
-            # Deduct recipe ingredients from stock
+            # Pre-check ingredient availability before deducting
             ingredients = conn.execute(
-                "SELECT ri.input_item_id, ri.input_qty "
-                "FROM recipe_ingredients ri WHERE ri.recipe_id = ?",
+                "SELECT ri.input_item_id, ri.input_qty, i.sku "
+                "FROM recipe_ingredients ri "
+                "JOIN items i ON ri.input_item_id = i.id "
+                "WHERE ri.recipe_id = ?",
                 (order["recipe_id"],)
             ).fetchall()
+
+            shortfalls = []
+            for ing in ingredients:
+                total = conn.execute(
+                    "SELECT COALESCE(SUM(on_hand), 0) as total FROM stock WHERE item_id = ?",
+                    (ing["input_item_id"],)
+                ).fetchone()["total"]
+                if total < ing["input_qty"]:
+                    shortfalls.append({
+                        "item_id": ing["input_item_id"],
+                        "sku": ing["sku"],
+                        "needed": ing["input_qty"],
+                        "available": total,
+                    })
+
+            if shortfalls:
+                return {
+                    "production_order_id": production_order_id,
+                    "status": "waiting_for_stock",
+                    "shortfalls": shortfalls,
+                    "message": f"MO {production_order_id} waiting for stock",
+                }
+
+            # All ingredients available — deduct and start
             for ing in ingredients:
                 InventoryService.deduct_stock(ing["input_item_id"], ing["input_qty"], conn=conn)
 
@@ -115,7 +145,7 @@ class ProductionService:
             return {"production_order_id": production_order_id, "status": "in_progress", "current_operation": current_operation, "message": f"Production order {production_order_id} started"}
 
     @staticmethod
-    def complete_order(production_order_id: str, qty_produced: int, warehouse: str, location: str) -> Dict[str, Any]:
+    def complete_order(production_order_id: str, qty_produced: float, warehouse: str, location: str) -> Dict[str, Any]:
         """Complete a production order and add finished goods to stock."""
         from services.simulation import SimulationService
 

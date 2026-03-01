@@ -33,6 +33,7 @@ CREATE TABLE IF NOT EXISTS items (
     unit_price REAL,
     uom TEXT DEFAULT 'ea',
     reorder_qty REAL DEFAULT 0,
+    default_supplier_id TEXT,
     image BLOB
 );
 
@@ -53,6 +54,7 @@ CREATE TABLE IF NOT EXISTS quotes (
     supersedes_quote_id TEXT,
     requested_delivery_date TEXT,
     ship_to_line1 TEXT,
+    ship_to_line2 TEXT,
     ship_to_postal_code TEXT,
     ship_to_city TEXT,
     ship_to_country TEXT,
@@ -86,6 +88,7 @@ CREATE TABLE IF NOT EXISTS sales_orders (
     customer_id TEXT NOT NULL,
     requested_delivery_date TEXT,
     ship_to_line1 TEXT,
+    ship_to_line2 TEXT,
     ship_to_postal_code TEXT,
     ship_to_city TEXT,
     ship_to_country TEXT,
@@ -105,6 +108,7 @@ CREATE TABLE IF NOT EXISTS shipments (
     id TEXT PRIMARY KEY,
     ship_from_warehouse TEXT NOT NULL,
     ship_to_line1 TEXT NOT NULL,
+    ship_to_line2 TEXT,
     ship_to_postal_code TEXT NOT NULL,
     ship_to_city TEXT NOT NULL,
     ship_to_country TEXT NOT NULL,
@@ -135,6 +139,8 @@ CREATE TABLE IF NOT EXISTS production_orders (
     item_id TEXT NOT NULL,
     status TEXT DEFAULT 'planned',
     parent_production_order_id TEXT,
+    current_operation TEXT,
+    qty_produced REAL,
     started_at TEXT,
     completed_at TEXT,
     eta_finish TEXT,
@@ -269,3 +275,19 @@ CREATE TABLE IF NOT EXISTS documents (
 
 CREATE INDEX IF NOT EXISTS idx_documents_entity ON documents(entity_type, entity_id);
 CREATE INDEX IF NOT EXISTS idx_documents_type ON documents(document_type);
+
+-- Foreign-key / hot-path indexes
+CREATE INDEX IF NOT EXISTS idx_stock_item ON stock(item_id);
+CREATE INDEX IF NOT EXISTS idx_sol_so ON sales_order_lines(sales_order_id);
+CREATE INDEX IF NOT EXISTS idx_sol_item ON sales_order_lines(item_id);
+CREATE INDEX IF NOT EXISTS idx_ri_recipe ON recipe_ingredients(recipe_id);
+CREATE INDEX IF NOT EXISTS idx_ro_recipe ON recipe_operations(recipe_id);
+CREATE INDEX IF NOT EXISTS idx_po_ops ON production_operations(production_order_id);
+CREATE INDEX IF NOT EXISTS idx_mo_status ON production_orders(status);
+CREATE INDEX IF NOT EXISTS idx_inv_so ON invoices(sales_order_id);
+CREATE INDEX IF NOT EXISTS idx_shiplines_ship ON shipment_lines(shipment_id);
+CREATE INDEX IF NOT EXISTS idx_ql_quote ON quote_lines(quote_id);
+CREATE INDEX IF NOT EXISTS idx_purchord_status ON purchase_orders(status, expected_delivery);
+CREATE INDEX IF NOT EXISTS idx_sos_ship ON sales_order_shipments(shipment_id);
+CREATE INDEX IF NOT EXISTS idx_payments_inv ON payments(invoice_id);
+CREATE INDEX IF NOT EXISTS idx_emails_cust ON emails(customer_id);

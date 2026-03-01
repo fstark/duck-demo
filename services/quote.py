@@ -8,7 +8,7 @@ from typing import Any, Dict, List, Optional
 
 import config
 from db import dict_rows, generate_id
-from utils import ui_href
+from utils import ship_to_columns, ship_to_dict, ui_href
 from services._base import db_conn
 
 from reportlab.lib.pagesizes import letter
@@ -70,7 +70,7 @@ class QuoteService:
 
             total_qty = sum(line["qty"] for line in lines)
             discount = config.PRICING_VOLUME_DISCOUNT_PCT * subtotal if total_qty >= config.PRICING_VOLUME_QTY_THRESHOLD else 0.0
-            shipping = 0.0 if subtotal >= config.PRICING_FREE_SHIPPING_THRESHOLD else 20.0
+            shipping = 0.0 if subtotal >= config.PRICING_FREE_SHIPPING_THRESHOLD else config.PRICING_FLAT_SHIPPING
             tax = 0.0
             total = subtotal - discount + shipping + tax
 
@@ -78,15 +78,12 @@ class QuoteService:
 
             conn.execute(
                 "INSERT INTO quotes (id, customer_id, revision_number, requested_delivery_date, "
-                "ship_to_line1, ship_to_postal_code, ship_to_city, ship_to_country, note, "
+                "ship_to_line1, ship_to_line2, ship_to_postal_code, ship_to_city, ship_to_country, note, "
                 "subtotal, discount, shipping, tax, total, currency, valid_until, status, created_at) "
-                "VALUES (?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', ?)",
+                "VALUES (?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', ?)",
                 (
                     quote_id, customer_id, requested_delivery_date,
-                    ship_to.get("line1") if ship_to else None,
-                    ship_to.get("postal_code") if ship_to else None,
-                    ship_to.get("city") if ship_to else None,
-                    ship_to.get("country") if ship_to else None,
+                    *ship_to_columns(ship_to),
                     note,
                     subtotal, discount, shipping, tax, total, config.PRICING_CURRENCY,
                     valid_until, sim_time
@@ -224,15 +221,21 @@ class QuoteService:
                 )
             except Exception as e:
                 logger.error(f"Failed to generate PDF for {quote_id}: {e}")
+                pdf_warning = f"PDF generation failed: {e}"
+            else:
+                pdf_warning = None
 
-            return {
+            result = {
                 "quote_id": quote_id,
                 "status": "sent",
                 "sent_at": sim_time,
                 "valid_until": quote["valid_until"],
                 "ui_url": ui_href("quotes", quote_id),
-                "message": f"📨 Quote {quote_id} sent to customer (valid until {quote['valid_until']})"
+                "message": f"\U0001f4e8 Quote {quote_id} sent to customer (valid until {quote['valid_until']})"
             }
+            if pdf_warning:
+                result["warning"] = pdf_warning
+            return result
 
     @staticmethod
     def accept_quote(quote_id: str) -> Dict[str, Any]:
@@ -260,12 +263,7 @@ class QuoteService:
 
             ship_to = None
             if quote["ship_to_line1"]:
-                ship_to = {
-                    "line1": quote["ship_to_line1"],
-                    "postal_code": quote["ship_to_postal_code"],
-                    "city": quote["ship_to_city"],
-                    "country": quote["ship_to_country"]
-                }
+                ship_to = ship_to_dict(quote)
 
             sales_result = SalesService.create_order(
                 customer_id=quote["customer_id"],
@@ -353,12 +351,7 @@ class QuoteService:
             if changes and "ship_to" in changes:
                 ship_to = changes["ship_to"]
             elif original_quote["ship_to_line1"]:
-                ship_to = {
-                    "line1": original_quote["ship_to_line1"],
-                    "postal_code": original_quote["ship_to_postal_code"],
-                    "city": original_quote["ship_to_city"],
-                    "country": original_quote["ship_to_country"]
-                }
+                ship_to = ship_to_dict(original_quote)
 
             subtotal = 0.0
             revised_lines = []
@@ -385,7 +378,7 @@ class QuoteService:
 
             total_qty = sum(line["qty"] for line in lines_to_use)
             discount = config.PRICING_VOLUME_DISCOUNT_PCT * subtotal if total_qty >= config.PRICING_VOLUME_QTY_THRESHOLD else 0.0
-            shipping = 0.0 if subtotal >= config.PRICING_FREE_SHIPPING_THRESHOLD else 20.0
+            shipping = 0.0 if subtotal >= config.PRICING_FREE_SHIPPING_THRESHOLD else config.PRICING_FLAT_SHIPPING
             tax = 0.0
             total = subtotal - discount + shipping + tax
 
@@ -394,15 +387,12 @@ class QuoteService:
 
             conn.execute(
                 "INSERT INTO quotes (id, customer_id, revision_number, supersedes_quote_id, requested_delivery_date, "
-                "ship_to_line1, ship_to_postal_code, ship_to_city, ship_to_country, note, "
+                "ship_to_line1, ship_to_line2, ship_to_postal_code, ship_to_city, ship_to_country, note, "
                 "subtotal, discount, shipping, tax, total, currency, valid_until, status, created_at) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', ?)",
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', ?)",
                 (
                     new_quote_id, original_quote["customer_id"], new_revision_num, quote_id, requested_delivery_date,
-                    ship_to.get("line1") if ship_to else None,
-                    ship_to.get("postal_code") if ship_to else None,
-                    ship_to.get("city") if ship_to else None,
-                    ship_to.get("country") if ship_to else None,
+                    *ship_to_columns(ship_to),
                     note,
                     subtotal, discount, shipping, tax, total, config.PRICING_CURRENCY,
                     valid_until, sim_time
@@ -507,7 +497,7 @@ class QuoteService:
         for line in lines:
             line_items_data.append([
                 f"{line['name']} ({line['sku']})",
-                f"{int(line['qty'])} {line.get('uom', 'ea')}",
+                f"{line['qty']:g} {line.get('uom', 'ea')}",
                 f"{quote['currency']} {line['unit_price']:.2f}",
                 f"{quote['currency']} {line['line_total']:.2f}"
             ])

@@ -114,14 +114,20 @@ class InvoiceService:
                 )
             except Exception as e:
                 logger.error(f"Failed to generate PDF for {invoice_id}: {e}")
+                pdf_warning = f"PDF generation failed: {e}"
+            else:
+                pdf_warning = None
 
-            return {
+            result = {
                 "invoice_id": invoice_id,
                 "status": "issued",
                 "due_date": due_date,
                 "ui_url": ui_href("invoices", invoice_id),
-                "message": f"📨 Invoice {invoice_id} issued — due {due_date}",
+                "message": f"\U0001f4e8 Invoice {invoice_id} issued — due {due_date}",
             }
+            if pdf_warning:
+                result["warning"] = pdf_warning
+            return result
 
     @staticmethod
     def get_invoice(invoice_id: str) -> Optional[Dict[str, Any]]:
@@ -345,7 +351,7 @@ class InvoiceService:
                     line_total = unit_price * line['qty']
                     line_items_data.append([
                         f"{item['name']} ({line['sku']})",
-                        str(int(line['qty'])),
+                        f"{line['qty']:g}",
                         f"{inv['currency']} {unit_price:.2f}",
                         f"{inv['currency']} {line_total:.2f}"
                     ])

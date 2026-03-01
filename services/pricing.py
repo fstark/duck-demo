@@ -83,7 +83,7 @@ class PricingService:
                 line_totals.append({"sku": row["sku"], "qty": qty, "unit_price": unit_price, "line_total": line_total})
 
             discount = config.PRICING_VOLUME_DISCOUNT_PCT * subtotal if total_qty >= config.PRICING_VOLUME_QTY_THRESHOLD else 0.0
-            shipping = 0.0 if subtotal >= config.PRICING_FREE_SHIPPING_THRESHOLD else 20.0
+            shipping = 0.0 if subtotal >= config.PRICING_FREE_SHIPPING_THRESHOLD else config.PRICING_FLAT_SHIPPING
             total = subtotal - discount + shipping
             return {
                 "sales_order_id": sales_order_id,
@@ -97,10 +97,9 @@ class PricingService:
                     else [
                         {"type": "volume", "description": "24+ units discount", "amount": -discount}
                     ],
-                    "shipping": {"amount": shipping, "description": "Free shipping threshold" if shipping == 0 else "Flat shipping"},
+                    "shipping": shipping,
+                    "shipping_note": "Free shipping threshold" if shipping == 0 else "Flat shipping",
                     "total": total,
-                    "subtotal": subtotal,
-                    "discount": discount,
                 },
             }
 

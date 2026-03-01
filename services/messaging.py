@@ -11,7 +11,7 @@ class MessagingService:
     """Service for email/messaging operations."""
 
     @staticmethod
-    def create_email(customer_id: str, subject: str, body: str, sales_order_id: Optional[str], recipient_email: Optional[str], recipient_name: Optional[str]) -> Dict[str, Any]:
+    def create_email(customer_id: str, subject: str, body: str, sales_order_id: Optional[str] = None, recipient_email: Optional[str] = None, recipient_name: Optional[str] = None) -> Dict[str, Any]:
         """Create a new email draft."""
         from services.simulation import SimulationService
 
@@ -38,7 +38,7 @@ class MessagingService:
             return {"email_id": email_id, "email": email, "message": f"Email draft '{subject}' created with ID {email_id} at {sim_time}"}
 
     @staticmethod
-    def list_emails(customer_id: Optional[str], sales_order_id: Optional[str], status: Optional[str], limit: int) -> Dict[str, Any]:
+    def list_emails(customer_id: Optional[str] = None, sales_order_id: Optional[str] = None, status: Optional[str] = None, limit: int = 20) -> Dict[str, Any]:
         """List emails with filters."""
         filters = []
         params: List[Any] = []

@@ -82,7 +82,7 @@ def register(mcp):
                 content=[
                     TextContent(
                         type="text",
-                        text=f"Launching 3D inspector (item not found: {sku})"
+                        text=f"Error inspecting item {sku}: {e}"
                     )
                 ],
                 structuredContent={
@@ -91,7 +91,7 @@ def register(mcp):
                     "type": "unknown",
                     "unit_price": 0.0
                 },
-                isError=False
+                isError=True
             )
 
     @mcp.tool(name="catalog_search_items", meta={"tags": ["shared"]})

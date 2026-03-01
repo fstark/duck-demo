@@ -23,6 +23,9 @@ from services import (
 )
 from services._base import db_conn
 
+import config
+from utils import customer_to_ship_to, ship_to_dict
+
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
@@ -254,10 +257,7 @@ def run_full_sales_cycle(
             mo_ids.append(mo["production_order_id"])
             # Start if ready
             if mo["status"] == "ready":
-                try:
-                    production_service.start_order(mo["production_order_id"])
-                except ValueError:
-                    pass  # insufficient stock — stays waiting
+                production_service.start_order(mo["production_order_id"])
     result["production_order_ids"] = mo_ids
 
     # 6. Advance time for production to complete
@@ -269,7 +269,7 @@ def run_full_sales_cycle(
     departure = sim_date()
     arrival = future_date(shipping_advance_days)
     ship = logistics_service.create_shipment(
-        ship_from={"warehouse": "WH-LYON"},
+        ship_from={"warehouse": config.WAREHOUSE_DEFAULT},
         ship_to=ship_to,
         planned_departure=departure,
         planned_arrival=arrival,
@@ -396,17 +396,7 @@ def create_demand_burst(
             lines = [{"sku": s, "qty": random.randint(*qty_range)} for s in skus]
 
             # Look up customer address for ship_to
-            with db_conn() as conn:
-                row = conn.execute(
-                    "SELECT address_line1, city, postal_code, country FROM customers WHERE id = ?",
-                    (cust,)
-                ).fetchone()
-            ship_to = {
-                "line1": row["address_line1"] or "1 Rue du Commerce",
-                "city": row["city"] or "Paris",
-                "postal_code": row["postal_code"] or "75001",
-                "country": row["country"] or "FR",
-            }
+            ship_to = get_customer_ship_to(cust)
 
             if full_cycle:
                 r = run_full_sales_cycle(
@@ -456,15 +446,12 @@ def trigger_production_for_orders(
             if not recipe_id:
                 continue
             recipe_data = recipe_service.get_recipe(recipe_id)
-            batches = max(1, -(-int(line["qty"]) // recipe_data["output_qty"]))
+            batches = int(max(1, -(-int(line["qty"]) // int(recipe_data["output_qty"]))))
             for _ in range(batches):
                 mo = production_service.create_order(recipe_id=recipe_id, notes=f"For {so_id}")
                 mo_ids.append(mo["production_order_id"])
                 if start and mo["status"] == "ready":
-                    try:
-                        production_service.start_order(mo["production_order_id"])
-                    except ValueError:
-                        pass
+                    production_service.start_order(mo["production_order_id"])
     return mo_ids
 
 
@@ -520,17 +507,23 @@ def get_customer_ship_to(customer_id: str) -> Dict[str, str]:
     """Look up a customer's address for use as ship_to."""
     with db_conn() as conn:
         row = conn.execute(
-            "SELECT address_line1, city, postal_code, country FROM customers WHERE id = ?",
+            "SELECT address_line1, address_line2, city, postal_code, country FROM customers WHERE id = ?",
             (customer_id,)
         ).fetchone()
     if not row:
         raise ValueError(f"Customer {customer_id} not found")
-    return {
-        "line1": row["address_line1"] or "1 Rue du Commerce",
-        "city": row["city"] or "Paris",
-        "postal_code": row["postal_code"] or "75001",
-        "country": row["country"] or "FR",
-    }
+    st = customer_to_ship_to(row)
+    # Ensure required fields have fallback values for scenario use
+    st.setdefault("line1", "1 Rue du Commerce")
+    if not st["line1"]:
+        st["line1"] = "1 Rue du Commerce"
+    if not st["city"]:
+        st["city"] = "Paris"
+    if not st["postal_code"]:
+        st["postal_code"] = "75001"
+    if not st["country"]:
+        st["country"] = "FR"
+    return st
 
 
 def pick_random_lines(
