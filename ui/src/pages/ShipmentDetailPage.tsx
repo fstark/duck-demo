@@ -169,7 +169,23 @@ export function ShipmentDetailPage({ shipmentId }: ShipmentDetailPageProps) {
                             rows={shipment.sales_orders as any}
                             columns={[
                                 { key: 'sales_order_id', label: 'Order' },
-                                { key: 'customer_name', label: 'Customer' },
+                                {
+                                    key: 'customer_name',
+                                    label: 'Customer',
+                                    render: (row) => (
+                                        <button
+                                            className="text-brand-600 hover:underline text-left"
+                                            onClick={(e) => {
+                                                e.stopPropagation()
+                                                setReferrer({ page: 'shipments', id: shipmentId, label: `Shipment ${shipment.id}` })
+                                                setHash('customers', (row as any).customer_id)
+                                            }}
+                                            type="button"
+                                        >
+                                            {row.customer_name}
+                                        </button>
+                                    ),
+                                },
                                 { key: 'customer_company', label: 'Company' },
                                 { key: 'status', label: 'Status', render: (row) => <Badge>{row.status}</Badge> },
                             ]}

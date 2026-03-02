@@ -99,7 +99,24 @@ export function InvoicesListPage() {
                         onRowClick={handleRowClick}
                         columns={[
                             { key: 'id', label: 'Invoice', sortable: true },
-                            { key: 'sales_order_id', label: 'Sales Order', sortable: true },
+                            {
+                                key: 'sales_order_id',
+                                label: 'Sales Order',
+                                sortable: true,
+                                render: (row: Invoice) => (
+                                    <button
+                                        className="text-brand-600 hover:underline text-left"
+                                        onClick={(e) => {
+                                            e.stopPropagation()
+                                            setReferrer({ page: 'invoices', label: 'Invoices' })
+                                            setHash('orders', row.sales_order_id)
+                                        }}
+                                        type="button"
+                                    >
+                                        {row.sales_order_id}
+                                    </button>
+                                ),
+                            },
                             {
                                 key: 'customer_name',
                                 label: 'Customer',

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Card } from '../components/Card'
 import { Table } from '../components/Table'
+import { Badge } from '../components/Badge'
 import { ProductionOrder } from '../types'
 import { api } from '../api'
 import { useNavigation } from '../contexts/NavigationContext'
@@ -122,7 +123,7 @@ export function ProductionOrdersListPage() {
                                 </div>
                             ),
                         },
-                        { key: 'status', label: 'Status', sortable: true },
+                        { key: 'status', label: 'Status', sortable: true, render: (row) => <Badge>{row.status}</Badge> },
                         { key: 'started_at', label: 'Started', sortable: true },
                         { key: 'completed_at', label: 'Completed', sortable: true },
                         { key: 'eta_finish', label: 'ETA Finish', sortable: true },

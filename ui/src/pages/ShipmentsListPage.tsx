@@ -117,6 +117,7 @@ export function ShipmentsListPage() {
                             sortable: true,
                             render: (row) => <Badge>{row.status}</Badge>,
                         },
+                        { key: 'tracking_ref', label: 'Tracking', sortable: true, render: (row) => row.tracking_ref || '—' },
                         { key: 'planned_departure', label: 'Departure', sortable: true },
                         { key: 'planned_arrival', label: 'Arrival', sortable: true },
                     ]}

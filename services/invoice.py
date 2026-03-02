@@ -182,6 +182,7 @@ def get_invoice(invoice_id: str) -> Optional[Dict[str, Any]]:
 
 def list_invoices(
     customer_id: Optional[str] = None,
+    sales_order_id: Optional[str] = None,
     status: Optional[str] = None,
     limit: int = 50,
 ) -> Dict[str, Any]:
@@ -191,6 +192,9 @@ def list_invoices(
     if customer_id:
         filters.append("inv.customer_id = ?")
         params.append(customer_id)
+    if sales_order_id:
+        filters.append("inv.sales_order_id = ?")
+        params.append(sales_order_id)
     if status:
         filters.append("inv.status = ?")
         params.append(status)

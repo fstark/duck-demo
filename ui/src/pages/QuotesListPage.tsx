@@ -6,6 +6,7 @@ import { Badge } from '../components/Badge'
 import type { Quote } from '../types'
 import { formatCurrency } from '../utils/currency'
 import { formatDate } from '../utils/date'
+import { useNavigation } from '../contexts/NavigationContext'
 
 function setHash(page: string, id?: string) {
     const path = id ? `#/${page}/${encodeURIComponent(id)}` : `#/${page}`
@@ -20,6 +21,7 @@ function QuotesListPage() {
     const [showSuperseded, setShowSuperseded] = useState(false)
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
+    const { setReferrer } = useNavigation()
 
     useEffect(() => {
         loadQuotes()
@@ -104,7 +106,23 @@ function QuotesListPage() {
                         onRowClick={(q: Quote) => setHash('quotes', q.id)}
                         columns={[
                             { key: 'id', label: 'Quote ID' },
-                            { key: 'customer_company', label: 'Customer', render: (q: Quote) => q.customer_company || q.customer_name || q.customer_id },
+                            {
+                                key: 'customer_company',
+                                label: 'Customer',
+                                render: (q: Quote) => (
+                                    <button
+                                        className="text-brand-600 hover:underline text-left"
+                                        onClick={(e) => {
+                                            e.stopPropagation()
+                                            setReferrer({ page: 'quotes', label: 'Quotes' })
+                                            setHash('customers', q.customer_id)
+                                        }}
+                                        type="button"
+                                    >
+                                        {q.customer_company || q.customer_name || q.customer_id}
+                                    </button>
+                                ),
+                            },
                             { key: 'revision_number', label: 'Revision', render: (q: Quote) => `R${q.revision_number}` },
                             { key: 'status', label: 'Status', render: (q: Quote) => getStatusBadge(q.status) },
                             { key: 'total', label: 'Total', render: (q: Quote) => formatCurrency(q.total) },

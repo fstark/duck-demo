@@ -45,7 +45,7 @@ export function RecipesListPage() {
     const [recipeSort, setRecipeSort] = useState<SortState | null>(null)
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
-    const { setListContext } = useNavigation()
+    const { setListContext, setReferrer } = useNavigation()
 
     useEffect(() => {
         // Navigation context will be set on row click
@@ -103,7 +103,24 @@ export function RecipesListPage() {
                     rows={sortedRecipes}
                     columns={[
                         { key: 'id', label: 'Recipe ID', sortable: true },
-                        { key: 'output_sku', label: 'Output SKU', sortable: true },
+                        {
+                            key: 'output_sku',
+                            label: 'Output SKU',
+                            sortable: true,
+                            render: (row) => (
+                                <button
+                                    className="text-brand-600 hover:underline text-left"
+                                    onClick={(e) => {
+                                        e.stopPropagation()
+                                        setReferrer({ page: 'recipes', label: 'Recipes' })
+                                        setHash('items', row.output_sku)
+                                    }}
+                                    type="button"
+                                >
+                                    {row.output_sku}
+                                </button>
+                            ),
+                        },
                         { key: 'output_name', label: 'Output Item', sortable: true },
                         { key: 'output_qty', label: 'Batch Size', sortable: true },
                         { key: 'production_time_hours', label: 'Time (hrs)', sortable: true },

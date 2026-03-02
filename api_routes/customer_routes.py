@@ -33,7 +33,7 @@ def register(mcp):
                 return _json({"error": "Customer not found"}, status_code=404)
             customer = dict(customer_row)
             customer["ui_url"] = ui_href("customers", customer_id)
-            orders_query = "SELECT id as sales_order_id, status, created_at, requested_delivery_date FROM sales_orders WHERE customer_id = ? ORDER BY created_at DESC LIMIT 50"
+            orders_query = "SELECT id as sales_order_id, status, total, currency, created_at, requested_delivery_date FROM sales_orders WHERE customer_id = ? ORDER BY created_at DESC LIMIT 50"
             orders = dict_rows(conn.execute(orders_query, (customer_id,)).fetchall())
             customer["sales_orders"] = orders
             shipments_query = "SELECT DISTINCT s.id, s.status, s.planned_departure, s.planned_arrival, sos.sales_order_id FROM shipments s JOIN sales_order_shipments sos ON s.id = sos.shipment_id JOIN sales_orders so ON sos.sales_order_id = so.id WHERE so.customer_id = ? ORDER BY s.planned_departure DESC LIMIT 50"

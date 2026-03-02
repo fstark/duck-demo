@@ -32,7 +32,13 @@ export const api = {
   salesOrder: (id: string) => fetchJson<SalesOrderDetail>(`/sales-orders/${encodeURIComponent(id)}`),
   shipment: (id: string) => fetchJson<Shipment>(`/shipments/${encodeURIComponent(id)}`),
   shipments: () => fetchJson<{ shipments: Shipment[] }>(`/shipments`),
-  productionOrders: () => fetchJson<{ production_orders: ProductionOrder[] }>(`/production-orders?limit=100`),
+  productionOrders: (q?: { sales_order_id?: string }) => {
+    const params = new URLSearchParams()
+    params.set('limit', '100')
+    if (q?.sales_order_id) params.set('sales_order_id', q.sales_order_id)
+    const query = params.toString()
+    return fetchJson<{ production_orders: ProductionOrder[] }>(`/production-orders?${query}`)
+  },
   productionOrder: (id: string) => fetchJson<ProductionOrder>(`/production-orders/${encodeURIComponent(id)}`),
   quote: (sku: string, qty: number) => fetchJson<{ options: QuoteOption[] }>(`/quote-options?sku=${encodeURIComponent(sku)}&qty=${qty}`),
   recipes: (outputItemSku?: string) =>
@@ -53,9 +59,10 @@ export const api = {
     return fetchJson<{ emails: Email[] }>(`/emails${query ? `?${query}` : ''}`)
   },
   emailDetail: (id: string) => fetchJson<EmailDetail>(`/emails/${encodeURIComponent(id)}`),
-  invoices: (q?: { customer_id?: string; status?: string }) => {
+  invoices: (q?: { customer_id?: string; sales_order_id?: string; status?: string }) => {
     const params = new URLSearchParams()
     if (q?.customer_id) params.set('customer_id', q.customer_id)
+    if (q?.sales_order_id) params.set('sales_order_id', q.sales_order_id)
     if (q?.status) params.set('status', q.status)
     const query = params.toString()
     return fetchJson<{ invoices: Invoice[] }>(`/invoices${query ? `?${query}` : ''}`)

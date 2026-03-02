@@ -6,6 +6,13 @@ import { api } from '../api'
 import { useNavigation } from '../contexts/NavigationContext'
 import { formatQtyWithUom } from '../utils/quantity'
 
+function setHash(page: string, id?: string) {
+    const path = id ? `#/${page}/${encodeURIComponent(id)}` : `#/${page}`
+    if (typeof window !== 'undefined') {
+        window.location.hash = path
+    }
+}
+
 interface PurchaseOrderDetailPageProps {
     purchaseOrderId: string
 }
@@ -14,11 +21,7 @@ export function PurchaseOrderDetailPage({ purchaseOrderId }: PurchaseOrderDetail
     const [purchaseOrder, setPurchaseOrder] = useState<PurchaseOrder | null>(null)
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
-    const { listContext } = useNavigation()
-
-    useEffect(() => {
-        // Navigation context comes from list page
-    }, [])
+    const { listContext, setListContext, referrer, setReferrer, clearListContext } = useNavigation()
 
     useEffect(() => {
         let cancelled = false
@@ -42,27 +45,58 @@ export function PurchaseOrderDetailPage({ purchaseOrderId }: PurchaseOrderDetail
         }
     }, [purchaseOrderId])
 
+    const hasPrevious = listContext && listContext.currentIndex > 0
+    const hasNext = listContext && listContext.currentIndex < listContext.items.length - 1
+
+    const handlePrevious = () => {
+        if (!hasPrevious || !listContext) return
+        const prevIndex = listContext.currentIndex - 1
+        const prevItem = listContext.items[prevIndex] as PurchaseOrder
+        setListContext({ ...listContext, currentIndex: prevIndex })
+        setHash('purchase-orders', prevItem.id)
+    }
+
+    const handleNext = () => {
+        if (!hasNext || !listContext) return
+        const nextIndex = listContext.currentIndex + 1
+        const nextItem = listContext.items[nextIndex] as PurchaseOrder
+        setListContext({ ...listContext, currentIndex: nextIndex })
+        setHash('purchase-orders', nextItem.id)
+    }
+
     if (loading) {
         return (
-            <Card title="Purchase Order Detail">
-                <div className="text-sm text-gray-500">Loading purchase order...</div>
-            </Card>
+            <section>
+                <div className="text-lg font-semibold text-slate-800 mb-4">Purchase Order Detail</div>
+                <Card>
+                    <div className="text-sm text-gray-500">Loading purchase order...</div>
+                </Card>
+            </section>
         )
     }
 
-    if (error) {
+    if (error || !purchaseOrder) {
         return (
-            <Card title="Purchase Order Detail">
-                <div className="text-sm text-red-600">Error: {error}</div>
-            </Card>
-        )
-    }
-
-    if (!purchaseOrder) {
-        return (
-            <Card title="Purchase Order Detail">
-                <div className="text-sm text-gray-500">Purchase order not found</div>
-            </Card>
+            <section>
+                <div className="text-lg font-semibold text-slate-800 mb-4">Purchase Order Detail</div>
+                <Card>
+                    <div className="text-sm text-red-600">{error || 'Purchase order not found'}</div>
+                    <button
+                        className="mt-3 text-brand-600 hover:underline text-sm"
+                        onClick={() => {
+                            if (referrer) {
+                                clearListContext()
+                                setHash(referrer.page, referrer.id)
+                            } else {
+                                setHash('purchase-orders')
+                            }
+                        }}
+                        type="button"
+                    >
+                        ← {referrer ? `Back to ${referrer.label}` : 'Back to Purchase Orders'}
+                    </button>
+                </Card>
+            </section>
         )
     }
 
@@ -70,6 +104,51 @@ export function PurchaseOrderDetailPage({ purchaseOrderId }: PurchaseOrderDetail
         <section>
             <div className="text-lg font-semibold text-slate-800 mb-4">Purchase Order {purchaseOrder.id}</div>
             <Card>
+                <div className="flex items-center justify-between mb-4">
+                    <button
+                        className="text-brand-600 hover:underline text-sm"
+                        onClick={() => {
+                            if (referrer) {
+                                clearListContext()
+                                setHash(referrer.page, referrer.id)
+                            } else {
+                                setHash('purchase-orders')
+                            }
+                        }}
+                        type="button"
+                    >
+                        ← {referrer ? `Back to ${referrer.label}` : 'Back to Purchase Orders'}
+                    </button>
+                    {listContext && (
+                        <div className="flex items-center gap-2">
+                            <button
+                                className={`px-3 py-1 text-sm rounded ${hasPrevious
+                                    ? 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                                    : 'bg-slate-50 text-slate-300 cursor-not-allowed'
+                                    }`}
+                                onClick={handlePrevious}
+                                disabled={!hasPrevious}
+                                type="button"
+                            >
+                                ← Previous
+                            </button>
+                            <span className="text-xs text-slate-500">
+                                {listContext.currentIndex + 1} of {listContext.items.length}
+                            </span>
+                            <button
+                                className={`px-3 py-1 text-sm rounded ${hasNext
+                                    ? 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                                    : 'bg-slate-50 text-slate-300 cursor-not-allowed'
+                                    }`}
+                                onClick={handleNext}
+                                disabled={!hasNext}
+                                type="button"
+                            >
+                                Next →
+                            </button>
+                        </div>
+                    )}
+                </div>
                 <dl className="grid grid-cols-1 gap-x-4 gap-y-4 sm:grid-cols-2">
                     <div>
                         <dt className="text-sm font-medium text-gray-500">Status</dt>
@@ -84,12 +163,16 @@ export function PurchaseOrderDetailPage({ purchaseOrderId }: PurchaseOrderDetail
                     <div>
                         <dt className="text-sm font-medium text-gray-500">Supplier</dt>
                         <dd className="text-sm text-gray-900">
-                            <a
-                                href={`#/suppliers/${purchaseOrder.supplier_id}`}
-                                className="text-blue-600 hover:underline"
+                            <button
+                                className="text-brand-600 hover:underline text-left"
+                                onClick={() => {
+                                    setReferrer({ page: 'purchase-orders', id: purchaseOrderId, label: `PO ${purchaseOrder.id}` })
+                                    setHash('suppliers', purchaseOrder.supplier_id)
+                                }}
+                                type="button"
                             >
                                 {purchaseOrder.supplier_name || purchaseOrder.supplier_id}
-                            </a>
+                            </button>
                         </dd>
                     </div>
                     <div>
@@ -100,7 +183,7 @@ export function PurchaseOrderDetailPage({ purchaseOrderId }: PurchaseOrderDetail
                         <dt className="text-sm font-medium text-gray-500">Contact Email</dt>
                         <dd className="text-sm text-gray-900">
                             {purchaseOrder.contact_email ? (
-                                <a href={`mailto:${purchaseOrder.contact_email}`} className="text-blue-600 hover:underline">
+                                <a href={`mailto:${purchaseOrder.contact_email}`} className="text-brand-600 hover:underline">
                                     {purchaseOrder.contact_email}
                                 </a>
                             ) : '—'}
@@ -114,12 +197,16 @@ export function PurchaseOrderDetailPage({ purchaseOrderId }: PurchaseOrderDetail
                         <div>
                             <dt className="text-sm font-medium text-gray-500">Item SKU</dt>
                             <dd className="text-sm text-gray-900">
-                                <a
-                                    href={`#/items/${purchaseOrder.item_sku}`}
-                                    className="text-blue-600 hover:underline"
+                                <button
+                                    className="text-brand-600 hover:underline text-left"
+                                    onClick={() => {
+                                        setReferrer({ page: 'purchase-orders', id: purchaseOrderId, label: `PO ${purchaseOrder.id}` })
+                                        setHash('items', purchaseOrder.item_sku)
+                                    }}
+                                    type="button"
                                 >
                                     {purchaseOrder.item_sku}
-                                </a>
+                                </button>
                             </dd>
                         </div>
                         <div>

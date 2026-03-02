@@ -14,9 +14,14 @@ def register(mcp):
     async def api_production_orders(request):
         qp = request.query_params
         limit = int(qp.get("limit", 100))
+        sales_order_id = qp.get("sales_order_id")
         with db_conn() as conn:
-            query = "SELECT po.*, i.name as item_name, i.sku as item_sku, i.type as item_type FROM production_orders po LEFT JOIN items i ON po.item_id = i.id ORDER BY po.eta_finish DESC LIMIT ?"
-            rows = dict_rows(conn.execute(query, (limit,)).fetchall())
+            if sales_order_id:
+                query = "SELECT po.*, i.name as item_name, i.sku as item_sku, i.type as item_type FROM production_orders po LEFT JOIN items i ON po.item_id = i.id WHERE po.sales_order_id = ? ORDER BY po.eta_finish DESC LIMIT ?"
+                rows = dict_rows(conn.execute(query, (sales_order_id, limit)).fetchall())
+            else:
+                query = "SELECT po.*, i.name as item_name, i.sku as item_sku, i.type as item_type FROM production_orders po LEFT JOIN items i ON po.item_id = i.id ORDER BY po.eta_finish DESC LIMIT ?"
+                rows = dict_rows(conn.execute(query, (limit,)).fetchall())
             for row in rows:
                 row["ui_url"] = ui_href("production", row["id"])
         return _json({"production_orders": rows})

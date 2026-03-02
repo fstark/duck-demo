@@ -5,6 +5,7 @@ import { Badge } from '../components/Badge'
 import { Supplier, PurchaseOrder } from '../types'
 import { api } from '../api'
 import { useNavigation } from '../contexts/NavigationContext'
+import { formatQtyWithUom } from '../utils/quantity'
 
 type SortDir = 'asc' | 'desc'
 type SortState = { key: keyof PurchaseOrder; dir: SortDir }
@@ -34,9 +35,10 @@ function nextSort(prev: SortState | null, key: keyof PurchaseOrder): SortState {
     return { key, dir: 'asc' }
 }
 
-function setHash(page: string, id: string) {
+function setHash(page: string, id?: string) {
+    const path = id ? `#/${page}/${encodeURIComponent(id)}` : `#/${page}`
     if (typeof window !== 'undefined') {
-        window.location.hash = `#/${page}/${encodeURIComponent(id)}`
+        window.location.hash = path
     }
 }
 
@@ -49,7 +51,7 @@ export function SupplierDetailPage({ supplierId }: SupplierDetailPageProps) {
     const [poSort, setPOSort] = useState<SortState | null>(null)
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
-    const { listContext } = useNavigation()
+    const { listContext, setListContext, referrer, setReferrer, clearListContext } = useNavigation()
 
     useEffect(() => {
         // Navigation context comes from list page
@@ -83,26 +85,57 @@ export function SupplierDetailPage({ supplierId }: SupplierDetailPageProps) {
 
     if (loading) {
         return (
-            <Card title="Supplier Detail">
-                <div className="text-sm text-gray-500">Loading supplier...</div>
-            </Card>
+            <section>
+                <div className="text-lg font-semibold text-slate-800 mb-4">Supplier Detail</div>
+                <Card>
+                    <div className="text-sm text-gray-500">Loading supplier...</div>
+                </Card>
+            </section>
         )
     }
 
-    if (error) {
+    if (error || !supplier) {
         return (
-            <Card title="Supplier Detail">
-                <div className="text-sm text-red-600">Error: {error}</div>
-            </Card>
+            <section>
+                <div className="text-lg font-semibold text-slate-800 mb-4">Supplier Detail</div>
+                <Card>
+                    <div className="text-sm text-red-600">{error || 'Supplier not found'}</div>
+                    <button
+                        className="mt-3 text-brand-600 hover:underline text-sm"
+                        onClick={() => {
+                            if (referrer) {
+                                clearListContext()
+                                setHash(referrer.page, referrer.id)
+                            } else {
+                                setHash('suppliers')
+                            }
+                        }}
+                        type="button"
+                    >
+                        ← {referrer ? `Back to ${referrer.label}` : 'Back to Suppliers'}
+                    </button>
+                </Card>
+            </section>
         )
     }
 
-    if (!supplier) {
-        return (
-            <Card title="Supplier Detail">
-                <div className="text-sm text-gray-500">Supplier not found</div>
-            </Card>
-        )
+    const hasPrevious = listContext && listContext.currentIndex > 0
+    const hasNext = listContext && listContext.currentIndex < listContext.items.length - 1
+
+    const handlePrevious = () => {
+        if (!hasPrevious || !listContext) return
+        const prevIndex = listContext.currentIndex - 1
+        const prevItem = listContext.items[prevIndex] as Supplier
+        setListContext({ ...listContext, currentIndex: prevIndex })
+        setHash('suppliers', prevItem.id)
+    }
+
+    const handleNext = () => {
+        if (!hasNext || !listContext) return
+        const nextIndex = listContext.currentIndex + 1
+        const nextItem = listContext.items[nextIndex] as Supplier
+        setListContext({ ...listContext, currentIndex: nextIndex })
+        setHash('suppliers', nextItem.id)
     }
 
     const purchaseOrders = supplier.purchase_orders || []
@@ -113,6 +146,51 @@ export function SupplierDetailPage({ supplierId }: SupplierDetailPageProps) {
             <section>
                 <div className="text-lg font-semibold text-slate-800 mb-4">{supplier.name} · Supplier {supplier.id}</div>
                 <Card>
+                    <div className="flex items-center justify-between mb-4">
+                        <button
+                            className="text-brand-600 hover:underline text-sm"
+                            onClick={() => {
+                                if (referrer) {
+                                    clearListContext()
+                                    setHash(referrer.page, referrer.id)
+                                } else {
+                                    setHash('suppliers')
+                                }
+                            }}
+                            type="button"
+                        >
+                            ← {referrer ? `Back to ${referrer.label}` : 'Back to Suppliers'}
+                        </button>
+                        {listContext && (
+                            <div className="flex items-center gap-2">
+                                <button
+                                    className={`px-3 py-1 text-sm rounded ${hasPrevious
+                                        ? 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                                        : 'bg-slate-50 text-slate-300 cursor-not-allowed'
+                                        }`}
+                                    onClick={handlePrevious}
+                                    disabled={!hasPrevious}
+                                    type="button"
+                                >
+                                    ← Previous
+                                </button>
+                                <span className="text-xs text-slate-500">
+                                    {listContext.currentIndex + 1} of {listContext.items.length}
+                                </span>
+                                <button
+                                    className={`px-3 py-1 text-sm rounded ${hasNext
+                                        ? 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                                        : 'bg-slate-50 text-slate-300 cursor-not-allowed'
+                                        }`}
+                                    onClick={handleNext}
+                                    disabled={!hasNext}
+                                    type="button"
+                                >
+                                    Next →
+                                </button>
+                            </div>
+                        )}
+                    </div>
                     <dl className="grid grid-cols-1 gap-x-4 gap-y-4 sm:grid-cols-2">
                         <div>
                             <dt className="text-sm font-medium text-gray-500">Contact Name</dt>
@@ -140,9 +218,26 @@ export function SupplierDetailPage({ supplierId }: SupplierDetailPageProps) {
                             rows={sortedPOs}
                             columns={[
                                 { key: 'id', label: 'PO ID', sortable: true },
-                                { key: 'item_sku', label: 'Item SKU', sortable: true },
+                                {
+                                    key: 'item_sku',
+                                    label: 'Item SKU',
+                                    sortable: true,
+                                    render: (row) => (
+                                        <button
+                                            className="text-brand-600 hover:underline text-left"
+                                            onClick={(e) => {
+                                                e.stopPropagation()
+                                                setReferrer({ page: 'suppliers', id: supplierId, label: supplier!.name })
+                                                setHash('items', row.item_sku)
+                                            }}
+                                            type="button"
+                                        >
+                                            {row.item_sku}
+                                        </button>
+                                    ),
+                                },
                                 { key: 'item_name', label: 'Item', sortable: true },
-                                { key: 'qty', label: 'Qty', sortable: true },
+                                { key: 'qty', label: 'Qty', sortable: true, render: (row) => formatQtyWithUom(row.qty, row.uom) },
                                 {
                                     key: 'status',
                                     label: 'Status',

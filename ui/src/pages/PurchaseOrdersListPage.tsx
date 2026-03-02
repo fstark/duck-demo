@@ -48,7 +48,7 @@ export function PurchaseOrdersListPage() {
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
     const [statusFilter, setStatusFilter] = useState<string>('')
-    const { setListContext } = useNavigation()
+    const { setListContext, setReferrer } = useNavigation()
 
     useEffect(() => {
         // Navigation context will be set on row click
@@ -129,8 +129,42 @@ export function PurchaseOrdersListPage() {
                     rows={sortedPOs}
                     columns={[
                         { key: 'id', label: 'PO ID', sortable: true },
-                        { key: 'supplier_name', label: 'Supplier', sortable: true },
-                        { key: 'item_sku', label: 'Item SKU', sortable: true },
+                        {
+                            key: 'supplier_name',
+                            label: 'Supplier',
+                            sortable: true,
+                            render: (row) => (
+                                <button
+                                    className="text-brand-600 hover:underline text-left"
+                                    onClick={(e) => {
+                                        e.stopPropagation()
+                                        setReferrer({ page: 'purchase-orders', label: 'Purchase Orders' })
+                                        setHash('suppliers', row.supplier_id)
+                                    }}
+                                    type="button"
+                                >
+                                    {row.supplier_name || row.supplier_id}
+                                </button>
+                            ),
+                        },
+                        {
+                            key: 'item_sku',
+                            label: 'Item SKU',
+                            sortable: true,
+                            render: (row) => (
+                                <button
+                                    className="text-brand-600 hover:underline text-left"
+                                    onClick={(e) => {
+                                        e.stopPropagation()
+                                        setReferrer({ page: 'purchase-orders', label: 'Purchase Orders' })
+                                        setHash('items', row.item_sku)
+                                    }}
+                                    type="button"
+                                >
+                                    {row.item_sku}
+                                </button>
+                            ),
+                        },
                         { key: 'item_name', label: 'Item', sortable: true },
                         {
                             key: 'qty',

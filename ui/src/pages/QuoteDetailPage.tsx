@@ -118,7 +118,7 @@ function QuoteDetailPage({ quoteId }: QuoteDetailPageProps) {
                     <div>
                         <p className="text-sm text-gray-600">Customer</p>
                         <button
-                            className="font-medium text-blue-600 hover:underline text-left"
+                            className="font-medium text-brand-600 hover:underline text-left"
                             onClick={() => setHash('customers', q.customer_id)}
                             type="button"
                         >
@@ -141,7 +141,7 @@ function QuoteDetailPage({ quoteId }: QuoteDetailPageProps) {
                         <div>
                             <p className="text-sm text-gray-600">Supersedes</p>
                             <button
-                                className="font-medium text-blue-600 hover:underline text-left"
+                                className="font-medium text-brand-600 hover:underline text-left"
                                 onClick={() => setHash('quotes', q.supersedes_quote_id!)}
                                 type="button"
                             >
@@ -159,7 +159,7 @@ function QuoteDetailPage({ quoteId }: QuoteDetailPageProps) {
                         <div>
                             <p className="text-sm text-gray-600">Sales Order</p>
                             <button
-                                className="font-medium text-blue-600 hover:underline text-left"
+                                className="font-medium text-brand-600 hover:underline text-left"
                                 onClick={() => setHash('orders', q.sales_order_id!)}
                                 type="button"
                             >
@@ -182,7 +182,7 @@ function QuoteDetailPage({ quoteId }: QuoteDetailPageProps) {
                             {
                                 key: 'sku', label: 'SKU', render: (line: any) => (
                                     <button
-                                        className="text-blue-600 hover:underline text-left"
+                                        className="text-brand-600 hover:underline text-left"
                                         onClick={() => setHash('items', line.sku)}
                                         type="button"
                                     >

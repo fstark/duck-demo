@@ -20,6 +20,8 @@ export type CustomerDetail = Customer & {
   sales_orders?: Array<{
     sales_order_id: string
     status: string
+    total?: number
+    currency?: string
     created_at?: string
     requested_delivery_date?: string
   }>
@@ -99,7 +101,8 @@ export type SalesOrder = {
 
 export type SalesOrderDetail = {
   sales_order: Record<string, any>
-  lines: Array<{ sku: string; qty: number }>
+  customer?: Record<string, any>
+  lines: Array<{ sku: string; qty: number; unit_price?: number; line_total?: number }>
   pricing: any
   shipments: Shipment[]
 }
@@ -316,7 +319,7 @@ export type InvoiceDetail = {
     created_at?: string
     ui_url?: string
   }
-  lines: Array<{ sku: string; qty: number }>
+  lines: Array<{ sku: string; qty: number; unit_price?: number; line_total?: number }>
   payments: Array<{
     id: string
     invoice_id: string

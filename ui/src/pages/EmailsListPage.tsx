@@ -47,7 +47,7 @@ export function EmailsListPage() {
     const [emailSort, setEmailSort] = useState<SortState | null>({ key: 'modified_at', dir: 'desc' })
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
-    const { setListContext } = useNavigation()
+    const { setListContext, setReferrer } = useNavigation()
 
     useEffect(() => {
         setLoading(true)
@@ -65,17 +65,47 @@ export function EmailsListPage() {
     const columns = [
         { key: 'subject', label: 'Subject', sortable: true },
         { key: 'recipient_email', label: 'Recipient', sortable: true },
-        { key: 'customer_id', label: 'Customer', sortable: true },
-        { key: 'sales_order_id', label: 'Sales Order', sortable: true, render: (row: Email) => row.sales_order_id || '—' },
+        {
+            key: 'customer_id',
+            label: 'Customer',
+            sortable: true,
+            render: (row: Email) => (
+                <button
+                    className="text-brand-600 hover:underline text-left"
+                    onClick={(e) => {
+                        e.stopPropagation()
+                        setReferrer({ page: 'emails', label: 'Emails' })
+                        setHash('customers', row.customer_id)
+                    }}
+                    type="button"
+                >
+                    {row.customer_id}
+                </button>
+            ),
+        },
+        {
+            key: 'sales_order_id',
+            label: 'Sales Order',
+            sortable: true,
+            render: (row: Email) => row.sales_order_id ? (
+                <button
+                    className="text-brand-600 hover:underline text-left"
+                    onClick={(e) => {
+                        e.stopPropagation()
+                        setReferrer({ page: 'emails', label: 'Emails' })
+                        setHash('orders', row.sales_order_id!)
+                    }}
+                    type="button"
+                >
+                    {row.sales_order_id}
+                </button>
+            ) : '—',
+        },
         {
             key: 'status',
             label: 'Status',
             sortable: true,
-            render: (row: Email) => (
-                <Badge variant={row.status === 'sent' ? 'success' : 'neutral'}>
-                    {row.status}
-                </Badge>
-            )
+            render: (row: Email) => <Badge>{row.status}</Badge>
         },
         { key: 'created_at', label: 'Created', sortable: true, render: (row: Email) => formatDate(row.created_at) },
         { key: 'modified_at', label: 'Modified', sortable: true, render: (row: Email) => formatDate(row.modified_at) },
@@ -103,11 +133,12 @@ export function EmailsListPage() {
                 {error && <div className="text-red-700">Error: {error}</div>}
                 {!loading && !error && (
                     <Table
-                        columns={columns}
+                        columns={columns as any}
                         rows={sorted as any}
                         onRowClick={handleRowClick}
-                        onSort={handleSort}
-                        sortState={emailSort ? { key: emailSort.key, direction: emailSort.dir } : undefined}
+                        onSort={handleSort as any}
+                        sortKey={emailSort?.key}
+                        sortDir={emailSort?.dir}
                     />
                 )}
             </Card>

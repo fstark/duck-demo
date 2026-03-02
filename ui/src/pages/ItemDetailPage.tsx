@@ -214,7 +214,7 @@ export function ItemDetailPage({ sku }: ItemDetailPageProps) {
                                 { key: 'ingredient_count', label: 'Ingredients', sortable: true, render: (row) => row.ingredient_count ?? '—' },
                                 { key: 'operation_count', label: 'Operations', sortable: true, render: (row) => row.operation_count ?? '—' },
                             ]}
-                            onRowClick={(row) => setHash('recipes', row.recipe_id || row.id)}
+                            onRowClick={(row: any) => setHash('recipes', row.recipe_id || row.id)}
                         />
                     </Card>
                 )}
@@ -234,7 +234,7 @@ export function ItemDetailPage({ sku }: ItemDetailPageProps) {
                                 { key: 'reserved', label: 'Reserved', render: (row) => <Quantity value={row.reserved} uom={item.uom} /> },
                                 { key: 'available', label: 'Available', render: (row) => <Quantity value={row.available} uom={item.uom} /> },
                             ]}
-                            onRowClick={(row, index) => {
+                            onRowClick={(row: any, index) => {
                                 setListContext({
                                     listType: 'stock',
                                     items: stock.by_location.map(s => ({ id: s.id })) as any,
@@ -274,9 +274,12 @@ export function ItemDetailPage({ sku }: ItemDetailPageProps) {
                                 { key: 'supplier_name', label: 'Supplier', sortable: true },
                                 { key: 'qty', label: 'Qty', sortable: true, render: (row) => <Quantity value={row.qty} uom={item.uom} /> },
                                 { key: 'status', label: 'Status', sortable: true, render: (row) => <Badge>{row.status}</Badge> },
-                                { key: 'ordered_at', label: 'Ordered', sortable: true },
                                 { key: 'expected_delivery', label: 'Expected', sortable: true },
                             ]}
+                            onRowClick={(row) => {
+                                setReferrer({ page: 'items', id: sku, label: item.name })
+                                setHash('purchase-orders', row.id)
+                            }}
                         />
                     </Card>
                 )}

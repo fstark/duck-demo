@@ -2,9 +2,10 @@ import { useState, useEffect } from 'react'
 import { Card } from '../components/Card'
 import { Table } from '../components/Table'
 import { Badge } from '../components/Badge'
-import { CustomerDetail, Customer, Email } from '../types'
+import { CustomerDetail, Customer, Email, Invoice, Quote } from '../types'
 import { api } from '../api'
 import { useNavigation } from '../contexts/NavigationContext'
+import { formatCurrency } from '../utils/currency'
 import { formatDate } from '../utils/date'
 
 function setHash(page: string, id?: string) {
@@ -21,19 +22,25 @@ interface CustomerDetailPageProps {
 export function CustomerDetailPage({ customerId }: CustomerDetailPageProps) {
     const [customer, setCustomer] = useState<CustomerDetail | null>(null)
     const [emails, setEmails] = useState<Email[]>([])
+    const [invoices, setInvoices] = useState<Invoice[]>([])
+    const [quotes, setQuotes] = useState<Quote[]>([])
     const [loading, setLoading] = useState(true)
     const { listContext, setListContext, referrer, setReferrer } = useNavigation()
     const [error, setError] = useState<string | null>(null)
 
     useEffect(() => {
-        // Fetch customer details and emails
+        // Fetch customer details, emails, invoices, and quotes
         Promise.all([
             api.customerDetail(customerId),
-            api.emails({ customer_id: customerId })
+            api.emails({ customer_id: customerId }),
+            api.invoices({ customer_id: customerId }),
+            api.quotes({ customer_id: customerId }),
         ])
-            .then(([customerData, emailsData]) => {
+            .then(([customerData, emailsData, invoicesData, quotesData]) => {
                 setCustomer(customerData)
                 setEmails(emailsData.emails)
+                setInvoices(invoicesData.invoices || [])
+                setQuotes(quotesData.quotes || [])
                 setLoading(false)
             })
             .catch((err) => {
@@ -229,6 +236,7 @@ export function CustomerDetailPage({ customerId }: CustomerDetailPageProps) {
                             columns={[
                                 { key: 'sales_order_id', label: 'Order' },
                                 { key: 'status', label: 'Status', render: (row) => <Badge>{row.status}</Badge> },
+                                { key: 'total', label: 'Total', render: (row: any) => <div className="text-right">{formatCurrency(row.total, row.currency)}</div> },
                                 { key: 'created_at', label: 'Created' },
                                 { key: 'requested_delivery_date', label: 'Delivery Date' },
                             ]}
@@ -250,6 +258,21 @@ export function CustomerDetailPage({ customerId }: CustomerDetailPageProps) {
                             rows={customer.shipments as any}
                             columns={[
                                 { key: 'id', label: 'Shipment' },
+                                {
+                                    key: 'sales_order_id', label: 'Sales Order', render: (row) => (
+                                        <button
+                                            className="text-brand-600 hover:underline text-left"
+                                            onClick={(e) => {
+                                                e.stopPropagation()
+                                                setReferrer({ page: 'customers', id: customerId, label: customer.name })
+                                                setHash('orders', row.sales_order_id)
+                                            }}
+                                            type="button"
+                                        >
+                                            {row.sales_order_id}
+                                        </button>
+                                    )
+                                },
                                 { key: 'status', label: 'Status', render: (row) => <Badge>{row.status}</Badge> },
                                 { key: 'planned_departure', label: 'Departure' },
                                 { key: 'planned_arrival', label: 'Arrival' },
@@ -266,6 +289,68 @@ export function CustomerDetailPage({ customerId }: CustomerDetailPageProps) {
                         />
                     </Card>
                 )}
+                {invoices.length > 0 && (
+                    <Card title="Invoices">
+                        <Table
+                            rows={invoices as any}
+                            columns={[
+                                { key: 'id', label: 'Invoice' },
+                                {
+                                    key: 'sales_order_id', label: 'Sales Order', render: (row: Invoice) => (
+                                        <button
+                                            className="text-brand-600 hover:underline text-left"
+                                            onClick={(e) => {
+                                                e.stopPropagation()
+                                                setReferrer({ page: 'customers', id: customerId, label: customer.name })
+                                                setHash('orders', row.sales_order_id)
+                                            }}
+                                            type="button"
+                                        >
+                                            {row.sales_order_id}
+                                        </button>
+                                    )
+                                },
+                                { key: 'total', label: 'Total', render: (row: Invoice) => <div className="text-right">{formatCurrency(row.total, row.currency)}</div> },
+                                { key: 'status', label: 'Status', render: (row: Invoice) => <Badge>{row.status}</Badge> },
+                                { key: 'invoice_date', label: 'Invoice Date', render: (row: Invoice) => formatDate(row.invoice_date) },
+                                { key: 'due_date', label: 'Due Date', render: (row: Invoice) => formatDate(row.due_date) },
+                            ]}
+                            onRowClick={(row: Invoice, index: number) => {
+                                setListContext({
+                                    listType: 'invoices',
+                                    items: invoices.map(i => ({ id: i.id })) as any,
+                                    currentIndex: index,
+                                })
+                                setReferrer({ page: 'customers', id: customerId, label: customer.name })
+                                setHash('invoices', row.id)
+                            }}
+                        />
+                    </Card>
+                )}
+                {quotes.length > 0 && (
+                    <Card title="Quotes">
+                        <Table
+                            rows={quotes as any}
+                            columns={[
+                                { key: 'id', label: 'Quote' },
+                                { key: 'revision_number', label: 'Rev', render: (q: Quote) => `R${q.revision_number}` },
+                                { key: 'total', label: 'Total', render: (q: Quote) => <div className="text-right">{formatCurrency(q.total)}</div> },
+                                { key: 'status', label: 'Status', render: (q: Quote) => <Badge>{q.status}</Badge> },
+                                { key: 'valid_until', label: 'Valid Until', render: (q: Quote) => q.valid_until ? formatDate(q.valid_until) : '—' },
+                                { key: 'created_at', label: 'Created', render: (q: Quote) => formatDate(q.created_at) },
+                            ]}
+                            onRowClick={(q: Quote, index: number) => {
+                                setListContext({
+                                    listType: 'quotes',
+                                    items: quotes.map(qt => ({ id: qt.id })) as any,
+                                    currentIndex: index,
+                                })
+                                setReferrer({ page: 'customers', id: customerId, label: customer.name })
+                                setHash('quotes', q.id)
+                            }}
+                        />
+                    </Card>
+                )}
                 {emails.length > 0 && (
                     <Card title="Emails">
                         <Table
@@ -276,11 +361,7 @@ export function CustomerDetailPage({ customerId }: CustomerDetailPageProps) {
                                 {
                                     key: 'status',
                                     label: 'Status',
-                                    render: (row: Email) => (
-                                        <Badge variant={row.status === 'sent' ? 'success' : 'neutral'}>
-                                            {row.status}
-                                        </Badge>
-                                    )
+                                    render: (row: Email) => <Badge>{row.status}</Badge>
                                 },
                                 { key: 'modified_at', label: 'Modified', render: (row: Email) => formatDate(row.modified_at) },
                             ]}

@@ -167,7 +167,20 @@ export function ProductionOrderDetailPage({ productionOrderId }: ProductionOrder
                             <div>{productionOrder.status ? <Badge>{productionOrder.status}</Badge> : '—'}</div>
 
                             <div className="font-medium">Recipe ID:</div>
-                            <div>{productionOrder.recipe_id || '—'}</div>
+                            <div>
+                                {productionOrder.recipe_id ? (
+                                    <button
+                                        className="text-brand-600 hover:underline text-left"
+                                        onClick={() => {
+                                            setReferrer({ page: 'production', id: productionOrderId, label: `Production Order ${productionOrder.id}` })
+                                            setHash('recipes', productionOrder.recipe_id!)
+                                        }}
+                                        type="button"
+                                    >
+                                        {productionOrder.recipe_id}
+                                    </button>
+                                ) : '—'}
+                            </div>
 
                             <div className="font-medium">Started:</div>
                             <div>{productionOrder.started_at || '—'}</div>
@@ -180,6 +193,24 @@ export function ProductionOrderDetailPage({ productionOrderId }: ProductionOrder
 
                             <div className="font-medium">ETA Ship:</div>
                             <div>{productionOrder.eta_ship || '—'}</div>
+
+                            {productionOrder.parent_production_order_id && (
+                                <>
+                                    <div className="font-medium">Parent Order:</div>
+                                    <div>
+                                        <button
+                                            className="text-brand-600 hover:underline text-left"
+                                            onClick={() => {
+                                                setReferrer({ page: 'production', id: productionOrderId, label: `Production Order ${productionOrder.id}` })
+                                                setHash('production', productionOrder.parent_production_order_id!)
+                                            }}
+                                            type="button"
+                                        >
+                                            {productionOrder.parent_production_order_id}
+                                        </button>
+                                    </div>
+                                </>
+                            )}
                         </div>
                     </div>
 

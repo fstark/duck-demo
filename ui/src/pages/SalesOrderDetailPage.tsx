@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { Card } from '../components/Card'
 import { Table } from '../components/Table'
 import { Badge } from '../components/Badge'
-import { SalesOrder, SalesOrderDetail, Email } from '../types'
+import { SalesOrder, SalesOrderDetail, Email, Invoice, ProductionOrder } from '../types'
 import { api } from '../api'
 import { useNavigation } from '../contexts/NavigationContext'
 import { formatCurrency } from '../utils/currency'
@@ -23,6 +23,8 @@ interface SalesOrderDetailPageProps {
 export function SalesOrderDetailPage({ orderId }: SalesOrderDetailPageProps) {
     const [order, setOrder] = useState<SalesOrderDetail | null>(null)
     const [emails, setEmails] = useState<Email[]>([])
+    const [invoices, setInvoices] = useState<Invoice[]>([])
+    const [productionOrders, setProductionOrders] = useState<ProductionOrder[]>([])
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
     const { listContext, setListContext, setReferrer, referrer, clearListContext } = useNavigation()
@@ -30,11 +32,15 @@ export function SalesOrderDetailPage({ orderId }: SalesOrderDetailPageProps) {
     useEffect(() => {
         Promise.all([
             api.salesOrder(orderId),
-            api.emails({ sales_order_id: orderId })
+            api.emails({ sales_order_id: orderId }),
+            api.invoices({ sales_order_id: orderId }),
+            api.productionOrders({ sales_order_id: orderId }),
         ])
-            .then(([orderData, emailsData]) => {
+            .then(([orderData, emailsData, invoicesData, prodData]) => {
                 setOrder(orderData as SalesOrderDetail)
                 setEmails(emailsData.emails)
+                setInvoices(invoicesData.invoices || [])
+                setProductionOrders(prodData.production_orders || [])
                 setLoading(false)
             })
             .catch((err) => {
@@ -156,23 +162,39 @@ export function SalesOrderDetailPage({ orderId }: SalesOrderDetailPageProps) {
                 </div>
                 <div className="space-y-3 text-sm text-slate-800">
                     <div className="font-semibold text-lg">Order {order.sales_order.id}</div>
-                    <Card title="Customer">
-                        <div className="space-y-1">
+                    {order.customer && (
+                        <Card title="Customer">
+                            <div className="space-y-1">
+                                <button
+                                    className="font-medium text-brand-600 hover:underline text-left"
+                                    onClick={() => {
+                                        setReferrer({ page: 'orders', id: orderId, label: `Order ${order.sales_order.id}` })
+                                        setHash('customers', order.customer!.id)
+                                    }}
+                                    type="button"
+                                >
+                                    {order.customer.name}
+                                </button>
+                                {order.customer.company && <div className="text-slate-600 text-sm">{order.customer.company}</div>}
+                                {order.customer.email && <div className="text-slate-600 text-sm">{order.customer.email}</div>}
+                                {order.customer.city && <div className="text-slate-600 text-sm">{order.customer.city}</div>}
+                            </div>
+                        </Card>
+                    )}
+                    {order.sales_order.quote_id && (
+                        <Card title="Quote">
                             <button
-                                className="font-medium text-brand-600 hover:underline text-left"
+                                className="text-brand-600 hover:underline text-left"
                                 onClick={() => {
                                     setReferrer({ page: 'orders', id: orderId, label: `Order ${order.sales_order.id}` })
-                                    setHash('customers', order.customer.id)
+                                    setHash('quotes', order.sales_order.quote_id)
                                 }}
                                 type="button"
                             >
-                                {order.customer.name}
+                                {order.sales_order.quote_id}
                             </button>
-                            {order.customer.company && <div className="text-slate-600 text-sm">{order.customer.company}</div>}
-                            {order.customer.email && <div className="text-slate-600 text-sm">{order.customer.email}</div>}
-                            {order.customer.city && <div className="text-slate-600 text-sm">{order.customer.city}</div>}
-                        </div>
-                    </Card>
+                        </Card>
+                    )}
                     <div className="grid grid-cols-2 gap-3">
                         <Card title="Lines">
                             <Table
@@ -195,7 +217,9 @@ export function SalesOrderDetailPage({ orderId }: SalesOrderDetailPageProps) {
                                             </button>
                                         )
                                     },
-                                    { key: 'qty', label: 'Qty', render: (row) => <Quantity value={row.qty} /> }
+                                    { key: 'qty', label: 'Qty', render: (row) => <Quantity value={row.qty} /> },
+                                    { key: 'unit_price', label: 'Unit Price', render: (row) => <div className="text-right">{formatCurrency(row.unit_price, order.pricing.currency)}</div> },
+                                    { key: 'line_total', label: 'Line Total', render: (row) => <div className="text-right">{formatCurrency(row.line_total, order.pricing.currency)}</div> },
                                 ]}
                                 onRowClick={(row, index) => {
                                     setListContext({
@@ -209,7 +233,13 @@ export function SalesOrderDetailPage({ orderId }: SalesOrderDetailPageProps) {
                             />
                         </Card>
                         <Card title="Pricing">
-                            <div className="text-right">{formatCurrency(order.pricing.total, order.pricing.currency)}</div>
+                            <div className="space-y-1 text-sm">
+                                <div className="flex justify-between"><span className="text-slate-500">Subtotal</span><span>{formatCurrency(order.pricing.subtotal, order.pricing.currency)}</span></div>
+                                {order.pricing.discount > 0 && <div className="flex justify-between"><span className="text-slate-500">Discount</span><span>−{formatCurrency(order.pricing.discount, order.pricing.currency)}</span></div>}
+                                {order.pricing.shipping > 0 && <div className="flex justify-between"><span className="text-slate-500">Shipping</span><span>{formatCurrency(order.pricing.shipping, order.pricing.currency)}</span></div>}
+                                <div className="flex justify-between"><span className="text-slate-500">Tax</span><span>{formatCurrency(order.pricing.tax, order.pricing.currency)}</span></div>
+                                <div className="flex justify-between font-semibold border-t pt-1"><span>Total</span><span>{formatCurrency(order.pricing.total, order.pricing.currency)}</span></div>
+                            </div>
                         </Card>
                     </div>
                     <Card title="Shipments">
@@ -246,11 +276,7 @@ export function SalesOrderDetailPage({ orderId }: SalesOrderDetailPageProps) {
                                     {
                                         key: 'status',
                                         label: 'Status',
-                                        render: (row: Email) => (
-                                            <Badge variant={row.status === 'sent' ? 'success' : 'neutral'}>
-                                                {row.status}
-                                            </Badge>
-                                        )
+                                        render: (row: Email) => <Badge>{row.status}</Badge>
                                     },
                                     { key: 'modified_at', label: 'Modified', render: (row: Email) => formatDate(row.modified_at) },
                                 ]}
@@ -262,6 +288,58 @@ export function SalesOrderDetailPage({ orderId }: SalesOrderDetailPageProps) {
                                     })
                                     setReferrer({ page: 'orders', id: orderId, label: `Order ${order.sales_order.id}` })
                                     setHash('emails', row.id)
+                                }}
+                            />
+                        </Card>
+                    )}
+                    {invoices.length > 0 && (
+                        <Card title="Invoices">
+                            <Table
+                                rows={invoices as any}
+                                columns={[
+                                    { key: 'id', label: 'Invoice' },
+                                    { key: 'total', label: 'Total', render: (row: Invoice) => <div className="text-right">{formatCurrency(row.total, row.currency)}</div> },
+                                    { key: 'status', label: 'Status', render: (row: Invoice) => <Badge>{row.status}</Badge> },
+                                    { key: 'invoice_date', label: 'Invoice Date', render: (row: Invoice) => formatDate(row.invoice_date) },
+                                    { key: 'due_date', label: 'Due Date', render: (row: Invoice) => formatDate(row.due_date) },
+                                ]}
+                                onRowClick={(row: Invoice, index: number) => {
+                                    setListContext({
+                                        listType: 'invoices',
+                                        items: invoices.map(i => ({ id: i.id })) as any,
+                                        currentIndex: index,
+                                    })
+                                    setReferrer({ page: 'orders', id: orderId, label: `Order ${order.sales_order.id}` })
+                                    setHash('invoices', row.id)
+                                }}
+                            />
+                        </Card>
+                    )}
+                    {productionOrders.length > 0 && (
+                        <Card title="Production Orders">
+                            <Table
+                                rows={productionOrders as any}
+                                columns={[
+                                    { key: 'id', label: 'Order' },
+                                    {
+                                        key: 'item_sku', label: 'Item', render: (row: ProductionOrder) => (
+                                            <div>
+                                                <div>{row.item_sku}</div>
+                                                <div className="text-xs text-slate-500">{row.item_name}</div>
+                                            </div>
+                                        )
+                                    },
+                                    { key: 'status', label: 'Status', render: (row: ProductionOrder) => <Badge>{row.status}</Badge> },
+                                    { key: 'eta_finish', label: 'ETA Finish' },
+                                ]}
+                                onRowClick={(row: ProductionOrder, index: number) => {
+                                    setListContext({
+                                        listType: 'production',
+                                        items: productionOrders.map(p => ({ id: p.id })) as any,
+                                        currentIndex: index,
+                                    })
+                                    setReferrer({ page: 'orders', id: orderId, label: `Order ${order.sales_order.id}` })
+                                    setHash('production', row.id)
                                 }}
                             />
                         </Card>

@@ -241,6 +241,8 @@ export function InvoiceDetailPage({ invoiceId }: InvoiceDetailPageProps) {
                                     ),
                                 },
                                 { key: 'qty', label: 'Qty', render: (row: any) => <Quantity value={row.qty} /> },
+                                { key: 'unit_price', label: 'Unit Price', render: (row: any) => row.unit_price != null ? formatCurrency(row.unit_price, inv.currency) : '—' },
+                                { key: 'line_total', label: 'Line Total', render: (row: any) => <div className="text-right">{row.line_total != null ? formatCurrency(row.line_total, inv.currency) : '—'}</div> },
                             ]}
                         />
                     </Card>

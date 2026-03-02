@@ -60,9 +60,10 @@ function nextOperationSort(prev: OperationSortState | null, key: keyof RecipeOpe
     return { key, dir: 'asc' }
 }
 
-function setHash(page: string, id: string) {
+function setHash(page: string, id?: string) {
+    const path = id ? `#/${page}/${encodeURIComponent(id)}` : `#/${page}`
     if (typeof window !== 'undefined') {
-        window.location.hash = `#/${page}/${encodeURIComponent(id)}`
+        window.location.hash = path
     }
 }
 
@@ -76,7 +77,7 @@ export function RecipeDetailPage({ recipeId }: RecipeDetailPageProps) {
     const [operationSort, setOperationSort] = useState<OperationSortState | null>(null)
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
-    const { listContext } = useNavigation()
+    const { listContext, setListContext, referrer, setReferrer, clearListContext } = useNavigation()
 
     useEffect(() => {
         // Navigation context comes from list page
@@ -114,26 +115,57 @@ export function RecipeDetailPage({ recipeId }: RecipeDetailPageProps) {
 
     if (loading) {
         return (
-            <Card title="Recipe Detail">
-                <div className="text-sm text-gray-500">Loading recipe...</div>
-            </Card>
+            <section>
+                <div className="text-lg font-semibold text-slate-800 mb-4">Recipe Detail</div>
+                <Card>
+                    <div className="text-sm text-gray-500">Loading recipe...</div>
+                </Card>
+            </section>
         )
     }
 
-    if (error) {
+    if (error || !recipe) {
         return (
-            <Card title="Recipe Detail">
-                <div className="text-sm text-red-600">Error: {error}</div>
-            </Card>
+            <section>
+                <div className="text-lg font-semibold text-slate-800 mb-4">Recipe Detail</div>
+                <Card>
+                    <div className="text-sm text-red-600">{error || 'Recipe not found'}</div>
+                    <button
+                        className="mt-3 text-brand-600 hover:underline text-sm"
+                        onClick={() => {
+                            if (referrer) {
+                                clearListContext()
+                                setHash(referrer.page, referrer.id)
+                            } else {
+                                setHash('recipes')
+                            }
+                        }}
+                        type="button"
+                    >
+                        ← {referrer ? `Back to ${referrer.label}` : 'Back to Recipes'}
+                    </button>
+                </Card>
+            </section>
         )
     }
 
-    if (!recipe) {
-        return (
-            <Card title="Recipe Detail">
-                <div className="text-sm text-gray-500">Recipe not found</div>
-            </Card>
-        )
+    const hasPrevious = listContext && listContext.currentIndex > 0
+    const hasNext = listContext && listContext.currentIndex < listContext.items.length - 1
+
+    const handlePrevious = () => {
+        if (!hasPrevious || !listContext) return
+        const prevIndex = listContext.currentIndex - 1
+        const prevItem = listContext.items[prevIndex] as Recipe
+        setListContext({ ...listContext, currentIndex: prevIndex })
+        setHash('recipes', prevItem.id)
+    }
+
+    const handleNext = () => {
+        if (!hasNext || !listContext) return
+        const nextIndex = listContext.currentIndex + 1
+        const nextItem = listContext.items[nextIndex] as Recipe
+        setListContext({ ...listContext, currentIndex: nextIndex })
+        setHash('recipes', nextItem.id)
     }
 
     const ingredients = recipe.ingredients || []
@@ -146,16 +178,65 @@ export function RecipeDetailPage({ recipeId }: RecipeDetailPageProps) {
             <section>
                 <div className="text-lg font-semibold text-slate-800 mb-4">Recipe: {recipe.output_name || recipe.output_sku} · {recipe.id}</div>
                 <Card>
+                    <div className="flex items-center justify-between mb-4">
+                        <button
+                            className="text-brand-600 hover:underline text-sm"
+                            onClick={() => {
+                                if (referrer) {
+                                    clearListContext()
+                                    setHash(referrer.page, referrer.id)
+                                } else {
+                                    setHash('recipes')
+                                }
+                            }}
+                            type="button"
+                        >
+                            ← {referrer ? `Back to ${referrer.label}` : 'Back to Recipes'}
+                        </button>
+                        {listContext && (
+                            <div className="flex items-center gap-2">
+                                <button
+                                    className={`px-3 py-1 text-sm rounded ${hasPrevious
+                                        ? 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                                        : 'bg-slate-50 text-slate-300 cursor-not-allowed'
+                                        }`}
+                                    onClick={handlePrevious}
+                                    disabled={!hasPrevious}
+                                    type="button"
+                                >
+                                    ← Previous
+                                </button>
+                                <span className="text-xs text-slate-500">
+                                    {listContext.currentIndex + 1} of {listContext.items.length}
+                                </span>
+                                <button
+                                    className={`px-3 py-1 text-sm rounded ${hasNext
+                                        ? 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                                        : 'bg-slate-50 text-slate-300 cursor-not-allowed'
+                                        }`}
+                                    onClick={handleNext}
+                                    disabled={!hasNext}
+                                    type="button"
+                                >
+                                    Next →
+                                </button>
+                            </div>
+                        )}
+                    </div>
                     <dl className="grid grid-cols-1 gap-x-4 gap-y-4 sm:grid-cols-2">
                         <div>
                             <dt className="text-sm font-medium text-gray-500">Output Item</dt>
                             <dd className="text-sm text-gray-900">
-                                <a
-                                    href={`#/items/${recipe.output_sku}`}
-                                    className="text-blue-600 hover:underline"
+                                <button
+                                    className="text-brand-600 hover:underline text-left"
+                                    onClick={() => {
+                                        setReferrer({ page: 'recipes', id: recipeId, label: `Recipe ${recipe.id}` })
+                                        setHash('items', recipe.output_sku)
+                                    }}
+                                    type="button"
                                 >
                                     {recipe.output_sku}
-                                </a>
+                                </button>
                                 {' - '}{recipe.output_name}
                             </dd>
                         </div>
