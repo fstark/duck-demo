@@ -1,6 +1,6 @@
 """API routes – production orders."""
 
-from api_routes._common import _json, _cors_preflight
+from api_routes._common import _json, cors_handler
 from db import dict_rows
 from services import db_conn, production_service
 from utils import ui_href
@@ -10,9 +10,8 @@ def register(mcp):
     """Register production routes."""
 
     @mcp.custom_route("/api/production-orders", methods=["GET", "OPTIONS"])
+    @cors_handler(["GET"])
     async def api_production_orders(request):
-        if request.method == "OPTIONS":
-            return _cors_preflight(["GET"])
         qp = request.query_params
         limit = int(qp.get("limit", 100))
         with db_conn() as conn:
@@ -23,9 +22,8 @@ def register(mcp):
         return _json({"production_orders": rows})
 
     @mcp.custom_route("/api/production-orders/{production_id}", methods=["GET", "OPTIONS"])
+    @cors_handler(["GET"])
     async def api_production(request):
-        if request.method == "OPTIONS":
-            return _cors_preflight(["GET"])
         production_id = request.path_params.get("production_id")
         try:
             result = production_service.get_order_status(production_id)

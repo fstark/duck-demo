@@ -1,6 +1,6 @@
 """API routes – customer list and detail."""
 
-from api_routes._common import _json, _cors_preflight
+from api_routes._common import _json, cors_handler
 from db import dict_rows
 from services import db_conn, customer_service
 from utils import ui_href
@@ -10,9 +10,8 @@ def register(mcp):
     """Register customer routes."""
 
     @mcp.custom_route("/api/customers", methods=["GET", "OPTIONS"])
+    @cors_handler(["GET"])
     async def api_customers(request):
-        if request.method == "OPTIONS":
-            return _cors_preflight(["GET"])
         qp = request.query_params
         limit = int(qp.get("limit", 20))
         result = customer_service.find_customers(
@@ -25,9 +24,8 @@ def register(mcp):
         return _json(result)
 
     @mcp.custom_route("/api/customers/{customer_id}", methods=["GET", "OPTIONS"])
+    @cors_handler(["GET"])
     async def api_customer_detail(request):
-        if request.method == "OPTIONS":
-            return _cors_preflight(["GET"])
         customer_id = request.path_params.get("customer_id")
         with db_conn() as conn:
             customer_row = conn.execute("SELECT * FROM customers WHERE id = ?", (customer_id,)).fetchone()

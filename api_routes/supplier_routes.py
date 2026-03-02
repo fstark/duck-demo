@@ -1,6 +1,6 @@
 """API routes – suppliers."""
 
-from api_routes._common import _json, _cors_preflight
+from api_routes._common import _json, cors_handler
 from db import dict_rows
 from services import db_conn
 
@@ -9,9 +9,8 @@ def register(mcp):
     """Register supplier routes."""
 
     @mcp.custom_route("/api/suppliers", methods=["GET", "OPTIONS"])
+    @cors_handler(["GET"])
     async def api_suppliers(request):
-        if request.method == "OPTIONS":
-            return _cors_preflight(["GET"])
         qp = request.query_params
         limit = int(qp.get("limit", 50))
         with db_conn() as conn:
@@ -19,9 +18,8 @@ def register(mcp):
             return _json({"suppliers": rows})
 
     @mcp.custom_route("/api/suppliers/{supplier_id}", methods=["GET", "OPTIONS"])
+    @cors_handler(["GET"])
     async def api_supplier_detail(request):
-        if request.method == "OPTIONS":
-            return _cors_preflight(["GET"])
         supplier_id = request.path_params.get("supplier_id")
         with db_conn() as conn:
             supplier = conn.execute("SELECT * FROM suppliers WHERE id = ?", (supplier_id,)).fetchone()

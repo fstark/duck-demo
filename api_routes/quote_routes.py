@@ -2,7 +2,7 @@
 
 from starlette.responses import Response
 
-from api_routes._common import _json, _cors_preflight
+from api_routes._common import _json, cors_handler
 from services import quote_service, DocumentService
 
 
@@ -10,9 +10,8 @@ def register(mcp):
     """Register quote routes."""
 
     @mcp.custom_route("/api/quotes", methods=["GET", "OPTIONS"])
+    @cors_handler(["GET"])
     async def api_quotes(request):
-        if request.method == "OPTIONS":
-            return _cors_preflight(["GET"])
         qp = request.query_params
         limit = int(qp.get("limit", 50))
         show_superseded = qp.get("show_superseded", "false").lower() == "true"
@@ -25,9 +24,8 @@ def register(mcp):
         return _json(result)
 
     @mcp.custom_route("/api/quotes/{quote_id}", methods=["GET", "OPTIONS"])
+    @cors_handler(["GET"])
     async def api_quote_detail(request):
-        if request.method == "OPTIONS":
-            return _cors_preflight(["GET"])
         quote_id = request.path_params.get("quote_id")
         try:
             result = quote_service.get_quote(quote_id)
@@ -38,9 +36,8 @@ def register(mcp):
             return _json({"error": str(exc)}, status_code=404)
 
     @mcp.custom_route("/api/quotes/{quote_id}/pdf", methods=["GET", "OPTIONS"])
+    @cors_handler(["GET"])
     async def api_quote_pdf(request):
-        if request.method == "OPTIONS":
-            return _cors_preflight(["GET"])
         quote_id = request.path_params.get("quote_id")
         try:
             doc = DocumentService.get_document("quote", quote_id, "quote_pdf")

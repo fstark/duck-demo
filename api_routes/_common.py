@@ -1,7 +1,8 @@
 """Common helpers shared across API route modules."""
 
 import logging
-from typing import Any, Optional
+from functools import wraps
+from typing import Any, Optional, List
 
 from starlette.responses import JSONResponse, Response
 
@@ -32,3 +33,24 @@ def _parse_bool(val: Optional[str]) -> bool:
     if val is None:
         return False
     return val.lower() in {"1", "true", "yes", "y", "on"}
+
+
+def cors_handler(methods: List[str]):
+    """Decorator to automatically handle CORS preflight requests.
+    
+    Args:
+        methods: List of HTTP methods to allow (e.g., ["GET", "POST"])
+    
+    Example:
+        @cors_handler(["GET"])
+        async def my_route(request):
+            return _json({"data": "value"})
+    """
+    def decorator(func):
+        @wraps(func)
+        async def wrapper(request):
+            if request.method == "OPTIONS":
+                return _cors_preflight(methods)
+            return await func(request)
+        return wrapper
+    return decorator

@@ -1,6 +1,6 @@
 """API routes – emails."""
 
-from api_routes._common import _json, _cors_preflight
+from api_routes._common import _json, cors_handler
 from services import messaging_service
 
 
@@ -8,9 +8,8 @@ def register(mcp):
     """Register email routes."""
 
     @mcp.custom_route("/api/emails", methods=["GET", "OPTIONS"])
+    @cors_handler(["GET"])
     async def api_emails(request):
-        if request.method == "OPTIONS":
-            return _cors_preflight(["GET"])
         qp = request.query_params
         limit = int(qp.get("limit", 20))
         result = messaging_service.list_emails(
@@ -22,9 +21,8 @@ def register(mcp):
         return _json(result)
 
     @mcp.custom_route("/api/emails/{email_id}", methods=["GET", "OPTIONS"])
+    @cors_handler(["GET"])
     async def api_email_detail(request):
-        if request.method == "OPTIONS":
-            return _cors_preflight(["GET"])
         email_id = request.path_params.get("email_id")
         try:
             result = messaging_service.get_email(email_id)

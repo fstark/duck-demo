@@ -1,6 +1,6 @@
 """API routes – sales orders and quote options."""
 
-from api_routes._common import _json, _cors_preflight
+from api_routes._common import _json, cors_handler
 from services import sales_service, pricing_service
 
 
@@ -8,9 +8,8 @@ def register(mcp):
     """Register sales routes."""
 
     @mcp.custom_route("/api/sales-orders", methods=["GET", "OPTIONS"])
+    @cors_handler(["GET"])
     async def api_sales_orders(request):
-        if request.method == "OPTIONS":
-            return _cors_preflight(["GET"])
         qp = request.query_params
         limit = int(qp.get("limit", 20))
         result = sales_service.search_orders(
@@ -21,9 +20,8 @@ def register(mcp):
         return _json(result)
 
     @mcp.custom_route("/api/sales-orders/{order_id}", methods=["GET", "OPTIONS"])
+    @cors_handler(["GET"])
     async def api_sales_order_detail(request):
-        if request.method == "OPTIONS":
-            return _cors_preflight(["GET"])
         order_id = request.path_params.get("order_id")
         detail = sales_service.get_order_details(order_id)
         if not detail:
@@ -31,9 +29,8 @@ def register(mcp):
         return _json(detail)
 
     @mcp.custom_route("/api/quote-options", methods=["GET", "OPTIONS"])
+    @cors_handler(["GET"])
     async def api_quote_options(request):
-        if request.method == "OPTIONS":
-            return _cors_preflight(["GET"])
         qp = request.query_params
         sku = qp.get("sku")
         qty = qp.get("qty")

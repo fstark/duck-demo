@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 
 from starlette.responses import FileResponse
 
-from api_routes._common import _json, _cors_preflight, DEMO_CORS_HEADERS
+from api_routes._common import _json, cors_handler, DEMO_CORS_HEADERS
 from db import dict_rows
 from services import db_conn, simulation_service
 
@@ -14,16 +14,14 @@ def register(mcp):
     """Register system/shared routes."""
 
     @mcp.custom_route("/api/health", methods=["GET", "OPTIONS"])
+    @cors_handler(["GET"])
     async def api_health(request):
-        if request.method == "OPTIONS":
-            return _cors_preflight(["GET"])
         return _json({"status": "ok"})
 
     @mcp.custom_route("/api/mcp-app-ui/customer-confirm", methods=["GET", "OPTIONS"])
+    @cors_handler(["GET"])
     async def api_mcp_app_test(request):
         """Test endpoint to manually access the MCP App UI for debugging."""
-        if request.method == "OPTIONS":
-            return _cors_preflight(["GET"])
         ui_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "mcp_apps_ui", "customer-confirm.html")
         if os.path.exists(ui_path):
             with open(ui_path, "r", encoding="utf-8") as f:
@@ -33,9 +31,8 @@ def register(mcp):
             return _json({"error": "MCP App UI not found"}, status_code=404)
 
     @mcp.custom_route("/api/simulation/time", methods=["GET", "OPTIONS"])
+    @cors_handler(["GET"])
     async def api_simulation_time(request):
-        if request.method == "OPTIONS":
-            return _cors_preflight(["GET"])
         try:
             result = {"current_time": simulation_service.get_current_time()}
             return _json(result)
@@ -43,9 +40,8 @@ def register(mcp):
             return _json({"error": str(exc)}, status_code=500)
 
     @mcp.custom_route("/api/charts/{filename}", methods=["GET", "OPTIONS"])
+    @cors_handler(["GET"])
     async def api_chart_image(request):
-        if request.method == "OPTIONS":
-            return _cors_preflight(["GET"])
         filename = request.path_params.get("filename")
         charts_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "tmp", "charts")
         file_path = os.path.join(charts_dir, filename)
@@ -60,10 +56,9 @@ def register(mcp):
         )
 
     @mcp.custom_route("/api/stats/spotlight", methods=["GET", "OPTIONS"])
+    @cors_handler(["GET"])
     async def api_stats_spotlight(request):
         """Return spotlight items for each overview card."""
-        if request.method == "OPTIONS":
-            return _cors_preflight(["GET"])
 
         with db_conn() as conn:
             now = simulation_service.get_current_time()

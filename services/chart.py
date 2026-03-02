@@ -3,6 +3,7 @@
 import os
 import uuid
 from datetime import datetime
+from types import SimpleNamespace
 from typing import Any, Dict, List, Optional
 
 import config
@@ -12,17 +13,13 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
 
-class ChartService:
-    """Service for generating chart images."""
-
-    @staticmethod
-    def generate_chart(
-        chart_type: str,
-        labels: List[str],
-        values: Optional[List[float]] = None,
-        series: Optional[List[Dict[str, Any]]] = None,
-        title: Optional[str] = None
-    ) -> Dict[str, str]:
+def generate_chart(
+    chart_type: str,
+    labels: List[str],
+    values: Optional[List[float]] = None,
+    series: Optional[List[Dict[str, Any]]] = None,
+    title: Optional[str] = None
+) -> Dict[str, str]:
         """
         Generate a chart image and return the filename.
 
@@ -231,4 +228,8 @@ class ChartService:
         }
 
 
-chart_service = ChartService()
+# Namespace for backward compatibility
+chart_service = SimpleNamespace(
+    generate_chart=generate_chart,
+)
+ChartService = type(chart_service)

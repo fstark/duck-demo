@@ -2,7 +2,7 @@
 
 from starlette.responses import Response
 
-from api_routes._common import _json, _cors_preflight
+from api_routes._common import _json, cors_handler
 from services import invoice_service, DocumentService
 
 
@@ -10,9 +10,8 @@ def register(mcp):
     """Register invoice routes."""
 
     @mcp.custom_route("/api/invoices", methods=["GET", "OPTIONS"])
+    @cors_handler(["GET"])
     async def api_invoices(request):
-        if request.method == "OPTIONS":
-            return _cors_preflight(["GET"])
         qp = request.query_params
         limit = int(qp.get("limit", 50))
         result = invoice_service.list_invoices(
@@ -23,9 +22,8 @@ def register(mcp):
         return _json(result)
 
     @mcp.custom_route("/api/invoices/{invoice_id}", methods=["GET", "OPTIONS"])
+    @cors_handler(["GET"])
     async def api_invoice_detail(request):
-        if request.method == "OPTIONS":
-            return _cors_preflight(["GET"])
         invoice_id = request.path_params.get("invoice_id")
         try:
             result = invoice_service.get_invoice(invoice_id)
@@ -36,9 +34,8 @@ def register(mcp):
             return _json({"error": str(exc)}, status_code=404)
 
     @mcp.custom_route("/api/invoices/{invoice_id}/pdf", methods=["GET", "OPTIONS"])
+    @cors_handler(["GET"])
     async def api_invoice_pdf(request):
-        if request.method == "OPTIONS":
-            return _cors_preflight(["GET"])
         invoice_id = request.path_params.get("invoice_id")
         try:
             doc = DocumentService.get_document("invoice", invoice_id, "invoice_pdf")

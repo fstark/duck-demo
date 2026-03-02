@@ -1,6 +1,6 @@
 """API routes – recipes."""
 
-from api_routes._common import _json, _cors_preflight
+from api_routes._common import _json, cors_handler
 from services import recipe_service
 
 
@@ -8,9 +8,8 @@ def register(mcp):
     """Register recipe routes."""
 
     @mcp.custom_route("/api/recipes", methods=["GET", "OPTIONS"])
+    @cors_handler(["GET"])
     async def api_recipes(request):
-        if request.method == "OPTIONS":
-            return _cors_preflight(["GET"])
         qp = request.query_params
         output_item_sku = qp.get("output_item_sku")
         limit = int(qp.get("limit", 50))
@@ -18,9 +17,8 @@ def register(mcp):
         return _json(result)
 
     @mcp.custom_route("/api/recipes/{recipe_id}", methods=["GET", "OPTIONS"])
+    @cors_handler(["GET"])
     async def api_recipe_detail(request):
-        if request.method == "OPTIONS":
-            return _cors_preflight(["GET"])
         recipe_id = request.path_params.get("recipe_id")
         try:
             result = recipe_service.get_recipe(recipe_id)

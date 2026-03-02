@@ -1,16 +1,13 @@
 """Service for statistics operations."""
 
+from types import SimpleNamespace
 from typing import Any, Dict, List, Optional, Union
 
 from db import dict_rows
 from services._base import db_conn
 
 
-class StatsService:
-    """Service for statistics operations."""
-
-    @staticmethod
-    def get_statistics(
+def get_statistics(
         entity: str,
         metric: str,
         group_by: Optional[Union[str, List[str]]],
@@ -108,7 +105,7 @@ class StatsService:
                     result: Dict[str, Any] = {"entity": entity, "metric": metric, "group_by": group_by, "results": rows}
 
                     if return_chart:
-                        chart_result = StatsService._generate_chart_from_results(
+                        chart_result = _generate_chart_from_results(
                             return_chart, rows, group_by, chart_title, entity, metric
                         )
                         if "error" in chart_result:
@@ -152,7 +149,7 @@ class StatsService:
                     result = {"entity": entity, "metric": metric, "group_by": group_by, "results": rows}
 
                     if return_chart:
-                        chart_result = StatsService._generate_chart_from_results(
+                        chart_result = _generate_chart_from_results(
                             return_chart, rows, group_by, chart_title, entity, metric
                         )
                         if "error" in chart_result:
@@ -171,7 +168,7 @@ class StatsService:
                     result = {"entity": entity, "metric": metric, "group_by": group_by, "results": rows}
 
                     if return_chart:
-                        chart_result = StatsService._generate_chart_from_results(
+                        chart_result = _generate_chart_from_results(
                             return_chart, rows, group_by, chart_title, entity, metric
                         )
                         if "error" in chart_result:
@@ -185,8 +182,7 @@ class StatsService:
                 result_row = conn.execute(sql, params).fetchone()
                 return {"entity": entity, "metric": metric, "value": result_row["value"] if result_row["value"] is not None else 0}
 
-    @staticmethod
-    def _generate_chart_from_results(
+def _generate_chart_from_results(
         chart_type: str,
         rows: List[Dict[str, Any]],
         group_by: Union[str, List[str]],
@@ -263,4 +259,9 @@ class StatsService:
             }
 
 
-stats_service = StatsService()
+# Namespace for backward compatibility
+stats_service = SimpleNamespace(
+    get_statistics=get_statistics,
+    _generate_chart_from_results=_generate_chart_from_results,
+)
+StatsService = type(stats_service)

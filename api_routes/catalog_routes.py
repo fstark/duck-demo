@@ -5,7 +5,7 @@ import os
 
 from starlette.responses import FileResponse, Response
 
-from api_routes._common import _json, _cors_preflight, DEMO_CORS_HEADERS
+from api_routes._common import _json, cors_handler, DEMO_CORS_HEADERS
 from services import db_conn, catalog_service, inventory_service
 from utils import ui_href
 import config
@@ -15,9 +15,8 @@ def register(mcp):
     """Register catalog/item routes."""
 
     @mcp.custom_route("/api/items", methods=["GET", "OPTIONS"])
+    @cors_handler(["GET"])
     async def api_items(request):
-        if request.method == "OPTIONS":
-            return _cors_preflight(["GET"])
         qp = request.query_params
         limit = int(qp.get("limit", 50))
         from api_routes._common import _parse_bool
@@ -26,9 +25,8 @@ def register(mcp):
         return _json(result)
 
     @mcp.custom_route("/api/items/{sku}", methods=["GET", "OPTIONS"])
+    @cors_handler(["GET"])
     async def api_item_detail(request):
-        if request.method == "OPTIONS":
-            return _cors_preflight(["GET"])
         sku = request.path_params.get("sku")
         from db import dict_rows
         with db_conn() as conn:
@@ -65,9 +63,8 @@ def register(mcp):
             return _json(result)
 
     @mcp.custom_route("/api/items/{sku}/image.png", methods=["GET", "OPTIONS"])
+    @cors_handler(["GET"])
     async def api_item_image(request):
-        if request.method == "OPTIONS":
-            return _cors_preflight(["GET"])
         sku = request.path_params.get("sku")
         with db_conn() as conn:
             row = conn.execute("SELECT image FROM items WHERE sku = ?", (sku,)).fetchone()
@@ -76,19 +73,17 @@ def register(mcp):
             return Response(content=row["image"], media_type="image/png", headers=DEMO_CORS_HEADERS)
 
     @mcp.custom_route("/api/models/duck.obj", methods=["GET", "OPTIONS"])
+    @cors_handler(["GET"])
     async def api_duck_model(request):
         """Serve the duck 3D model for MCP App item inspector."""
-        if request.method == "OPTIONS":
-            return _cors_preflight(["GET"])
         model_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "ui", "public", "models", "duck.obj")
         if not os.path.exists(model_path):
             return _json({"error": "Model not found"}, status_code=404)
         return FileResponse(model_path, media_type="text/plain", headers=DEMO_CORS_HEADERS)
 
     @mcp.custom_route("/api/items/{sku}/image/base64", methods=["GET", "OPTIONS"])
+    @cors_handler(["GET"])
     async def api_item_image_base64(request):
-        if request.method == "OPTIONS":
-            return _cors_preflight(["GET"])
         sku = request.path_params.get("sku")
         with db_conn() as conn:
             row = conn.execute("SELECT image FROM items WHERE sku = ?", (sku,)).fetchone()
@@ -98,9 +93,8 @@ def register(mcp):
             return Response(content=b64_data, media_type="text/plain", headers=DEMO_CORS_HEADERS)
 
     @mcp.custom_route("/api/items/{sku}/stock", methods=["GET", "OPTIONS"])
+    @cors_handler(["GET"])
     async def api_item_stock(request):
-        if request.method == "OPTIONS":
-            return _cors_preflight(["GET"])
         sku = request.path_params.get("sku")
         try:
             item = catalog_service.load_item(sku)
