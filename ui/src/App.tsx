@@ -33,11 +33,13 @@ import { InvoicesListPage } from './pages/InvoicesListPage'
 import { InvoiceDetailPage } from './pages/InvoiceDetailPage'
 import QuotesListPage from './pages/QuotesListPage'
 import QuoteDetailPage from './pages/QuoteDetailPage'
+import { WorkCentersListPage } from './pages/WorkCentersListPage'
+import { WorkCenterDetailPage } from './pages/WorkCenterDetailPage'
 
 type SortDir = 'asc' | 'desc'
 type SortState<T> = { key: keyof T; dir: SortDir }
 
-type ViewPage = 'home' | 'customers' | 'items' | 'stock' | 'orders' | 'shipments' | 'production' | 'suppliers' | 'recipes' | 'purchase-orders' | 'emails' | 'invoices' | 'quotes'
+type ViewPage = 'home' | 'customers' | 'items' | 'stock' | 'orders' | 'shipments' | 'production' | 'suppliers' | 'recipes' | 'purchase-orders' | 'emails' | 'invoices' | 'quotes' | 'work-centers'
 type ViewState = { page: ViewPage; id?: string }
 
 function SectionHeading({ id, title }: { id: string; title: string }) {
@@ -54,7 +56,7 @@ function parseHash(): ViewState {
   const parts = hash.split('/').filter(Boolean)
   const page = (parts[0] as ViewPage) || 'home'
   const id = parts[1] ? decodeURIComponent(parts.slice(1).join('/')) : undefined
-  const allowed: ViewPage[] = ['home', 'customers', 'items', 'stock', 'orders', 'shipments', 'production', 'suppliers', 'recipes', 'purchase-orders', 'emails', 'invoices', 'quotes']
+  const allowed: ViewPage[] = ['home', 'customers', 'items', 'stock', 'orders', 'shipments', 'production', 'suppliers', 'recipes', 'purchase-orders', 'emails', 'invoices', 'quotes', 'work-centers']
   return { page: allowed.includes(page) ? page : 'home', id }
 }
 
@@ -193,6 +195,7 @@ function AppContent() {
       label: 'Supply Chain',
       items: [
         { page: 'production' as ViewPage, label: 'Production' },
+        { page: 'work-centers' as ViewPage, label: 'Work Centers' },
         { page: 'suppliers' as ViewPage, label: 'Suppliers' },
         { page: 'purchase-orders' as ViewPage, label: 'Purchases' },
       ],
@@ -414,6 +417,9 @@ function AppContent() {
 
         {view.page === 'production' && !view.id && <ProductionOrdersListPage />}
         {view.page === 'production' && view.id && <ProductionOrderDetailPage productionOrderId={view.id} />}
+
+        {view.page === 'work-centers' && !view.id && <WorkCentersListPage />}
+        {view.page === 'work-centers' && view.id && <WorkCenterDetailPage workCenterId={view.id} />}
 
       </div>
     </Layout>

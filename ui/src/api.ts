@@ -1,4 +1,4 @@
-import { Customer, Item, SalesOrder, SalesOrderDetail, Shipment, StockSummary, QuoteOption, ProductionOrder, Recipe, Supplier, PurchaseOrder, Email, EmailDetail, Invoice, InvoiceDetail, Quote, QuoteDetail } from './types'
+import { Customer, Item, SalesOrder, SalesOrderDetail, Shipment, StockSummary, QuoteOption, ProductionOrder, Recipe, Supplier, PurchaseOrder, Email, EmailDetail, Invoice, InvoiceDetail, Quote, QuoteDetail, WorkCenter, WorkCenterDetail } from './types'
 
 const API_BASE = import.meta.env.VITE_API_BASE || '/api'
 
@@ -40,6 +40,8 @@ export const api = {
     return fetchJson<{ production_orders: ProductionOrder[] }>(`/production-orders?${query}`)
   },
   productionOrder: (id: string) => fetchJson<ProductionOrder>(`/production-orders/${encodeURIComponent(id)}`),
+  workCenters: () => fetchJson<{ work_centers: WorkCenter[] }>(`/work-centers`),
+  workCenterDetail: (id: string) => fetchJson<WorkCenterDetail>(`/work-centers/${encodeURIComponent(id)}`),
   quote: (sku: string, qty: number) => fetchJson<{ options: QuoteOption[] }>(`/quote-options?sku=${encodeURIComponent(sku)}&qty=${qty}`),
   recipes: (outputItemSku?: string) =>
     fetchJson<{ recipes: Recipe[] }>(`/recipes${outputItemSku ? `?output_item_sku=${encodeURIComponent(outputItemSku)}` : ''}`),

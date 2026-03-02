@@ -181,9 +181,38 @@ export type ProductionOperation = {
   sequence_order: number
   operation_name: string
   duration_hours: number
+  work_center?: string
   status: 'pending' | 'in_progress' | 'completed' | 'failed'
   started_at?: string
   completed_at?: string
+}
+
+export type WorkCenter = {
+  id: string
+  name: string
+  max_concurrent: number
+  description?: string
+  in_progress: number
+  pending: number
+  completed: number
+  utilization: number
+  ui_url?: string
+}
+
+export type WorkCenterDetail = WorkCenter & {
+  operations: Array<{
+    id: string
+    production_order_id: string
+    operation_name: string
+    duration_hours: number
+    status: 'pending' | 'in_progress' | 'completed'
+    started_at?: string
+    completed_at?: string
+    item_id: string
+    item_name?: string
+    item_sku?: string
+    production_order_ui_url?: string
+  }>
 }
 
 export type Recipe = {
