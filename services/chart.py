@@ -232,4 +232,4 @@ def generate_chart(
 chart_service = SimpleNamespace(
     generate_chart=generate_chart,
 )
-ChartService = type(chart_service)
+ChartService = chart_service

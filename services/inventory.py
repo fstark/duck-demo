@@ -133,4 +133,4 @@ inventory_service = SimpleNamespace(
     check_availability=check_availability,
     deduct_stock=deduct_stock,
 )
-InventoryService = type(inventory_service)
+InventoryService = inventory_service

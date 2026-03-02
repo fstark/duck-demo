@@ -135,4 +135,4 @@ logistics_service = SimpleNamespace(
     dispatch_shipment=dispatch_shipment,
     deliver_shipment=deliver_shipment,
 )
-LogisticsService = type(logistics_service)
+LogisticsService = logistics_service

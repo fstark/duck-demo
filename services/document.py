@@ -63,4 +63,4 @@ document_service = SimpleNamespace(
     get_document=get_document,
     list_documents=list_documents,
 )
-DocumentService = type(document_service)
+DocumentService = document_service

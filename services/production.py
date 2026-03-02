@@ -517,4 +517,4 @@ production_service = SimpleNamespace(
     advance_operations=advance_operations,
     update_readiness=update_readiness,
 )
-ProductionService = type(production_service)
+ProductionService = production_service

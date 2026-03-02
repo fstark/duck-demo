@@ -197,4 +197,4 @@ customer_service = SimpleNamespace(
     update_customer=update_customer,
     get_customer_details=get_customer_details,
 )
-CustomerService = type(customer_service)
+CustomerService = customer_service

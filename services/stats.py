@@ -264,4 +264,4 @@ stats_service = SimpleNamespace(
     get_statistics=get_statistics,
     _generate_chart_from_results=_generate_chart_from_results,
 )
-StatsService = type(stats_service)
+StatsService = stats_service

@@ -642,4 +642,4 @@ quote_service = SimpleNamespace(
     revise_quote=revise_quote,
     generate_quote_pdf=generate_quote_pdf,
 )
-QuoteService = type(quote_service)
+QuoteService = quote_service

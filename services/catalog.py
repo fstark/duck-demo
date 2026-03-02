@@ -108,4 +108,4 @@ catalog_service = SimpleNamespace(
     search_items=search_items,
     list_items=list_items,
 )
-CatalogService = type(catalog_service)
+CatalogService = catalog_service

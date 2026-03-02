@@ -238,4 +238,4 @@ pricing_service = SimpleNamespace(
     compute_pricing=compute_pricing,
     calculate_quote_options=calculate_quote_options,
 )
-PricingService = type(pricing_service)
+PricingService = pricing_service

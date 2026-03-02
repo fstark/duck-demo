@@ -39,4 +39,4 @@ recipe_service = SimpleNamespace(
     list_recipes=list_recipes,
     get_recipe=get_recipe,
 )
-RecipeService = type(recipe_service)
+RecipeService = recipe_service

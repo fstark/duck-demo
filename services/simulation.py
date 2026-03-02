@@ -180,4 +180,4 @@ simulation_service = SimpleNamespace(
     get_current_time=get_current_time,
     advance_time=advance_time,
 )
-SimulationService = type(simulation_service)
+SimulationService = simulation_service

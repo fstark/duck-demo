@@ -476,4 +476,4 @@ invoice_service = SimpleNamespace(
     mark_overdue=mark_overdue,
     generate_invoice_pdf=generate_invoice_pdf,
 )
-InvoiceService = type(invoice_service)
+InvoiceService = invoice_service

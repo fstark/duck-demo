@@ -145,4 +145,4 @@ messaging_service = SimpleNamespace(
     send_email=send_email,
     delete_email=delete_email,
 )
-MessagingService = type(messaging_service)
+MessagingService = messaging_service

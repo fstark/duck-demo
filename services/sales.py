@@ -189,4 +189,4 @@ sales_service = SimpleNamespace(
     confirm_order=confirm_order,
     complete_order=complete_order,
 )
-SalesService = type(sales_service)
+SalesService = sales_service

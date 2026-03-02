@@ -24,4 +24,4 @@ def reset_database(confirm: str) -> Dict[str, Any]:
 admin_service = SimpleNamespace(
     reset_database=reset_database,
 )
-AdminService = type(admin_service)
+AdminService = admin_service

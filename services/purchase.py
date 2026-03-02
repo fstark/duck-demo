@@ -71,4 +71,4 @@ purchase_service = SimpleNamespace(
     restock_materials=restock_materials,
     receive=receive,
 )
-PurchaseService = type(purchase_service)
+PurchaseService = purchase_service
