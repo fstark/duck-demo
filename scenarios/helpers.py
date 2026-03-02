@@ -20,6 +20,7 @@ from services import (
     recipe_service,
     purchase_service,
     messaging_service,
+    activity_service,
 )
 from services._base import db_conn
 
@@ -244,17 +245,22 @@ def run_full_sales_cycle(
         note=note,
     )
     result["quote_id"] = quote["quote_id"]
+    activity_service.log_activity("scenario", "sales", "quote.created", "quote", quote["quote_id"], {"customer_id": customer_id})
 
     # 2. Send quote
     quote_service.send_quote(quote["quote_id"])
+    activity_service.log_activity("scenario", "sales", "quote.sent", "quote", quote["quote_id"])
 
     # 3. Accept quote (auto-creates SO)
     accept = quote_service.accept_quote(quote["quote_id"])
     so_id = accept["sales_order_id"]
     result["sales_order_id"] = so_id
+    activity_service.log_activity("scenario", "sales", "quote.accepted", "quote", quote["quote_id"], {"sales_order_id": so_id})
+    activity_service.log_activity("scenario", "sales", "sales_order.created", "sales_order", so_id, {"customer_id": customer_id})
 
     # 4. Confirm SO
     sales_service.confirm_order(so_id)
+    activity_service.log_activity("scenario", "sales", "sales_order.confirmed", "sales_order", so_id)
 
     # 5. Production — one order per line's recipe
     mo_ids = []
@@ -270,9 +276,11 @@ def run_full_sales_cycle(
         for _ in range(batches_needed):
             mo = production_service.create_order(recipe_id=recipe_id, sales_order_id=so_id, notes=f"For {so_id}")
             mo_ids.append(mo["production_order_id"])
+            activity_service.log_activity("scenario", "production", "production_order.created", "production_order", mo["production_order_id"], {"sales_order_id": so_id, "recipe_id": recipe_id})
             # Start if ready
             if mo["status"] == "ready":
                 production_service.start_order(mo["production_order_id"])
+                activity_service.log_activity("scenario", "production", "production_order.started", "production_order", mo["production_order_id"])
     result["production_order_ids"] = mo_ids
 
     # 6. Advance time for production to complete
@@ -292,10 +300,12 @@ def run_full_sales_cycle(
         reference={"type": "sales_order", "id": so_id},
     )
     result["shipment_id"] = ship["shipment_id"]
+    activity_service.log_activity("scenario", "logistics", "shipment.created", "shipment", ship["shipment_id"], {"sales_order_id": so_id})
 
     # Dispatch (deducts stock)
     try:
         logistics_service.dispatch_shipment(ship["shipment_id"])
+        activity_service.log_activity("scenario", "logistics", "shipment.dispatched", "shipment", ship["shipment_id"])
     except ValueError as e:
         logger.warning("Could not dispatch %s: %s", ship["shipment_id"], e)
 
@@ -307,6 +317,7 @@ def run_full_sales_cycle(
     inv = invoice_service.create_invoice(so_id)
     result["invoice_id"] = inv["invoice_id"]
     invoice_service.issue_invoice(inv["invoice_id"])
+    activity_service.log_activity("scenario", "billing", "invoice.issued", "invoice", inv["invoice_id"], {"sales_order_id": so_id, "total": inv["total"]})
 
     # 10. Payment
     if pay:
@@ -316,9 +327,11 @@ def run_full_sales_cycle(
             payment_method="bank_transfer",
             reference=f"VIR-{so_id}",
         )
+        activity_service.log_activity("scenario", "billing", "payment.recorded", "invoice", inv["invoice_id"], {"amount": inv["total"]})
 
     # 11. Complete SO
     sales_service.complete_order(so_id)
+    activity_service.log_activity("scenario", "sales", "sales_order.completed", "sales_order", so_id)
 
     return result
 
@@ -346,11 +359,16 @@ def create_sales_order_only(
         lines=lines,
         note=note,
     )
+    activity_service.log_activity("scenario", "sales", "quote.created", "quote", q["quote_id"], {"customer_id": customer_id})
     quote_service.send_quote(q["quote_id"])
+    activity_service.log_activity("scenario", "sales", "quote.sent", "quote", q["quote_id"])
     accept = quote_service.accept_quote(q["quote_id"])
     so_id = accept["sales_order_id"]
+    activity_service.log_activity("scenario", "sales", "quote.accepted", "quote", q["quote_id"], {"sales_order_id": so_id})
+    activity_service.log_activity("scenario", "sales", "sales_order.created", "sales_order", so_id, {"customer_id": customer_id})
     if confirm:
         sales_service.confirm_order(so_id)
+        activity_service.log_activity("scenario", "sales", "sales_order.confirmed", "sales_order", so_id)
     return so_id
 
 
@@ -374,8 +392,10 @@ def create_quote_only(
         note=note,
         valid_days=valid_days,
     )
+    activity_service.log_activity("scenario", "sales", "quote.created", "quote", q["quote_id"], {"customer_id": customer_id})
     if send:
         quote_service.send_quote(q["quote_id"])
+        activity_service.log_activity("scenario", "sales", "quote.sent", "quote", q["quote_id"])
     return q["quote_id"]
 
 
@@ -470,8 +490,10 @@ def trigger_production_for_orders(
             for _ in range(batches):
                 mo = production_service.create_order(recipe_id=recipe_id, sales_order_id=so_id, notes=f"For {so_id}")
                 mo_ids.append(mo["production_order_id"])
+                activity_service.log_activity("scenario", "production", "production_order.created", "production_order", mo["production_order_id"], {"sales_order_id": so_id, "recipe_id": recipe_id})
                 if start and mo["status"] == "ready":
                     production_service.start_order(mo["production_order_id"])
+                    activity_service.log_activity("scenario", "production", "production_order.started", "production_order", mo["production_order_id"])
     return mo_ids
 
 
@@ -499,7 +521,11 @@ def create_supply_disruption(material_sku: str, delay_days: int) -> int:
 
 def restock_materials() -> Dict[str, Any]:
     """Trigger automatic restock check for all materials below reorder point."""
-    return purchase_service.restock_materials()
+    result = purchase_service.restock_materials()
+    n_created = result.get("purchase_orders_created", 0)
+    if n_created:
+        activity_service.log_activity("scenario", "purchasing", "purchase_orders.restocked", "purchase_order", None, {"count": n_created})
+    return result
 
 
 def send_email(
@@ -516,6 +542,7 @@ def send_email(
         sales_order_id=sales_order_id,
     )
     messaging_service.send_email(result["email_id"])
+    activity_service.log_activity("scenario", "sales", "email.sent", "email", result["email_id"], {"customer_id": customer_id})
     return result["email_id"]
 
 

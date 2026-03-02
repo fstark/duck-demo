@@ -320,3 +320,19 @@ CREATE INDEX IF NOT EXISTS idx_purchord_status ON purchase_orders(status, expect
 CREATE INDEX IF NOT EXISTS idx_sos_ship ON sales_order_shipments(shipment_id);
 CREATE INDEX IF NOT EXISTS idx_payments_inv ON payments(invoice_id);
 CREATE INDEX IF NOT EXISTS idx_emails_cust ON emails(customer_id);
+
+-- Activity log: persistent event stream for factory observability
+CREATE TABLE IF NOT EXISTS activity_log (
+    id          TEXT PRIMARY KEY,
+    timestamp   TEXT NOT NULL,
+    actor       TEXT NOT NULL,
+    category    TEXT NOT NULL,
+    action      TEXT NOT NULL,
+    entity_type TEXT,
+    entity_id   TEXT,
+    details     TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_actlog_ts       ON activity_log(timestamp);
+CREATE INDEX IF NOT EXISTS idx_actlog_entity   ON activity_log(entity_type, entity_id);
+CREATE INDEX IF NOT EXISTS idx_actlog_action   ON activity_log(action);
+CREATE INDEX IF NOT EXISTS idx_actlog_category ON activity_log(category);

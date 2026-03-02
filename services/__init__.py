@@ -18,6 +18,7 @@ from services.document import document_service, DocumentService
 from services.stats import stats_service, StatsService
 from services.admin import admin_service, AdminService
 from services.chart import chart_service, ChartService
+from services.activity import activity_service, ActivityService
 
 __all__ = [
     "db_conn",
@@ -38,4 +39,5 @@ __all__ = [
     "stats_service", "StatsService",
     "admin_service", "AdminService",
     "chart_service", "ChartService",
+    "activity_service", "ActivityService",
 ]

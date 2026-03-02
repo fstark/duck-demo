@@ -82,6 +82,10 @@ def advance_time(
         overdue_count = invoice_service.mark_overdue(new_time)
         if overdue_count > 0:
             result["invoices_marked_overdue"] = overdue_count
+            from services.activity import log_activity
+            # Log each overdue invoice individually would be expensive;
+            # log one summary event instead.
+            log_activity("system", "billing", "invoice.overdue", details={"count": overdue_count}, timestamp=new_time)
 
         # --- Side-effect 2: auto-complete production orders ---
         # Phase A: tick operations for all in-progress MOs based on elapsed time
@@ -138,6 +142,12 @@ def advance_time(
         if completed_mos:
             conn.commit()
             result["production_orders_completed"] = completed_mos
+            from services.activity import log_batch
+            log_batch([
+                {"actor": "system", "category": "production", "action": "production_order.completed",
+                 "entity_type": "production_order", "entity_id": mo_id, "timestamp": new_time}
+                for mo_id in completed_mos
+            ])
 
         # --- Side-effect 3: auto-deliver shipments ---
         delivered_ships = []
@@ -155,6 +165,12 @@ def advance_time(
         if delivered_ships:
             conn.commit()
             result["shipments_delivered"] = delivered_ships
+            from services.activity import log_batch
+            log_batch([
+                {"actor": "system", "category": "logistics", "action": "shipment.delivered",
+                 "entity_type": "shipment", "entity_id": sid, "timestamp": new_time}
+                for sid in delivered_ships
+            ])
 
         # --- Side-effect 4: expire quotes ---
         expired_count = conn.execute(
@@ -164,6 +180,8 @@ def advance_time(
         ).rowcount
         if expired_count > 0:
             result["quotes_expired"] = expired_count
+            from services.activity import log_activity
+            log_activity("system", "sales", "quote.expired", details={"count": expired_count}, timestamp=new_time)
         conn.commit()  # release write lock before update_readiness opens a new connection
 
         # --- Side-effect 5: promote waiting → ready production orders ---
@@ -171,6 +189,12 @@ def advance_time(
         readiness = production_service.update_readiness()
         if readiness["promoted_to_ready"]:
             result["production_orders_promoted"] = readiness["promoted_to_ready"]
+            from services.activity import log_batch
+            log_batch([
+                {"actor": "system", "category": "production", "action": "production_order.promoted",
+                 "entity_type": "production_order", "entity_id": mo_id, "timestamp": new_time}
+                for mo_id in readiness["promoted_to_ready"]
+            ])
 
         return result
 

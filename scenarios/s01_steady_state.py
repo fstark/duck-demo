@@ -31,6 +31,7 @@ from scenarios.helpers import (
 )
 from utils import ship_to_dict
 from services import (
+    activity_service,
     inventory_service,
     invoice_service,
     logistics_service,
@@ -133,6 +134,7 @@ def _start_ready_mos() -> int:
         result = production_service.start_order(mo["id"])
         if result["status"] == "in_progress":
             started += 1
+            activity_service.log_activity("scenario", "production", "production_order.started", "production_order", mo["id"])
     return started
 
 
@@ -149,6 +151,7 @@ def _receive_due_pos() -> int:
         try:
             purchase_service.receive(po["id"], warehouse=config.WAREHOUSE_DEFAULT, location=config.LOC_RAW_MATERIAL_RECV)
             received += 1
+            activity_service.log_activity("scenario", "purchasing", "purchase_order.received", "purchase_order", po["id"])
         except Exception as e:
             logger.debug("PO %s receive skipped: %s", po["id"], e)
     return received
@@ -211,6 +214,7 @@ def _ship_ready_orders(so_ids: List[str]) -> List[str]:
             )
             logistics_service.dispatch_shipment(ship["shipment_id"])
             ship_ids.append(ship["shipment_id"])
+            activity_service.log_activity("scenario", "logistics", "shipment.dispatched", "shipment", ship["shipment_id"], {"sales_order_id": so_id})
         except Exception as e:
             logger.warning("Ship failed for %s: %s", so_id, e)
     return ship_ids
@@ -240,6 +244,7 @@ def _invoice_shipped_orders(so_ids: List[str], pay_pct: float = 0.75,
             inv = invoice_service.create_invoice(so_id)
             invoice_service.issue_invoice(inv["invoice_id"])
             count += 1
+            activity_service.log_activity("scenario", "billing", "invoice.issued", "invoice", inv["invoice_id"], {"sales_order_id": so_id, "total": inv["total"]})
             if random.random() < pay_pct:
                 invoice_service.record_payment(
                     invoice_id=inv["invoice_id"],
@@ -249,7 +254,9 @@ def _invoice_shipped_orders(so_ids: List[str], pay_pct: float = 0.75,
                     ]),
                     reference=f"VIR-{so_id}",
                 )
+                activity_service.log_activity("scenario", "billing", "payment.recorded", "invoice", inv["invoice_id"], {"amount": inv["total"]})
             sales_service.complete_order(so_id)
+            activity_service.log_activity("scenario", "sales", "sales_order.completed", "sales_order", so_id)
             if completed_set is not None:
                 completed_set.add(so_id)
         except Exception as e:

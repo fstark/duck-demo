@@ -33,7 +33,7 @@ def dict_rows(rows: Iterable[sqlite3.Row]) -> list[dict]:
 
 
 def generate_id(conn: sqlite3.Connection, prefix: str, table: str, column: str = "id") -> str:
-    seed_defaults = {"CUST": 101, "SO": 1041, "SHIP": 899, "INV": 2000, "PAY": 3000}
+    seed_defaults = {"CUST": 101, "SO": 1041, "SHIP": 899, "INV": 2000, "PAY": 3000, "ACT": 0}
     pattern = f"{prefix}-%"
     prefix_len = len(prefix) + 2  # skip "PREFIX-"
     row = conn.execute(
