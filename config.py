@@ -37,3 +37,13 @@ LOG_FILE = os.getenv("LOG_FILE", "duck-demo.log")
 # Override with API_BASE environment variable for production/tunnel deployments
 # Examples: http://localhost:5173, https://yourdomain.com, https://abc123.ngrok.io
 API_BASE = os.getenv("API_BASE", "http://127.0.0.1:5173")
+
+# Work center capacity (max concurrent operations per center)
+WORK_CENTER_CAPACITY = {
+    "MOLDING": 3,
+    "PAINTING": 4,
+    "CURING": 2,
+    "ASSEMBLY": 2,
+    "QC": 2,
+    "PACKAGING": 3,
+}

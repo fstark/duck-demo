@@ -74,7 +74,15 @@ def create_order(recipe_id: str, sales_order_id: str, notes: Optional[str] = Non
         conn.execute("INSERT INTO production_orders (id, sales_order_id, recipe_id, item_id, status, eta_finish, eta_ship) VALUES (?, ?, ?, ?, ?, ?, ?)", (order_id, sales_order_id, recipe_id, recipe_data["output_item_id"], status, eta_finish, eta_ship))
         for op in recipe_data["operations"]:
             pop_id = generate_id(conn, "POP", "production_operations")
-            conn.execute("INSERT INTO production_operations (id, production_order_id, recipe_operation_id, sequence_order, operation_name, duration_hours, status) VALUES (?, ?, ?, ?, ?, ?, ?)", (pop_id, order_id, op["id"], op["sequence_order"], op["operation_name"], op["duration_hours"], "pending"))
+            conn.execute(
+                "INSERT INTO production_operations "
+                "(id, production_order_id, recipe_operation_id, sequence_order, "
+                "operation_name, duration_hours, work_center, status) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (pop_id, order_id, op["id"], op["sequence_order"],
+                 op["operation_name"], op["duration_hours"],
+                 op.get("work_center"), "pending"),
+            )
         conn.commit()
         return {"production_order_id": order_id, "recipe_id": recipe_id, "output_item": recipe_data["output_sku"], "output_qty": recipe_data["output_qty"], "status": status, "eta_finish": eta_finish, "eta_ship": eta_ship, "ingredient_shortfalls": shortfalls, "ui_url": ui_href("production-orders", order_id)}
 
@@ -270,18 +278,45 @@ def advance_operations(production_order_id: str, sim_time: str, conn=None) -> Di
         now = datetime.fromisoformat(sim_time)
 
         ops = dict_rows(c.execute(
-            "SELECT id, sequence_order, operation_name, duration_hours, status "
-            "FROM production_operations WHERE production_order_id = ? ORDER BY sequence_order",
+            "SELECT id, sequence_order, operation_name, duration_hours, "
+            "work_center, status "
+            "FROM production_operations WHERE production_order_id = ? "
+            "ORDER BY sequence_order",
             (production_order_id,),
         ))
         if not ops:
             return {"all_done": True, "current_operation": None}
 
+        # Pre-fetch work center capacity limits
+        wc_rows = c.execute(
+            "SELECT name, max_concurrent FROM work_centers"
+        ).fetchall()
+        wc_capacity = {r["name"]: r["max_concurrent"] for r in wc_rows}
+
+        # Count currently in-progress ops per work center (excluding this MO,
+        # since we'll recompute its state)
+        wc_usage_rows = c.execute(
+            "SELECT work_center, COUNT(*) as cnt "
+            "FROM production_operations "
+            "WHERE status = 'in_progress' AND work_center IS NOT NULL "
+            "AND production_order_id != ? "
+            "GROUP BY work_center",
+            (production_order_id,),
+        ).fetchall()
+        wc_used = {r["work_center"]: r["cnt"] for r in wc_usage_rows}
+
         cursor = mo_start
         current_operation = None
         all_done = True
+        blocked = False  # once blocked, all subsequent ops stay pending
 
         for op in ops:
+            if blocked:
+                all_done = False
+                if current_operation is None:
+                    current_operation = op["operation_name"]
+                continue
+
             op_start = cursor
             op_end = cursor + timedelta(hours=op["duration_hours"])
 
@@ -293,14 +328,39 @@ def advance_operations(production_order_id: str, sim_time: str, conn=None) -> Di
                         "started_at = ?, completed_at = ? WHERE id = ?",
                         (op_start.isoformat(), op_end.isoformat(), op["id"]),
                     )
+                    # Free up work center slot
+                    wc = op.get("work_center")
+                    if wc and wc in wc_used:
+                        wc_used[wc] = max(0, wc_used[wc] - 1)
             elif now >= op_start:
-                # This operation is currently in progress
+                # Check work center capacity before allowing in_progress
+                wc = op.get("work_center")
+                if wc and wc in wc_capacity:
+                    used = wc_used.get(wc, 0)
+                    if used >= wc_capacity[wc]:
+                        # Work center full — this op must wait
+                        blocked = True
+                        all_done = False
+                        current_operation = op["operation_name"]
+                        # Revert to pending if it was somehow in_progress
+                        if op["status"] == "in_progress":
+                            c.execute(
+                                "UPDATE production_operations "
+                                "SET status = 'pending', started_at = NULL "
+                                "WHERE id = ?",
+                                (op["id"],),
+                            )
+                        continue
+
                 if op["status"] != "in_progress":
                     c.execute(
                         "UPDATE production_operations SET status = 'in_progress', "
                         "started_at = ? WHERE id = ?",
                         (op_start.isoformat(), op["id"]),
                     )
+                # Reserve the slot
+                if wc:
+                    wc_used[wc] = wc_used.get(wc, 0) + 1
                 current_operation = op["operation_name"]
                 all_done = False
             else:

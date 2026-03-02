@@ -119,16 +119,16 @@ def _std_recipe(item_id: str, size_cm: int, dyes: list, extra_materials: list = 
     ingredients.append((box, 1, "ea"))
 
     operations = [
-        ("Mold injection", round(0.5 + size_cm * 0.05, 2)),
-        ("Cooling", 0.5),
+        ("Mold injection", round(0.5 + size_cm * 0.05, 2), "MOLDING"),
+        ("Cooling", 0.5, "CURING"),
     ]
     # Paint operations per dye
     for item_id_dye, qty, _uom in dyes:
         colour = item_id_dye.replace("ITEM-", "").replace("-DYE", "").replace("-", " ").title()
-        operations.append((f"Paint {colour.lower()}", round(0.3 + qty / 300, 2)))
+        operations.append((f"Paint {colour.lower()}", round(0.3 + qty / 300, 2), "PAINTING"))
     operations.extend(extra_ops or [])
-    operations.append(("Quality check", 0.25))
-    operations.append(("Pack into box", 0.25))
+    operations.append(("Quality check", 0.25, "QC"))
+    operations.append(("Pack into box", 0.25, "PACKAGING"))
 
     total_hours = round(sum(op[1] for op in operations), 1)
     output_qty = max(6, 24 - size_cm)  # larger ducks → smaller batch
@@ -152,37 +152,37 @@ def _build_recipe_defs():
         "output_qty": 12, "prod_hours": 3.5,
         "notes": "Elvis Duck 20cm - signature black hair and white jumpsuit",
         "ingredients": [("ITEM-PVC", 2400, "g"), ("ITEM-BLACK-DYE", 180, "ml"), ("ITEM-YELLOW-DYE", 50, "ml"), ("ITEM-BOX-MEDIUM", 1, "ea")],
-        "operations": [("Mold injection", 1.5), ("Cooling", 0.5), ("Paint hair black", 0.75), ("Paint details yellow", 0.5), ("Pack into box", 0.25)],
+        "operations": [("Mold injection", 1.5, "MOLDING"), ("Cooling", 0.5, "CURING"), ("Paint hair black", 0.75, "PAINTING"), ("Paint details yellow", 0.5, "PAINTING"), ("Pack into box", 0.25, "PACKAGING")],
     }
     defs["ITEM-CLASSIC-10"] = {
         "output_qty": 24, "prod_hours": 2.5,
         "notes": "Classic yellow duck - high volume simple design",
         "ingredients": [("ITEM-PVC", 1200, "g"), ("ITEM-YELLOW-DYE", 150, "ml"), ("ITEM-BOX-SMALL", 2, "ea")],
-        "operations": [("Mold injection", 1.0), ("Paint yellow", 0.75), ("Quality check", 0.5), ("Pack into boxes", 0.25)],
+        "operations": [("Mold injection", 1.0, "MOLDING"), ("Paint yellow", 0.75, "PAINTING"), ("Quality check", 0.5, "QC"), ("Pack into boxes", 0.25, "PACKAGING")],
     }
     defs["ITEM-ROBOT-25"] = {
         "output_qty": 8, "prod_hours": 6.5,
         "notes": "Robot Duck - metallic finish, most complex design",
         "ingredients": [("ITEM-PVC", 3200, "g"), ("ITEM-BLACK-DYE", 200, "ml"), ("ITEM-YELLOW-DYE", 80, "ml"), ("ITEM-BOX-MEDIUM", 1, "ea")],
-        "operations": [("Mold injection", 2.0), ("Curing process", 1.0), ("Base coat", 1.5), ("Paint robot details", 1.0), ("Assemble parts", 0.5), ("Quality check", 0.25), ("Pack into box", 0.25)],
+        "operations": [("Mold injection", 2.0, "MOLDING"), ("Curing process", 1.0, "CURING"), ("Base coat", 1.5, "PAINTING"), ("Paint robot details", 1.0, "PAINTING"), ("Assemble parts", 0.5, "ASSEMBLY"), ("Quality check", 0.25, "QC"), ("Pack into box", 0.25, "PACKAGING")],
     }
     defs["ITEM-PIRATE-15"] = {
         "output_qty": 12, "prod_hours": 4.0,
         "notes": "Pirate Duck with eye patch and hat",
         "ingredients": [("ITEM-PVC", 1800, "g"), ("ITEM-BLACK-DYE", 150, "ml"), ("ITEM-YELLOW-DYE", 60, "ml"), ("ITEM-BOX-SMALL", 1, "ea")],
-        "operations": [("Mold injection", 1.5), ("Cooling", 0.5), ("Paint base yellow", 0.75), ("Paint pirate details", 0.75), ("Quality check", 0.25), ("Pack into box", 0.25)],
+        "operations": [("Mold injection", 1.5, "MOLDING"), ("Cooling", 0.5, "CURING"), ("Paint base yellow", 0.75, "PAINTING"), ("Paint pirate details", 0.75, "PAINTING"), ("Quality check", 0.25, "QC"), ("Pack into box", 0.25, "PACKAGING")],
     }
     defs["ITEM-NINJA-12"] = {
         "output_qty": 12, "prod_hours": 3.75,
         "notes": "Ninja Duck with mask and ninja outfit",
         "ingredients": [("ITEM-PVC", 1400, "g"), ("ITEM-BLACK-DYE", 160, "ml"), ("ITEM-YELLOW-DYE", 40, "ml"), ("ITEM-BOX-SMALL", 1, "ea")],
-        "operations": [("Mold injection", 1.25), ("Cooling", 0.5), ("Paint ninja outfit", 1.0), ("Quality check", 0.75), ("Pack into box", 0.25)],
+        "operations": [("Mold injection", 1.25, "MOLDING"), ("Cooling", 0.5, "CURING"), ("Paint ninja outfit", 1.0, "PAINTING"), ("Quality check", 0.75, "QC"), ("Pack into box", 0.25, "PACKAGING")],
     }
     defs["ITEM-UNICORN-25"] = {
         "output_qty": 10, "prod_hours": 5.0,
         "notes": "Unicorn Duck with horn and rainbow colors",
         "ingredients": [("ITEM-PVC", 2500, "g"), ("ITEM-BLACK-DYE", 100, "ml"), ("ITEM-YELLOW-DYE", 120, "ml"), ("ITEM-BOX-MEDIUM", 1, "ea")],
-        "operations": [("Mold injection", 1.75), ("Cooling", 0.75), ("Paint rainbow colors", 1.5), ("Attach horn", 0.5), ("Quality check", 0.25), ("Pack into box", 0.25)],
+        "operations": [("Mold injection", 1.75, "MOLDING"), ("Cooling", 0.75, "CURING"), ("Paint rainbow colors", 1.5, "PAINTING"), ("Attach horn", 0.5, "ASSEMBLY"), ("Quality check", 0.25, "QC"), ("Pack into box", 0.25, "PACKAGING")],
     }
 
     # --- Auto-generated recipes for remaining ducks ---
@@ -353,14 +353,22 @@ def populate() -> dict:
                     "INSERT INTO recipe_ingredients (id, recipe_id, sequence_order, input_item_id, input_qty, input_uom) VALUES (?,?,?,?,?,?)",
                     (f"ING-{ing_counter:04d}", rcp_id, seq, inp_item_id, inp_qty, inp_uom),
                 )
-            for seq, (op_name, dur) in enumerate(rdef["operations"], start=1):
+            for seq, (op_name, dur, wc) in enumerate(rdef["operations"], start=1):
                 op_counter += 1
                 conn.execute(
-                    "INSERT INTO recipe_operations (id, recipe_id, sequence_order, operation_name, duration_hours) VALUES (?,?,?,?,?)",
-                    (f"OP-{op_counter:04d}", rcp_id, seq, op_name, dur),
+                    "INSERT INTO recipe_operations (id, recipe_id, sequence_order, operation_name, duration_hours, work_center) VALUES (?,?,?,?,?,?)",
+                    (f"OP-{op_counter:04d}", rcp_id, seq, op_name, dur, wc),
                 )
         logger.info("Inserted %d recipes (%d ingredients, %d operations)",
                      len(recipe_defs), ing_counter, op_counter)
+
+        # ---- Work centers ----
+        for wc_name, max_conc in config.WORK_CENTER_CAPACITY.items():
+            conn.execute(
+                "INSERT INTO work_centers (id, name, max_concurrent, description) VALUES (?,?,?,?)",
+                (f"WC-{wc_name}", wc_name, max_conc, f"{wc_name.title()} work center"),
+            )
+        logger.info("Inserted %d work centers", len(config.WORK_CENTER_CAPACITY))
 
         # ---- Initial raw material stock ----
         for idx, (item_id, wh, loc, qty) in enumerate(INITIAL_STOCK, start=1):

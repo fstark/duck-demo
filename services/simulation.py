@@ -92,7 +92,8 @@ def advance_time(
             "SELECT po.id, po.item_id, r.output_qty "
             "FROM production_orders po "
             "JOIN recipes r ON po.recipe_id = r.id "
-            "WHERE po.status = 'in_progress'",
+            "WHERE po.status = 'in_progress' "
+            "ORDER BY po.started_at",
         ).fetchall()
         for mo in all_in_progress:
             result = advance_operations(mo["id"], new_time, conn=conn)

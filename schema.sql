@@ -169,6 +169,7 @@ CREATE TABLE IF NOT EXISTS production_operations (
     sequence_order INTEGER NOT NULL,
     operation_name TEXT NOT NULL,
     duration_hours REAL NOT NULL,
+    work_center TEXT,
     status TEXT DEFAULT 'pending',
     started_at TEXT,
     completed_at TEXT
@@ -203,6 +204,14 @@ CREATE TABLE IF NOT EXISTS recipe_ingredients (
     notes TEXT
 );
 
+-- Work centers define shared production resources with finite capacity
+CREATE TABLE IF NOT EXISTS work_centers (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL UNIQUE,
+    max_concurrent INTEGER NOT NULL DEFAULT 1,
+    description TEXT
+);
+
 -- Recipe operations (production steps)
 CREATE TABLE IF NOT EXISTS recipe_operations (
     id TEXT PRIMARY KEY,
@@ -210,6 +219,7 @@ CREATE TABLE IF NOT EXISTS recipe_operations (
     sequence_order INTEGER NOT NULL,
     operation_name TEXT NOT NULL,
     duration_hours REAL NOT NULL,
+    work_center TEXT,
     notes TEXT
 );
 
@@ -299,6 +309,7 @@ CREATE INDEX IF NOT EXISTS idx_sol_item ON sales_order_lines(item_id);
 CREATE INDEX IF NOT EXISTS idx_ri_recipe ON recipe_ingredients(recipe_id);
 CREATE INDEX IF NOT EXISTS idx_ro_recipe ON recipe_operations(recipe_id);
 CREATE INDEX IF NOT EXISTS idx_po_ops ON production_operations(production_order_id);
+CREATE INDEX IF NOT EXISTS idx_po_ops_wc ON production_operations(work_center, status);
 CREATE INDEX IF NOT EXISTS idx_mo_status ON production_orders(status);
 CREATE INDEX IF NOT EXISTS idx_inv_so ON invoices(sales_order_id);
 CREATE INDEX IF NOT EXISTS idx_shiplines_ship ON shipment_lines(shipment_id);
