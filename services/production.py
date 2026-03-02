@@ -17,7 +17,34 @@ def get_statistics() -> Dict[str, Any]:
         total_qty = conn.execute("SELECT SUM(r.output_qty) as total FROM production_orders po JOIN recipes r ON po.recipe_id = r.id").fetchone()["total"] or 0
         top_items = dict_rows(conn.execute("SELECT i.sku, i.name, SUM(r.output_qty) as total_qty, COUNT(*) as order_count FROM production_orders po JOIN recipes r ON po.recipe_id = r.id JOIN items i ON po.item_id = i.id GROUP BY i.id, i.sku, i.name ORDER BY total_qty DESC LIMIT 10"))
         upcoming = dict_rows(conn.execute("SELECT i.sku, i.name, r.output_qty as qty, po.eta_finish, po.status FROM production_orders po JOIN recipes r ON po.recipe_id = r.id JOIN items i ON po.item_id = i.id WHERE po.eta_finish >= date('now') AND po.eta_finish <= date('now', '+60 days') ORDER BY po.eta_finish LIMIT 20"))
-        return {"total_production_orders": total_production, "production_orders_by_status": status_rows, "total_quantity_in_production": total_qty, "top_items_in_production": top_items, "upcoming_production": upcoming}
+        
+        # Work center statistics
+        wc_stats = dict_rows(conn.execute("""
+            SELECT 
+                wc.name,
+                wc.max_concurrent,
+                COUNT(CASE WHEN pop.status = 'in_progress' THEN 1 END) as in_progress,
+                COUNT(CASE WHEN pop.status = 'pending' THEN 1 END) as pending
+            FROM work_centers wc
+            LEFT JOIN production_operations pop ON wc.name = pop.work_center
+            GROUP BY wc.id, wc.name, wc.max_concurrent
+            ORDER BY wc.name
+        """))
+        for wc in wc_stats:
+            wc["utilization_percent"] = round(wc["in_progress"] / wc["max_concurrent"] * 100, 1) if wc["max_concurrent"] > 0 else 0
+            wc["is_bottleneck"] = wc["in_progress"] >= wc["max_concurrent"]
+        
+        bottlenecks = [wc for wc in wc_stats if wc["is_bottleneck"]]
+        
+        return {
+            "total_production_orders": total_production,
+            "production_orders_by_status": status_rows,
+            "total_quantity_in_production": total_qty,
+            "top_items_in_production": top_items,
+            "upcoming_production": upcoming,
+            "work_centers": wc_stats,
+            "bottlenecked_work_centers": bottlenecks,
+        }
 
 
 def get_order_status(production_order_id: str) -> Dict[str, Any]:
