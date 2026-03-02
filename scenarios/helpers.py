@@ -70,6 +70,21 @@ def future_date(days: int) -> str:
     return (now + timedelta(days=days)).strftime("%Y-%m-%d")
 
 
+def set_day_time(hour: int, minute: int = 0) -> str:
+    """Set the simulation clock to a specific hour on the current sim date.
+
+    Useful for giving entities realistic intra-day timestamps
+    (e.g. orders at 10:00, shipping at 14:00).
+    Does NOT trigger side-effects — call advance_and_settle separately.
+
+    Returns the new simulation time as ISO string.
+    """
+    date_part = sim_date()
+    target = f"{date_part} {hour:02d}:{minute:02d}:00"
+    simulation_service.advance_time(to_time=target, side_effects=False)
+    return target
+
+
 # ---------------------------------------------------------------------------
 # Customer helpers
 # ---------------------------------------------------------------------------

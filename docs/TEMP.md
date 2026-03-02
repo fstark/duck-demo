@@ -1,3 +1,8 @@
+* In scenario quotes generation, it could be cool to have a few quotes with revisions.
+
+
+
+
 we now need to build a robust framework to simulate protuction. I think the first thing we would need is a way too keep track of the simulated time.
 Add a state table with a single line with the current time.
 Display the date and time in the UI and have an mcp for that too.
