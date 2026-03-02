@@ -35,11 +35,14 @@ import QuotesListPage from './pages/QuotesListPage'
 import QuoteDetailPage from './pages/QuoteDetailPage'
 import { WorkCentersListPage } from './pages/WorkCentersListPage'
 import { WorkCenterDetailPage } from './pages/WorkCenterDetailPage'
+import { ActivityLogPage } from './pages/ActivityLogPage'
+import { DashboardPage } from './pages/DashboardPage'
+import { DashboardData } from './types'
 
 type SortDir = 'asc' | 'desc'
 type SortState<T> = { key: keyof T; dir: SortDir }
 
-type ViewPage = 'home' | 'customers' | 'items' | 'stock' | 'orders' | 'shipments' | 'production' | 'suppliers' | 'recipes' | 'purchase-orders' | 'emails' | 'invoices' | 'quotes' | 'work-centers'
+type ViewPage = 'home' | 'customers' | 'items' | 'stock' | 'orders' | 'shipments' | 'production' | 'suppliers' | 'recipes' | 'purchase-orders' | 'emails' | 'invoices' | 'quotes' | 'work-centers' | 'dashboard' | 'activity'
 type ViewState = { page: ViewPage; id?: string }
 
 function SectionHeading({ id, title }: { id: string; title: string }) {
@@ -56,7 +59,7 @@ function parseHash(): ViewState {
   const parts = hash.split('/').filter(Boolean)
   const page = (parts[0] as ViewPage) || 'home'
   const id = parts[1] ? decodeURIComponent(parts.slice(1).join('/')) : undefined
-  const allowed: ViewPage[] = ['home', 'customers', 'items', 'stock', 'orders', 'shipments', 'production', 'suppliers', 'recipes', 'purchase-orders', 'emails', 'invoices', 'quotes', 'work-centers']
+  const allowed: ViewPage[] = ['home', 'customers', 'items', 'stock', 'orders', 'shipments', 'production', 'suppliers', 'recipes', 'purchase-orders', 'emails', 'invoices', 'quotes', 'work-centers', 'dashboard', 'activity']
   return { page: allowed.includes(page) ? page : 'home', id }
 }
 
@@ -110,6 +113,7 @@ function AppContent() {
   const [quotesCount, setQuotesCount] = useState(0)
   const [quotesPending, setQuotesPending] = useState(0)
   const [totalQuotesAmount, setTotalQuotesAmount] = useState(0)
+  const [dashData, setDashData] = useState<DashboardData | null>(null)
   const [view, setView] = useState<ViewState>(() => parseHash())
   const [apiError, setApiError] = useState<string | null>(null)
   const [spotlight, setSpotlight] = useState<{
@@ -163,6 +167,7 @@ function AppContent() {
       setTotalQuotesAmount(total)
     }).catch(handleApiError)
     api.spotlight().then(setSpotlight).catch(handleApiError)
+    api.dashboard().then(setDashData).catch(handleApiError)
   }, [])
 
   useEffect(() => {
@@ -198,6 +203,13 @@ function AppContent() {
         { page: 'work-centers' as ViewPage, label: 'Work Centers' },
         { page: 'suppliers' as ViewPage, label: 'Suppliers' },
         { page: 'purchase-orders' as ViewPage, label: 'Purchases' },
+      ],
+    },
+    {
+      label: 'Monitoring',
+      items: [
+        { page: 'dashboard' as ViewPage, label: 'Dashboard' },
+        { page: 'activity' as ViewPage, label: 'Activity Log' },
       ],
     },
   ]
@@ -275,6 +287,66 @@ function AppContent() {
 
         {view.page === 'home' && (
           <section className="space-y-8">
+            {/* KPI Banner */}
+            {dashData && (
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+                <div className="card p-3 cursor-pointer hover:shadow-md" onClick={() => setHash('dashboard')}>
+                  <div className="text-xs text-slate-500 mb-1">Open Orders</div>
+                  <div className="text-xl font-semibold text-slate-900">{dashData.kpis.open_orders}</div>
+                </div>
+                <div className="card p-3 cursor-pointer hover:shadow-md" onClick={() => setHash('dashboard')}>
+                  <div className="text-xs text-slate-500 mb-1">In-Progress MOs</div>
+                  <div className="text-xl font-semibold text-slate-900">{dashData.kpis.in_progress_mos}</div>
+                </div>
+                <div className="card p-3 cursor-pointer hover:shadow-md" onClick={() => setHash('dashboard')}>
+                  <div className="text-xs text-slate-500 mb-1">Pending Shipments</div>
+                  <div className="text-xl font-semibold text-slate-900">{dashData.kpis.pending_shipments}</div>
+                </div>
+                <div className="card p-3 cursor-pointer hover:shadow-md" onClick={() => setHash('dashboard')}>
+                  <div className="text-xs text-slate-500 mb-1">Overdue Invoices</div>
+                  <div className={`text-xl font-semibold ${dashData.kpis.overdue_invoices > 0 ? 'text-red-600' : 'text-slate-900'}`}>{dashData.kpis.overdue_invoices}</div>
+                </div>
+                <div className="card p-3 cursor-pointer hover:shadow-md" onClick={() => setHash('dashboard')}>
+                  <div className="text-xs text-slate-500 mb-1">Total Revenue</div>
+                  <div className="text-xl font-semibold text-slate-900">{formatCurrency(dashData.kpis.total_revenue)}</div>
+                </div>
+              </div>
+            )}
+
+            {/* Recent Activity Widget */}
+            {dashData && dashData.recent_activity.length > 0 && (
+              <div className="card p-4">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="section-title">Recent Activity</div>
+                  <a href="#/activity" className="text-xs text-blue-600 hover:underline">View all →</a>
+                </div>
+                <div className="divide-y divide-slate-100">
+                  {dashData.recent_activity.slice(0, 10).map((e) => {
+                    const catColors: Record<string, string> = {
+                      sales: 'bg-blue-100 text-blue-700',
+                      production: 'bg-amber-100 text-amber-700',
+                      logistics: 'bg-green-100 text-green-700',
+                      purchasing: 'bg-purple-100 text-purple-700',
+                      billing: 'bg-rose-100 text-rose-700',
+                    }
+                    const catClass = catColors[e.category] || 'bg-slate-100 text-slate-700'
+                    return (
+                      <div key={e.id} className="flex items-center gap-3 py-1.5 text-sm">
+                        <span className="text-slate-400 tabular-nums text-xs w-36 shrink-0">{e.timestamp}</span>
+                        <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium shrink-0 ${catClass}`}>
+                          {e.category}
+                        </span>
+                        <span className="text-slate-700 truncate">{e.action}</span>
+                        {e.entity_id && (
+                          <span className="font-mono text-xs text-slate-400 shrink-0">{e.entity_id}</span>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+
             {/* Sales & CRM */}
             <div>
               <h2 className="text-lg font-semibold text-slate-800 mb-3">Sales & CRM</h2>
@@ -420,6 +492,9 @@ function AppContent() {
 
         {view.page === 'work-centers' && !view.id && <WorkCentersListPage />}
         {view.page === 'work-centers' && view.id && <WorkCenterDetailPage workCenterId={view.id} />}
+
+        {view.page === 'dashboard' && <DashboardPage />}
+        {view.page === 'activity' && <ActivityLogPage />}
 
       </div>
     </Layout>

@@ -24,6 +24,7 @@ from mcp_tools import (
     invoice_tools,
     chart_tools,
     admin_tools,
+    activity_tools,
 )
 
 _MODULES = [
@@ -44,6 +45,7 @@ _MODULES = [
     invoice_tools,
     chart_tools,
     admin_tools,
+    activity_tools,
 ]
 
 

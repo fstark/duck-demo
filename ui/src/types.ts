@@ -393,3 +393,32 @@ export type InvoiceDetail = {
   amount_paid: number
   balance_due: number
 }
+
+// ---------------------------------------------------------------------------
+// Activity Log & Dashboard
+// ---------------------------------------------------------------------------
+
+export type ActivityLogEntry = {
+  id: string
+  timestamp: string
+  actor: string
+  category: string
+  action: string
+  entity_type: string | null
+  entity_id: string | null
+  details: Record<string, unknown> | null
+}
+
+export type DashboardData = {
+  status_distributions: Record<string, { status: string; count: number }[]>
+  kpis: {
+    open_orders: number
+    in_progress_mos: number
+    pending_shipments: number
+    overdue_invoices: number
+    total_revenue: number
+  }
+  recent_activity: ActivityLogEntry[]
+  daily_volumes: { date: string; created: number; shipped: number; invoiced: number }[]
+}
+

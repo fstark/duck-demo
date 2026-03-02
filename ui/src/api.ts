@@ -1,4 +1,4 @@
-import { Customer, Item, SalesOrder, SalesOrderDetail, Shipment, StockSummary, QuoteOption, ProductionOrder, Recipe, Supplier, PurchaseOrder, Email, EmailDetail, Invoice, InvoiceDetail, Quote, QuoteDetail, WorkCenter, WorkCenterDetail } from './types'
+import { Customer, Item, SalesOrder, SalesOrderDetail, Shipment, StockSummary, QuoteOption, ProductionOrder, Recipe, Supplier, PurchaseOrder, Email, EmailDetail, Invoice, InvoiceDetail, Quote, QuoteDetail, WorkCenter, WorkCenterDetail, ActivityLogEntry, DashboardData } from './types'
 
 const API_BASE = import.meta.env.VITE_API_BASE || '/api'
 
@@ -90,4 +90,25 @@ export const api = {
     production_orders: { label: string; sublabel: string; href: string }[]
     purchase_orders: { label: string; sublabel: string; href: string }[]
   }>(`/stats/spotlight`),
+  activityLog: (params?: { limit?: number; offset?: number; category?: string; action?: string; entity_type?: string; entity_id?: string; since?: string; until?: string }) => {
+    const p = new URLSearchParams()
+    if (params?.limit) p.set('limit', String(params.limit))
+    if (params?.offset) p.set('offset', String(params.offset))
+    if (params?.category) p.set('category', params.category)
+    if (params?.action) p.set('action', params.action)
+    if (params?.entity_type) p.set('entity_type', params.entity_type)
+    if (params?.entity_id) p.set('entity_id', params.entity_id)
+    if (params?.since) p.set('since', params.since)
+    if (params?.until) p.set('until', params.until)
+    const q = p.toString()
+    return fetchJson<{ entries: ActivityLogEntry[]; total: number; limit: number; offset: number }>(`/activity-log${q ? `?${q}` : ''}`)
+  },
+  activitySummary: (params?: { since?: string; until?: string }) => {
+    const p = new URLSearchParams()
+    if (params?.since) p.set('since', params.since)
+    if (params?.until) p.set('until', params.until)
+    const q = p.toString()
+    return fetchJson<{ date: string; category: string; action: string; count: number }[]>(`/activity-log/summary${q ? `?${q}` : ''}`)
+  },
+  dashboard: () => fetchJson<DashboardData>(`/dashboard`),
 }
