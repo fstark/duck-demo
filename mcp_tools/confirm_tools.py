@@ -96,6 +96,10 @@ def register(mcp):
                 warehouse=arguments.get("warehouse", config.WAREHOUSE_DEFAULT),
                 location=arguments.get("location", config.LOC_PRODUCTION_OUT)
             )
+        elif original_tool == "production_complete_operation":
+            return production_service.complete_operation(
+                production_order_id=arguments["production_order_id"]
+            )
 
         # Purchase Tools
         elif original_tool == "purchase_create_order":

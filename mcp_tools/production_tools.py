@@ -181,3 +181,43 @@ def register(mcp):
             arguments=arguments,
             category="production"
         )
+
+    # MUTATING TOOL
+    @mcp.tool(name="production_complete_operation", meta={
+        "tags": ["production"],
+        "ui": {
+            "resourceUri": "ui://generic-confirm/dialog",
+            "visibility": ["model", "app"]
+        }
+    }, structured_output=False)
+    @log_tool("production_complete_operation")
+    def production_complete_operation(production_order_id: str) -> Dict[str, Any]:
+        """
+        Complete the current in-progress operation on a manufacturing order and advance to the next one.
+        If all operations are done the MO is ready to be completed via production_complete_order.
+
+        Parameters:
+            production_order_id: The production order ID (e.g., 'MO-1000')
+
+        Returns:
+            Confirmation metadata for advancing the production operation.
+        """
+        order = production_service.get_order_status(production_order_id)
+        current_op_name = order.get("current_operation", "(none)")
+
+        arguments = {"production_order_id": production_order_id}
+
+        field_configs = [
+            {"name": "production_order_id", "label": "Production Order ID", "type": "text", "value": production_order_id, "required": True, "display_order": 1},
+            {"name": "current_operation", "label": "Current Operation", "type": "text", "value": current_op_name, "display_order": 2},
+            {"name": "status", "label": "MO Status", "type": "text", "value": order.get("status"), "display_order": 3},
+        ]
+
+        return create_confirmation_response(
+            tool_name="production_complete_operation",
+            title=f"Complete Operation: {current_op_name} on {production_order_id}",
+            description=f"This will mark the current operation '{current_op_name}' as completed and advance to the next operation.",
+            field_configs=field_configs,
+            arguments=arguments,
+            category="production"
+        )

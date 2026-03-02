@@ -138,6 +138,14 @@ def start_order(production_order_id: str) -> Dict[str, Any]:
         current_operation = first_op["operation_name"] if first_op else None
         sim_time = simulation_service.get_current_time()
         conn.execute("UPDATE production_orders SET status = 'in_progress', started_at = ?, current_operation = ? WHERE id = ?", (sim_time, current_operation, production_order_id))
+        # Mark the first production operation as in_progress
+        conn.execute(
+            "UPDATE production_operations SET status = 'in_progress', started_at = ? "
+            "WHERE production_order_id = ? AND sequence_order = ("
+            "  SELECT MIN(sequence_order) FROM production_operations WHERE production_order_id = ?"
+            ")",
+            (sim_time, production_order_id, production_order_id),
+        )
         conn.commit()
         return {"production_order_id": production_order_id, "status": "in_progress", "current_operation": current_operation, "message": f"Production order {production_order_id} started"}
 
@@ -153,6 +161,8 @@ def complete_order(production_order_id: str, qty_produced: int, warehouse: str, 
         if order["status"] == "completed":
             raise ValueError(f"Production order {production_order_id} already completed")
         sim_time = simulation_service.get_current_time()
+        # Finalize all operations that are not yet completed
+        _finalize_all_operations(conn, production_order_id, order["started_at"], sim_time)
         conn.execute("UPDATE production_orders SET status = 'completed', completed_at = ?, qty_produced = ?, current_operation = NULL WHERE id = ?", (sim_time, qty_produced, production_order_id))
         stock_id = generate_id(conn, "STK", "stock")
         conn.execute("INSERT INTO stock (id, item_id, warehouse, location, on_hand) VALUES (?, ?, ?, ?, ?)", (stock_id, order["item_id"], warehouse, location, qty_produced))
@@ -195,6 +205,219 @@ def update_readiness() -> Dict[str, Any]:
         return {"checked": len(waiting), "promoted_to_ready": promoted}
 
 
+def _finalize_all_operations(conn, production_order_id: str, mo_started_at: Optional[str], completed_at: str) -> None:
+    """Mark all non-completed operations as completed with proportional timestamps.
+
+    Timestamps are spread across the MO's duration based on each operation's
+    ``duration_hours``.  Operations already completed are left untouched.
+    """
+    ops = dict_rows(conn.execute(
+        "SELECT id, sequence_order, duration_hours, status, started_at "
+        "FROM production_operations WHERE production_order_id = ? ORDER BY sequence_order",
+        (production_order_id,),
+    ))
+    if not ops:
+        return
+
+    start_dt = datetime.fromisoformat(mo_started_at) if mo_started_at else datetime.fromisoformat(completed_at)
+    end_dt = datetime.fromisoformat(completed_at)
+    total_hours = sum(op["duration_hours"] for op in ops) or 1.0
+    elapsed = end_dt - start_dt
+    if elapsed.total_seconds() <= 0:
+        elapsed = timedelta(hours=total_hours)
+        start_dt = end_dt - elapsed
+
+    cursor = start_dt
+    for op in ops:
+        if op["status"] == "completed":
+            # already done — advance cursor past its duration
+            frac = op["duration_hours"] / total_hours
+            cursor += elapsed * frac
+            continue
+        op_start = op.get("started_at")
+        op_start_ts = op_start if op_start else cursor.isoformat()
+        frac = op["duration_hours"] / total_hours
+        cursor += elapsed * frac
+        op_end_ts = cursor.isoformat()
+        conn.execute(
+            "UPDATE production_operations SET status = 'completed', "
+            "started_at = ?, completed_at = ? WHERE id = ?",
+            (op_start_ts, op_end_ts, op["id"]),
+        )
+
+
+def advance_operations(production_order_id: str, sim_time: str, conn=None) -> Dict[str, Any]:
+    """Tick through operations for an in-progress MO based on elapsed time.
+
+    Walks the operation list in sequence order.  Each operation's start is
+    computed from the MO ``started_at`` plus the cumulative duration of all
+    preceding operations.  Operations whose cumulative end-time has passed
+    are marked *completed*; the first operation whose window spans the
+    current ``sim_time`` is marked *in_progress*; the rest stay *pending*.
+
+    Returns a dict with ``all_done`` (bool) and the ``current_operation``
+    name (or ``None`` when all operations are finished).
+    """
+    def _inner(c):
+        mo = c.execute(
+            "SELECT started_at FROM production_orders WHERE id = ?",
+            (production_order_id,),
+        ).fetchone()
+        if not mo or not mo["started_at"]:
+            return {"all_done": False, "current_operation": None}
+
+        mo_start = datetime.fromisoformat(mo["started_at"])
+        now = datetime.fromisoformat(sim_time)
+
+        ops = dict_rows(c.execute(
+            "SELECT id, sequence_order, operation_name, duration_hours, status "
+            "FROM production_operations WHERE production_order_id = ? ORDER BY sequence_order",
+            (production_order_id,),
+        ))
+        if not ops:
+            return {"all_done": True, "current_operation": None}
+
+        cursor = mo_start
+        current_operation = None
+        all_done = True
+
+        for op in ops:
+            op_start = cursor
+            op_end = cursor + timedelta(hours=op["duration_hours"])
+
+            if now >= op_end:
+                # This operation should be completed
+                if op["status"] != "completed":
+                    c.execute(
+                        "UPDATE production_operations SET status = 'completed', "
+                        "started_at = ?, completed_at = ? WHERE id = ?",
+                        (op_start.isoformat(), op_end.isoformat(), op["id"]),
+                    )
+            elif now >= op_start:
+                # This operation is currently in progress
+                if op["status"] != "in_progress":
+                    c.execute(
+                        "UPDATE production_operations SET status = 'in_progress', "
+                        "started_at = ? WHERE id = ?",
+                        (op_start.isoformat(), op["id"]),
+                    )
+                current_operation = op["operation_name"]
+                all_done = False
+            else:
+                # Future operation — stays pending
+                all_done = False
+                if current_operation is None:
+                    current_operation = op["operation_name"]
+
+            cursor = op_end
+
+        # Update current_operation on the MO header
+        c.execute(
+            "UPDATE production_orders SET current_operation = ? WHERE id = ?",
+            (current_operation, production_order_id),
+        )
+        return {"all_done": all_done, "current_operation": current_operation}
+
+    if conn is not None:
+        return _inner(conn)
+    with db_conn() as c:
+        result = _inner(c)
+        c.commit()
+        return result
+
+
+def complete_operation(production_order_id: str) -> Dict[str, Any]:
+    """Manually complete the current in-progress operation and advance to the next.
+
+    If the completed operation is the last one, the MO itself is **not**
+    automatically completed — call ``complete_order`` separately so the
+    caller can specify ``qty_produced`` and stock location.
+
+    Returns a dict describing what happened.
+    """
+    from services.simulation import simulation_service
+
+    with db_conn() as conn:
+        order = conn.execute(
+            "SELECT * FROM production_orders WHERE id = ?",
+            (production_order_id,),
+        ).fetchone()
+        if not order:
+            raise ValueError(f"Production order {production_order_id} not found")
+        if order["status"] != "in_progress":
+            raise ValueError(
+                f"Production order {production_order_id} is not in_progress "
+                f"(current status: {order['status']})"
+            )
+
+        sim_time = simulation_service.get_current_time()
+
+        # Find the current in-progress operation
+        current_op = conn.execute(
+            "SELECT * FROM production_operations "
+            "WHERE production_order_id = ? AND status = 'in_progress' "
+            "ORDER BY sequence_order LIMIT 1",
+            (production_order_id,),
+        ).fetchone()
+        if not current_op:
+            return {
+                "production_order_id": production_order_id,
+                "status": "no_in_progress_operation",
+                "message": "No in-progress operation found to complete",
+            }
+
+        # Complete the current operation
+        conn.execute(
+            "UPDATE production_operations SET status = 'completed', completed_at = ? WHERE id = ?",
+            (sim_time, current_op["id"]),
+        )
+
+        # Advance to the next pending operation
+        next_op = conn.execute(
+            "SELECT * FROM production_operations "
+            "WHERE production_order_id = ? AND status = 'pending' "
+            "ORDER BY sequence_order LIMIT 1",
+            (production_order_id,),
+        ).fetchone()
+
+        if next_op:
+            conn.execute(
+                "UPDATE production_operations SET status = 'in_progress', started_at = ? WHERE id = ?",
+                (sim_time, next_op["id"]),
+            )
+            conn.execute(
+                "UPDATE production_orders SET current_operation = ? WHERE id = ?",
+                (next_op["operation_name"], production_order_id),
+            )
+            conn.commit()
+            return {
+                "production_order_id": production_order_id,
+                "status": "advanced",
+                "completed_operation": current_op["operation_name"],
+                "next_operation": next_op["operation_name"],
+                "message": (
+                    f"Operation '{current_op['operation_name']}' completed. "
+                    f"Now on '{next_op['operation_name']}'."
+                ),
+            }
+        else:
+            # Last operation completed — MO can be completed
+            conn.execute(
+                "UPDATE production_orders SET current_operation = NULL WHERE id = ?",
+                (production_order_id,),
+            )
+            conn.commit()
+            return {
+                "production_order_id": production_order_id,
+                "status": "all_operations_done",
+                "completed_operation": current_op["operation_name"],
+                "message": (
+                    f"Operation '{current_op['operation_name']}' completed. "
+                    f"All operations finished — MO is ready to be completed."
+                ),
+            }
+
+
 # Namespace for backward compatibility
 production_service = SimpleNamespace(
     get_statistics=get_statistics,
@@ -203,6 +426,8 @@ production_service = SimpleNamespace(
     create_order=create_order,
     start_order=start_order,
     complete_order=complete_order,
+    complete_operation=complete_operation,
+    advance_operations=advance_operations,
     update_readiness=update_readiness,
 )
 ProductionService = type(production_service)

@@ -84,16 +84,44 @@ def advance_time(
             result["invoices_marked_overdue"] = overdue_count
 
         # --- Side-effect 2: auto-complete production orders ---
+        # Phase A: tick operations for all in-progress MOs based on elapsed time
+        from services.production import advance_operations
         from db import generate_id
         completed_mos = []
-        in_progress = conn.execute(
+        all_in_progress = conn.execute(
             "SELECT po.id, po.item_id, r.output_qty "
+            "FROM production_orders po "
+            "JOIN recipes r ON po.recipe_id = r.id "
+            "WHERE po.status = 'in_progress'",
+        ).fetchall()
+        for mo in all_in_progress:
+            result = advance_operations(mo["id"], new_time, conn=conn)
+            if result["all_done"]:
+                conn.execute(
+                    "UPDATE production_orders SET status = 'completed', "
+                    "completed_at = ?, qty_produced = ?, current_operation = NULL WHERE id = ?",
+                    (new_time, mo["output_qty"], mo["id"]),
+                )
+                stock_id = generate_id(conn, "STK", "stock")
+                conn.execute(
+                    "INSERT INTO stock (id, item_id, warehouse, location, on_hand) "
+                    "VALUES (?, ?, ?, ?, ?)",
+                    (stock_id, mo["item_id"], config.LOC_FINISHED_GOODS, config.LOC_PRODUCTION_OUT, mo["output_qty"]),
+                )
+                completed_mos.append(mo["id"])
+
+        # Phase B: safety-net — force-complete MOs past eta_finish that
+        # weren't caught by operation ticking (e.g. missing operation rows)
+        stragglers = conn.execute(
+            "SELECT po.id, po.item_id, po.started_at, r.output_qty "
             "FROM production_orders po "
             "JOIN recipes r ON po.recipe_id = r.id "
             "WHERE po.status = 'in_progress' AND po.eta_finish IS NOT NULL AND po.eta_finish <= ?",
             (new_date,)
         ).fetchall()
-        for mo in in_progress:
+        for mo in stragglers:
+            from services.production import _finalize_all_operations
+            _finalize_all_operations(conn, mo["id"], mo["started_at"], new_time)
             conn.execute(
                 "UPDATE production_orders SET status = 'completed', "
                 "completed_at = ?, qty_produced = ?, current_operation = NULL WHERE id = ?",
