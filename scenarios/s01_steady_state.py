@@ -151,10 +151,20 @@ def _ship_ready_orders(so_ids: List[str]) -> List[str]:
                 "WHERE sol.sales_order_id = ?", (so_id,)
             ).fetchall()
 
-        can_ship = all(
-            inventory_service.check_availability(ln["sku"], int(ln["qty"]))["is_available"]
-            for ln in lines
-        )
+        # Use raw on_hand stock (not check_availability which includes
+        # reservations from ALL open SOs, creating a death-spiral where
+        # growing demand always exceeds produced supply).
+        can_ship = True
+        for ln in lines:
+            with db_conn() as c2:
+                on_hand = c2.execute(
+                    "SELECT COALESCE(SUM(s.on_hand), 0) "
+                    "FROM stock s JOIN items i ON s.item_id = i.id "
+                    "WHERE i.sku = ?", (ln["sku"],)
+                ).fetchone()[0]
+            if on_hand < int(ln["qty"]):
+                can_ship = False
+                break
         if not can_ship:
             continue
 
@@ -273,20 +283,17 @@ def run(ctx: Dict[str, Any]) -> Dict[str, Any]:
 
         # 4. Start any promoted-to-ready MOs + restock raw materials
         started = _start_ready_mos()
-        if started:
-            logger.info("  Started %d promoted MOs", started)
+        logger.info("  Started %d promoted MOs", started)
 
         # 5. Restock & receive materials
         try:
             rs = restock_materials()
             n_po = rs.get("purchase_orders_created", 0)
-            if n_po:
-                logger.info("  Restock POs: %d", n_po)
+            logger.info("  Restock POs: %d", n_po)
         except Exception as e:
             logger.debug("Restock skipped (expected): %s", e)
         n_rcv = _receive_due_pos()
-        if n_rcv:
-            logger.info("  Received %d POs", n_rcv)
+        logger.info("  Received %d POs", n_rcv)
 
         # 6. Ship orders with available FG stock (skip already-shipped)
         pending_ship = [sid for sid in all_so_ids if sid not in _completed_so_ids]

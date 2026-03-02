@@ -96,8 +96,8 @@ def advance_time(
             "ORDER BY po.started_at",
         ).fetchall()
         for mo in all_in_progress:
-            result = advance_operations(mo["id"], new_time, conn=conn)
-            if result["all_done"]:
+            op_result = advance_operations(mo["id"], new_time, conn=conn)
+            if op_result["all_done"]:
                 conn.execute(
                     "UPDATE production_orders SET status = 'completed', "
                     "completed_at = ?, qty_produced = ?, current_operation = NULL WHERE id = ?",

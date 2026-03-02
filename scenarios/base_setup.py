@@ -256,7 +256,7 @@ BASE_CUSTOMERS = [
     ("Daisy Paddlesworth",    "Splash & Co",            "daisy@splashco.example",           "+33 4 93 12 34 56",  "22 Promenade des Anglais",   "Nice",        "06000", "FR", "FR55566677788",   30,  None),
     ("Quentin Maréchal",      None,                     "quentin@mare.example",              None,                "17 Rue du Vieux Port",       "Marseille",   "13001", "FR", None,              30,  "Prefers email"),
     ("Bella Featherstone",    "The Duck Emporium",      "bella@duckemporium.example",       "+33 5 61 22 33 44",  "5 Place du Capitole",        "Toulouse",    "31000", "FR", "FR11122233344",   60,  "Large orders"),
-    ("Puddles O'Mallory",     None,                      None,                              "+33 5 56 78 90 12",   None,                        "Bordeaux",     None,   "FR", None,              30,  "No email"),
+    ("Puddles O'Mallory",     None,                     "puddles@omallory.example",         "+33 5 56 78 90 12",   None,                        "Bordeaux",     None,   "FR", None,              30,  None),
     ("Drake Fluffington",     "Fluff & Feathers",       "drake@fluffnfeathers.example",     "+33 3 88 11 22 33",  "28 Rue des Hallebardes",     "Strasbourg",  "67000", "FR", "FR77788899900",   30,  None),
     ("Mallory Beakworth",     None,                     "mallory@beakmail.example",         "+33 2 40 55 66 77",   None,                        "Nantes",       None,   "FR", None,              15,  "COD preferred"),
     ("Hugo Canard",           "Waddle Inc",             "hugo@waddleinc.example",           "+33 3 20 44 55 66",  "12 Rue Faidherbe",           "Lille",       "59000", "FR", "FR44455566677",   30,  None),

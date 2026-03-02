@@ -206,9 +206,12 @@ def complete_order(production_order_id: str, qty_produced: int, warehouse: str, 
 
 
 def update_readiness() -> Dict[str, Any]:
-    """Check 'waiting' production orders and promote to 'ready' if materials are now available."""
-    from services.inventory import inventory_service
+    """Check 'waiting' production orders and promote to 'ready' if materials are now available.
 
+    Uses raw on_hand stock (ignoring reservations) to avoid a deadlock
+    where every waiting MO's demand blocks every other waiting MO from
+    being promoted.
+    """
     with db_conn() as conn:
         waiting = conn.execute(
             "SELECT po.id, po.recipe_id FROM production_orders po WHERE po.status = 'waiting'"
@@ -217,17 +220,19 @@ def update_readiness() -> Dict[str, Any]:
         promoted = []
         for wo in waiting:
             ingredients = conn.execute(
-                "SELECT ri.input_item_id, ri.input_qty, i.sku as ingredient_sku "
+                "SELECT ri.input_item_id, ri.input_qty "
                 "FROM recipe_ingredients ri "
-                "JOIN items i ON ri.input_item_id = i.id "
                 "WHERE ri.recipe_id = ?",
                 (wo["recipe_id"],)
             ).fetchall()
 
             all_available = True
             for ing in ingredients:
-                check = inventory_service.check_availability(ing["ingredient_sku"], ing["input_qty"])
-                if not check["is_available"]:
+                on_hand = conn.execute(
+                    "SELECT COALESCE(SUM(on_hand), 0) FROM stock WHERE item_id = ?",
+                    (ing["input_item_id"],)
+                ).fetchone()[0]
+                if on_hand < ing["input_qty"]:
                     all_available = False
                     break
 
