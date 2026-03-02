@@ -156,11 +156,10 @@ export function WorkCenterDetailPage({ workCenterId }: WorkCenterDetailPageProps
                         </div>
                         <div>
                             <div className="text-sm text-slate-500">Utilization</div>
-                            <div className={`text-2xl font-bold ${
-                                workCenter.utilization >= 100 ? 'text-red-600' : 
-                                workCenter.utilization >= 75 ? 'text-orange-600' : 
-                                workCenter.utilization >= 50 ? 'text-yellow-600' : 'text-green-600'
-                            }`}>
+                            <div className={`text-2xl font-bold ${workCenter.utilization >= 100 ? 'text-red-600' :
+                                    workCenter.utilization >= 75 ? 'text-orange-600' :
+                                        workCenter.utilization >= 50 ? 'text-yellow-600' : 'text-green-600'
+                                }`}>
                                 {workCenter.utilization}%
                             </div>
                         </div>
@@ -211,7 +210,7 @@ export function WorkCenterDetailPage({ workCenterId }: WorkCenterDetailPageProps
                                     sortable: false,
                                     render: (row) => (
                                         <span className="text-sm text-slate-600">
-                                            {row.started_at ? new Date(row.started_at.replace(' ', 'T')).toLocaleString() : '—'}
+                                            {row.started_at ? row.started_at.split('.')[0] : '—'}
                                         </span>
                                     ),
                                 },
@@ -312,7 +311,7 @@ export function WorkCenterDetailPage({ workCenterId }: WorkCenterDetailPageProps
                                     sortable: false,
                                     render: (row) => (
                                         <span className="text-sm text-slate-600">
-                                            {row.completed_at ? new Date(row.completed_at.replace(' ', 'T')).toLocaleString() : '—'}
+                                            {row.completed_at ? row.completed_at.split('.')[0] : '—'}
                                         </span>
                                     ),
                                 },

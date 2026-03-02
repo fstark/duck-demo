@@ -7,6 +7,7 @@ import { api } from '../api'
 import { useNavigation } from '../contexts/NavigationContext'
 import { formatCurrency } from '../utils/currency'
 import { formatQuantity, Quantity, formatQtyWithUom } from '../utils/quantity.tsx'
+import { formatDate } from '../utils/date'
 
 function setHash(page: string, id?: string) {
     const path = id ? `#/${page}/${encodeURIComponent(id)}` : `#/${page}`
@@ -255,8 +256,8 @@ export function ItemDetailPage({ sku }: ItemDetailPageProps) {
                                 { key: 'recipe_id', label: 'Recipe', sortable: true },
                                 { key: 'output_qty', label: 'Qty', sortable: true, render: (row) => <Quantity value={row.output_qty} uom="ea" /> },
                                 { key: 'status', label: 'Status', sortable: true, render: (row) => <Badge>{row.status}</Badge> },
-                                { key: 'started_at', label: 'Started', sortable: true },
-                                { key: 'eta_finish', label: 'ETA Finish', sortable: true },
+                                { key: 'started_at', label: 'Started', sortable: true, render: (row) => formatDate(row.started_at) },
+                                { key: 'eta_finish', label: 'ETA Finish', sortable: true, render: (row) => formatDate(row.eta_finish) },
                             ]}
                             onRowClick={(row) => {
                                 setReferrer({ page: 'items', id: sku, label: item.name })

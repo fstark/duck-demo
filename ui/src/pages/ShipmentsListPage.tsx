@@ -5,6 +5,7 @@ import { Badge } from '../components/Badge'
 import { Shipment } from '../types'
 import { api } from '../api'
 import { useNavigation } from '../contexts/NavigationContext'
+import { formatDate } from '../utils/date'
 
 type SortDir = 'asc' | 'desc'
 type SortState = { key: keyof Shipment; dir: SortDir }
@@ -118,8 +119,8 @@ export function ShipmentsListPage() {
                             render: (row) => <Badge>{row.status}</Badge>,
                         },
                         { key: 'tracking_ref', label: 'Tracking', sortable: true, render: (row) => row.tracking_ref || '—' },
-                        { key: 'planned_departure', label: 'Departure', sortable: true },
-                        { key: 'planned_arrival', label: 'Arrival', sortable: true },
+                        { key: 'planned_departure', label: 'Departure', sortable: true, render: (row) => formatDate(row.planned_departure) },
+                        { key: 'planned_arrival', label: 'Arrival', sortable: true, render: (row) => formatDate(row.planned_arrival) },
                     ]}
                 />
             </Card>

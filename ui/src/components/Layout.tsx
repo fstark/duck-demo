@@ -11,9 +11,8 @@ export function Layout({ children }: { children: ReactNode }) {
   }, [])
 
   const formatSimTime = (timeStr: string) => {
-    // SQLite returns datetime as 'YYYY-MM-DD HH:MM:SS', ensure it's ISO format
-    const isoTime = timeStr.replace(' ', 'T')
-    return new Date(isoTime).toLocaleString()
+    // Return ISO format (YYYY-MM-DD HH:MM:SS)
+    return timeStr.split('.')[0] // Remove milliseconds if present
   }
 
   return (

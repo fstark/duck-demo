@@ -162,23 +162,64 @@ export function SalesOrderDetailPage({ orderId }: SalesOrderDetailPageProps) {
                 </div>
                 <div className="space-y-3 text-sm text-slate-800">
                     <div className="font-semibold text-lg">Order {order.sales_order.id}</div>
-                    {order.customer && (
-                        <Card title="Customer">
+                    <div className="grid grid-cols-2 gap-3">
+                        {order.customer && (
+                            <Card title="Customer">
+                                <div className="space-y-1">
+                                    <button
+                                        className="font-medium text-brand-600 hover:underline text-left"
+                                        onClick={() => {
+                                            setReferrer({ page: 'orders', id: orderId, label: `Order ${order.sales_order.id}` })
+                                            setHash('customers', order.customer!.id)
+                                        }}
+                                        type="button"
+                                    >
+                                        {order.customer.name}
+                                    </button>
+                                    {order.customer.company && <div className="text-slate-600 text-sm">{order.customer.company}</div>}
+                                    {order.customer.email && <div className="text-slate-600 text-sm">{order.customer.email}</div>}
+                                    {order.customer.city && <div className="text-slate-600 text-sm">{order.customer.city}</div>}
+                                </div>
+                            </Card>
+                        )}
+                        <Card title="Dates">
                             <div className="space-y-1">
-                                <button
-                                    className="font-medium text-brand-600 hover:underline text-left"
-                                    onClick={() => {
-                                        setReferrer({ page: 'orders', id: orderId, label: `Order ${order.sales_order.id}` })
-                                        setHash('customers', order.customer!.id)
-                                    }}
-                                    type="button"
-                                >
-                                    {order.customer.name}
-                                </button>
-                                {order.customer.company && <div className="text-slate-600 text-sm">{order.customer.company}</div>}
-                                {order.customer.email && <div className="text-slate-600 text-sm">{order.customer.email}</div>}
-                                {order.customer.city && <div className="text-slate-600 text-sm">{order.customer.city}</div>}
+                                {order.sales_order.created_at && (
+                                    <div>
+                                        <span className="text-slate-500">Order Date: </span>
+                                        <span>{formatDate(order.sales_order.created_at)}</span>
+                                    </div>
+                                )}
+                                {order.sales_order.requested_delivery_date && (
+                                    <div>
+                                        <span className="text-slate-500">Requested Delivery: </span>
+                                        <span>{formatDate(order.sales_order.requested_delivery_date)}</span>
+                                    </div>
+                                )}
+                                {!order.sales_order.created_at && !order.sales_order.requested_delivery_date && (
+                                    <div className="text-slate-400 text-sm">No dates available</div>
+                                )}
                             </div>
+                        </Card>
+                    </div>
+                    {(order.sales_order.ship_to_line1 || order.sales_order.ship_to_city) && (
+                        <Card title="Shipping Address">
+                            <div className="space-y-1">
+                                {order.sales_order.ship_to_line1 && <div>{order.sales_order.ship_to_line1}</div>}
+                                {order.sales_order.ship_to_line2 && <div>{order.sales_order.ship_to_line2}</div>}
+                                {(order.sales_order.ship_to_postal_code || order.sales_order.ship_to_city) && (
+                                    <div>
+                                        {order.sales_order.ship_to_postal_code && <span>{order.sales_order.ship_to_postal_code} </span>}
+                                        {order.sales_order.ship_to_city && <span>{order.sales_order.ship_to_city}</span>}
+                                    </div>
+                                )}
+                                {order.sales_order.ship_to_country && <div>{order.sales_order.ship_to_country}</div>}
+                            </div>
+                        </Card>
+                    )}
+                    {order.sales_order.note && (
+                        <Card title="Note">
+                            <div className="text-slate-700 whitespace-pre-wrap">{order.sales_order.note}</div>
                         </Card>
                     )}
                     {order.sales_order.quote_id && (
@@ -249,8 +290,8 @@ export function SalesOrderDetailPage({ orderId }: SalesOrderDetailPageProps) {
                                 columns={[
                                     { key: 'id', label: 'Shipment' },
                                     { key: 'status', label: 'Status', render: (row) => <Badge>{row.status}</Badge> },
-                                    { key: 'planned_departure', label: 'Departure' },
-                                    { key: 'planned_arrival', label: 'Arrival' },
+                                    { key: 'planned_departure', label: 'Departure', render: (row) => formatDate(row.planned_departure) },
+                                    { key: 'planned_arrival', label: 'Arrival', render: (row) => formatDate(row.planned_arrival) },
                                 ]}
                                 onRowClick={(row, index) => {
                                     setListContext({
@@ -330,7 +371,7 @@ export function SalesOrderDetailPage({ orderId }: SalesOrderDetailPageProps) {
                                         )
                                     },
                                     { key: 'status', label: 'Status', render: (row: ProductionOrder) => <Badge>{row.status}</Badge> },
-                                    { key: 'eta_finish', label: 'ETA Finish' },
+                                    { key: 'eta_finish', label: 'ETA Finish', render: (row: ProductionOrder) => formatDate(row.eta_finish) },
                                 ]}
                                 onRowClick={(row: ProductionOrder, index: number) => {
                                     setListContext({

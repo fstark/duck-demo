@@ -6,6 +6,7 @@ import { SalesOrder } from '../types'
 import { api } from '../api'
 import { useNavigation } from '../contexts/NavigationContext'
 import { formatCurrency } from '../utils/currency'
+import { formatDate } from '../utils/date'
 
 type SortDir = 'asc' | 'desc'
 type SortState = { key: keyof SalesOrder; dir: SortDir }
@@ -148,7 +149,7 @@ export function SalesOrdersListPage() {
                             sortable: true,
                             render: (row) => <Badge>{row.fulfillment_state || row.status}</Badge>,
                         },
-                        { key: 'created_at', label: 'Created', sortable: true },
+                        { key: 'created_at', label: 'Created', sortable: true, render: (row) => formatDate(row.created_at) },
                     ]}
                 />
             </Card>

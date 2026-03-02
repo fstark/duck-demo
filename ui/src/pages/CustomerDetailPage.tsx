@@ -237,8 +237,8 @@ export function CustomerDetailPage({ customerId }: CustomerDetailPageProps) {
                                 { key: 'sales_order_id', label: 'Order' },
                                 { key: 'status', label: 'Status', render: (row) => <Badge>{row.status}</Badge> },
                                 { key: 'total', label: 'Total', render: (row: any) => <div className="text-right">{formatCurrency(row.total, row.currency)}</div> },
-                                { key: 'created_at', label: 'Created' },
-                                { key: 'requested_delivery_date', label: 'Delivery Date' },
+                                { key: 'created_at', label: 'Created', render: (row: any) => formatDate(row.created_at) },
+                                { key: 'requested_delivery_date', label: 'Delivery Date', render: (row: any) => formatDate(row.requested_delivery_date) },
                             ]}
                             onRowClick={(row, index) => {
                                 setListContext({
@@ -274,8 +274,8 @@ export function CustomerDetailPage({ customerId }: CustomerDetailPageProps) {
                                     )
                                 },
                                 { key: 'status', label: 'Status', render: (row) => <Badge>{row.status}</Badge> },
-                                { key: 'planned_departure', label: 'Departure' },
-                                { key: 'planned_arrival', label: 'Arrival' },
+                                { key: 'planned_departure', label: 'Departure', render: (row: any) => formatDate(row.planned_departure) },
+                                { key: 'planned_arrival', label: 'Arrival', render: (row: any) => formatDate(row.planned_arrival) },
                             ]}
                             onRowClick={(row, index) => {
                                 setListContext({

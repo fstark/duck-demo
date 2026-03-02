@@ -5,6 +5,7 @@ import { Badge } from '../components/Badge'
 import { ProductionOrder } from '../types'
 import { api } from '../api'
 import { useNavigation } from '../contexts/NavigationContext'
+import { formatDate } from '../utils/date'
 
 type SortDir = 'asc' | 'desc'
 type SortState<T> = { key: keyof T; dir: SortDir }
@@ -124,10 +125,10 @@ export function ProductionOrdersListPage() {
                             ),
                         },
                         { key: 'status', label: 'Status', sortable: true, render: (row) => <Badge>{row.status}</Badge> },
-                        { key: 'started_at', label: 'Started', sortable: true },
-                        { key: 'completed_at', label: 'Completed', sortable: true },
-                        { key: 'eta_finish', label: 'ETA Finish', sortable: true },
-                        { key: 'eta_ship', label: 'ETA Ship', sortable: true },
+                        { key: 'started_at', label: 'Started', sortable: true, render: (row) => formatDate(row.started_at) },
+                        { key: 'completed_at', label: 'Completed', sortable: true, render: (row) => formatDate(row.completed_at) },
+                        { key: 'eta_finish', label: 'ETA Finish', sortable: true, render: (row) => formatDate(row.eta_finish) },
+                        { key: 'eta_ship', label: 'ETA Ship', sortable: true, render: (row) => formatDate(row.eta_ship) },
                     ]}
                 />
             </Card>
