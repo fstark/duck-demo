@@ -161,7 +161,12 @@ export function SalesOrderDetailPage({ orderId }: SalesOrderDetailPageProps) {
                     )}
                 </div>
                 <div className="space-y-3 text-sm text-slate-800">
-                    <div className="font-semibold text-lg">Order {order.sales_order.id}</div>
+                    <div className="font-semibold text-lg">
+                        Order {order.sales_order.id}
+                        {order.sales_order.status && (
+                            <span className="ml-3 align-middle"><Badge>{order.sales_order.status}</Badge></span>
+                        )}
+                    </div>
                     <div className="grid grid-cols-2 gap-3">
                         {order.customer && (
                             <Card title="Customer">

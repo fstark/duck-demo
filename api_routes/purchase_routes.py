@@ -33,7 +33,7 @@ def register(mcp):
         po_id = request.path_params.get("po_id")
         with db_conn() as conn:
             po = conn.execute(
-                "SELECT po.*, s.name as supplier_name, s.contact_email, i.sku as item_sku, i.name as item_name, i.type as item_type, i.uom FROM purchase_orders po JOIN suppliers s ON po.supplier_id = s.id JOIN items i ON po.item_id = i.id WHERE po.id = ?",
+                "SELECT po.*, s.name as supplier_name, s.contact_name, s.contact_email, s.contact_phone, i.sku as item_sku, i.name as item_name, i.type as item_type, i.uom FROM purchase_orders po JOIN suppliers s ON po.supplier_id = s.id JOIN items i ON po.item_id = i.id WHERE po.id = ?",
                 (po_id,)
             ).fetchone()
             if not po:

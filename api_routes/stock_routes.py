@@ -26,8 +26,30 @@ def register(mcp):
     async def api_stock_detail(request):
         stock_id = request.path_params.get("stock_id")
         with db_conn() as conn:
-            query = "SELECT s.id, s.item_id, i.sku as item_sku, i.name as item_name, i.type as item_type, s.warehouse, s.location, s.on_hand FROM stock s JOIN items i ON s.item_id = i.id WHERE s.id = ?"
+            query = """
+                SELECT s.id, s.item_id, i.sku as item_sku, i.name as item_name,
+                       i.type as item_type, s.warehouse, s.location, s.on_hand,
+                       COALESCE(res.reserved, 0) as reserved
+                FROM stock s
+                JOIN items i ON s.item_id = i.id
+                LEFT JOIN (
+                    SELECT item_id, SUM(qty) as reserved FROM (
+                        SELECT sol.item_id, sol.qty
+                        FROM sales_order_lines sol
+                        JOIN sales_orders so ON sol.sales_order_id = so.id
+                        WHERE so.status IN ('draft', 'confirmed', 'in_production')
+                        UNION ALL
+                        SELECT ri.input_item_id as item_id, ri.input_qty as qty
+                        FROM production_orders po
+                        JOIN recipe_ingredients ri ON po.recipe_id = ri.recipe_id
+                        WHERE po.status IN ('planned', 'waiting', 'ready')
+                    ) GROUP BY item_id
+                ) res ON res.item_id = s.item_id
+                WHERE s.id = ?
+            """
             row = conn.execute(query, (stock_id,)).fetchone()
             if not row:
                 return _json({"error": "Stock record not found"}, status_code=404)
-            return _json(dict(row))
+            data = dict(row)
+            data["available"] = data["on_hand"] - data["reserved"]
+            return _json(data)

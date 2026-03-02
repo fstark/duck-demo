@@ -83,17 +83,17 @@ FINISHED_GOODS = [
 
 # -- Suppliers ---------------------------------------------------------------
 SUPPLIERS = [
-    # (id, name, contact_email, lead_time_days)
-    ("SUP-001", "PlasticCorp",              "orders@plasticcorp.example",          10),
-    ("SUP-002", "ColorMaster",               "sales@colormaster.example",           7),
-    ("SUP-003", "PackagingPlus",            "contact@packagingplus.example",       5),
-    ("SUP-004", "EuroPlast GmbH",           "bestellung@europlast.example",       12),
-    ("SUP-005", "Pigment Express",          "orders@pigmentexpress.example",       6),
-    ("SUP-006", "BoxFactory Direct",        "sales@boxfactory.example",            4),
-    ("SUP-007", "Rhine Chemical Supply",    "info@rhinechemical.example",          9),
-    ("SUP-008", "QuickPack Logistics",      "orders@quickpack.example",            3),
-    ("SUP-009", "DuraPoly Industries",      "procurement@durapoly.example",       14),
-    ("SUP-010", "ChemiColor France",        "commandes@chemicolor.example",        8),
+    # (id, name, contact_name, contact_email, contact_phone, lead_time_days)
+    ("SUP-001", "PlasticCorp",              "Marc Dupont",        "orders@plasticcorp.example",          "+33 1 40 00 11 22",  10),
+    ("SUP-002", "ColorMaster",               "Isabelle Morel",     "sales@colormaster.example",           "+33 4 72 33 44 55",   7),
+    ("SUP-003", "PackagingPlus",            "Jean-Pierre Laurent","contact@packagingplus.example",       "+33 3 88 66 77 88",   5),
+    ("SUP-004", "EuroPlast GmbH",           "Klaus Weber",        "bestellung@europlast.example",        "+49 221 55 66 77",   12),
+    ("SUP-005", "Pigment Express",          "Sophie Blanc",       "orders@pigmentexpress.example",       "+33 1 55 22 33 44",   6),
+    ("SUP-006", "BoxFactory Direct",        "Thomas Petit",       "sales@boxfactory.example",            "+33 5 61 77 88 99",   4),
+    ("SUP-007", "Rhine Chemical Supply",    "Helmut Fischer",     "info@rhinechemical.example",          "+49 611 44 55 66",    9),
+    ("SUP-008", "QuickPack Logistics",      "Marie Leroy",        "orders@quickpack.example",            "+33 2 40 11 22 33",   3),
+    ("SUP-009", "DuraPoly Industries",      "Andreas Müller",     "procurement@durapoly.example",        "+49 89 33 44 55",    14),
+    ("SUP-010", "ChemiColor France",        "Claire Fontaine",    "commandes@chemicolor.example",        "+33 4 93 55 66 77",   8),
 ]
 
 
@@ -331,7 +331,7 @@ def populate() -> dict:
 
         # ---- Suppliers ----
         conn.executemany(
-            "INSERT INTO suppliers (id, name, contact_email, lead_time_days) VALUES (?,?,?,?)",
+            "INSERT INTO suppliers (id, name, contact_name, contact_email, contact_phone, lead_time_days) VALUES (?,?,?,?,?,?)",
             SUPPLIERS,
         )
         logger.info("Inserted %d suppliers", len(SUPPLIERS))

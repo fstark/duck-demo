@@ -179,7 +179,9 @@ CREATE TABLE IF NOT EXISTS production_operations (
 CREATE TABLE IF NOT EXISTS suppliers (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
+    contact_name TEXT,
     contact_email TEXT,
+    contact_phone TEXT,
     lead_time_days INTEGER NOT NULL
 );
 

@@ -5,6 +5,8 @@ import { Badge } from '../components/Badge'
 import { Shipment } from '../types'
 import { api } from '../api'
 import { useNavigation } from '../contexts/NavigationContext'
+import { formatDate } from '../utils/date'
+import { formatQtyWithUom } from '../utils/quantity'
 
 function setHash(page: string, id?: string) {
     const path = id ? `#/${page}/${encodeURIComponent(id)}` : `#/${page}`
@@ -151,18 +153,76 @@ export function ShipmentDetailPage({ shipmentId }: ShipmentDetailPageProps) {
                     <div className="text-slate-600">
                         <span className="font-medium">Status:</span> <Badge>{shipment.status}</Badge>
                     </div>
-                    <div className="text-slate-600">
-                        <span className="font-medium">Planned Departure:</span> {shipment.planned_departure || '—'}
+                    <div className="grid grid-cols-2 gap-3 mt-3">
+                        <Card title="Schedule">
+                            <div className="space-y-1">
+                                <div><span className="font-medium">Planned Departure:</span> {shipment.planned_departure ? formatDate(shipment.planned_departure) : '—'}</div>
+                                <div><span className="font-medium">Planned Arrival:</span> {shipment.planned_arrival ? formatDate(shipment.planned_arrival) : '—'}</div>
+                                {shipment.dispatched_at && (
+                                    <div><span className="font-medium">Dispatched:</span> {formatDate(shipment.dispatched_at)}</div>
+                                )}
+                                {shipment.delivered_at && (
+                                    <div><span className="font-medium">Delivered:</span> {formatDate(shipment.delivered_at)}</div>
+                                )}
+                                {shipment.tracking_ref && (
+                                    <div><span className="font-medium">Tracking Ref:</span> {shipment.tracking_ref}</div>
+                                )}
+                            </div>
+                        </Card>
+                        <Card title="Addresses">
+                            <div className="space-y-2">
+                                {shipment.ship_from_warehouse && (
+                                    <div>
+                                        <div className="font-medium text-slate-500 text-xs uppercase">From</div>
+                                        <div>{shipment.ship_from_warehouse}</div>
+                                    </div>
+                                )}
+                                {(shipment.ship_to_line1 || shipment.ship_to_city) && (
+                                    <div>
+                                        <div className="font-medium text-slate-500 text-xs uppercase">To</div>
+                                        {shipment.ship_to_line1 && <div>{shipment.ship_to_line1}</div>}
+                                        {shipment.ship_to_line2 && <div>{shipment.ship_to_line2}</div>}
+                                        {(shipment.ship_to_postal_code || shipment.ship_to_city) && (
+                                            <div>
+                                                {shipment.ship_to_postal_code && <span>{shipment.ship_to_postal_code} </span>}
+                                                {shipment.ship_to_city && <span>{shipment.ship_to_city}</span>}
+                                            </div>
+                                        )}
+                                        {shipment.ship_to_country && <div>{shipment.ship_to_country}</div>}
+                                    </div>
+                                )}
+                            </div>
+                        </Card>
                     </div>
-                    <div className="text-slate-600">
-                        <span className="font-medium">Planned Arrival:</span> {shipment.planned_arrival || '—'}
-                    </div>
-                    {shipment.tracking_ref && (
-                        <div className="text-slate-600">
-                            <span className="font-medium">Tracking Reference:</span> {shipment.tracking_ref}
-                        </div>
-                    )}
                 </div>
+                {shipment.lines && shipment.lines.length > 0 && (
+                    <Card title="Shipment Lines">
+                        <Table
+                            rows={shipment.lines as any}
+                            columns={[
+                                {
+                                    key: 'item_sku',
+                                    label: 'SKU',
+                                    render: (row) => (
+                                        <button
+                                            className="text-brand-600 hover:underline text-left"
+                                            onClick={(e) => {
+                                                e.stopPropagation()
+                                                setReferrer({ page: 'shipments', id: shipmentId, label: `Shipment ${shipment.id}` })
+                                                setHash('items', row.item_sku)
+                                            }}
+                                            type="button"
+                                        >
+                                            {row.item_sku}
+                                        </button>
+                                    ),
+                                },
+                                { key: 'item_name', label: 'Item' },
+                                { key: 'qty', label: 'Qty', render: (row) => formatQtyWithUom(row.qty, row.uom) },
+                            ]}
+                        />
+                    </Card>
+                )}
                 {shipment.sales_orders && shipment.sales_orders.length > 0 && (
                     <Card title="Sales Orders">
                         <Table

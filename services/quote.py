@@ -145,13 +145,58 @@ def get_quote(quote_id: str) -> Optional[Dict[str, Any]]:
         if newer_revision:
             newer_revision_dict = {"id": newer_revision[0], "ui_url": ui_href("quotes", newer_revision[0])}
 
-        return {
+        # Look up linked sales order
+        so_row = conn.execute(
+            "SELECT id FROM sales_orders WHERE quote_id = ? LIMIT 1",
+            (quote_id,),
+        ).fetchone()
+        sales_order_id = so_row[0] if so_row else None
+
+        # Build revision chain
+        revisions = []
+        # Walk backwards through supersedes chain to find the root
+        root_id = quote_id
+        visited = {root_id}
+        while True:
+            prev = conn.execute(
+                "SELECT supersedes_quote_id FROM quotes WHERE id = ?", (root_id,)
+            ).fetchone()
+            if prev and prev[0] and prev[0] not in visited:
+                root_id = prev[0]
+                visited.add(root_id)
+            else:
+                break
+        # Walk forward from root collecting all revisions
+        queue = [root_id]
+        all_ids = []
+        while queue:
+            current = queue.pop(0)
+            all_ids.append(current)
+            children = conn.execute(
+                "SELECT id FROM quotes WHERE supersedes_quote_id = ? ORDER BY revision_number",
+                (current,),
+            ).fetchall()
+            for child in children:
+                if child[0] not in all_ids:
+                    queue.append(child[0])
+        if len(all_ids) > 1:
+            placeholders = ",".join("?" for _ in all_ids)
+            revisions = dict_rows(conn.execute(
+                f"SELECT id, revision_number, status, created_at FROM quotes WHERE id IN ({placeholders}) ORDER BY revision_number",
+                all_ids,
+            ).fetchall())
+
+        result = {
             "quote": quote_dict,
             "customer": customer_dict,
             "lines": lines,
             "superseded_quote": superseded_quote,
-            "newer_revision": newer_revision_dict
+            "newer_revision": newer_revision_dict,
+            "revisions": revisions,
         }
+        if sales_order_id:
+            quote_dict["sales_order_id"] = sales_order_id
+        return result
 
 
 def list_quotes(

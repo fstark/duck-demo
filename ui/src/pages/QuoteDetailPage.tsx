@@ -137,6 +137,12 @@ function QuoteDetailPage({ quoteId }: QuoteDetailPageProps) {
                         <p className="text-sm text-gray-600">Valid Until</p>
                         <p className="font-medium">{q.valid_until ? formatDate(q.valid_until) : '-'}</p>
                     </div>
+                    {q.requested_delivery_date && (
+                        <div>
+                            <p className="text-sm text-gray-600">Requested Delivery</p>
+                            <p className="font-medium">{formatDate(q.requested_delivery_date)}</p>
+                        </div>
+                    )}
                     {q.supersedes_quote_id && (
                         <div>
                             <p className="text-sm text-gray-600">Supersedes</p>
@@ -149,10 +155,28 @@ function QuoteDetailPage({ quoteId }: QuoteDetailPageProps) {
                             </button>
                         </div>
                     )}
+                    {quote.newer_revision && (
+                        <div>
+                            <p className="text-sm text-gray-600">Newer Revision</p>
+                            <button
+                                className="font-medium text-brand-600 hover:underline text-left"
+                                onClick={() => setHash('quotes', quote.newer_revision!.id)}
+                                type="button"
+                            >
+                                {quote.newer_revision.id}
+                            </button>
+                        </div>
+                    )}
                     {q.accepted_at && (
                         <div>
                             <p className="text-sm text-gray-600">Accepted At</p>
                             <p className="font-medium">{formatDate(q.accepted_at)}</p>
+                        </div>
+                    )}
+                    {q.rejected_at && (
+                        <div>
+                            <p className="text-sm text-gray-600">Rejected At</p>
+                            <p className="font-medium">{formatDate(q.rejected_at)}</p>
                         </div>
                     )}
                     {q.sales_order_id && (
@@ -169,6 +193,32 @@ function QuoteDetailPage({ quoteId }: QuoteDetailPageProps) {
                     )}
                 </div>
             </Card>
+
+            {/* Shipping Address */}
+            {(q.ship_to_line1 || q.ship_to_city) && (
+                <Card>
+                    <h2 className="text-xl font-semibold mb-4">Shipping Address</h2>
+                    <div className="space-y-1">
+                        {q.ship_to_line1 && <p>{q.ship_to_line1}</p>}
+                        {q.ship_to_line2 && <p>{q.ship_to_line2}</p>}
+                        {(q.ship_to_postal_code || q.ship_to_city) && (
+                            <p>
+                                {q.ship_to_postal_code && <span>{q.ship_to_postal_code} </span>}
+                                {q.ship_to_city && <span>{q.ship_to_city}</span>}
+                            </p>
+                        )}
+                        {q.ship_to_country && <p>{q.ship_to_country}</p>}
+                    </div>
+                </Card>
+            )}
+
+            {/* Note */}
+            {q.note && (
+                <Card>
+                    <h2 className="text-xl font-semibold mb-4">Note</h2>
+                    <p className="text-slate-700 whitespace-pre-wrap">{q.note}</p>
+                </Card>
+            )}
 
             {/* Quote Lines */}
             <Card>
@@ -207,6 +257,18 @@ function QuoteDetailPage({ quoteId }: QuoteDetailPageProps) {
                         <span>Subtotal</span>
                         <span className="font-medium">{formatCurrency(q.subtotal)}</span>
                     </div>
+                    {q.discount > 0 && (
+                        <div className="flex justify-between">
+                            <span>Discount</span>
+                            <span className="font-medium">−{formatCurrency(q.discount)}</span>
+                        </div>
+                    )}
+                    {q.shipping > 0 && (
+                        <div className="flex justify-between">
+                            <span>Shipping</span>
+                            <span className="font-medium">{formatCurrency(q.shipping)}</span>
+                        </div>
+                    )}
                     <div className="flex justify-between">
                         <span>Tax</span>
                         <span className="font-medium">{formatCurrency(q.tax)}</span>

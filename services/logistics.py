@@ -58,6 +58,13 @@ def get_shipment_status(shipment_id: str) -> Dict[str, Any]:
         orders_query = "SELECT so.id as sales_order_id, so.customer_id, c.name as customer_name, c.company as customer_company, so.status FROM sales_order_shipments sos JOIN sales_orders so ON sos.sales_order_id = so.id LEFT JOIN customers c ON so.customer_id = c.id WHERE sos.shipment_id = ?"
         orders = dict_rows(conn.execute(orders_query, (shipment_id,)).fetchall())
         data["sales_orders"] = orders
+        lines = dict_rows(conn.execute(
+            "SELECT sl.id, sl.item_id, i.sku as item_sku, i.name as item_name, i.uom, sl.qty "
+            "FROM shipment_lines sl JOIN items i ON sl.item_id = i.id "
+            "WHERE sl.shipment_id = ? ORDER BY sl.id",
+            (shipment_id,),
+        ).fetchall())
+        data["lines"] = lines
         return data
 
 def dispatch_shipment(shipment_id: str) -> Dict[str, Any]:

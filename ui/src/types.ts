@@ -43,8 +43,10 @@ export type Item = {
   reserved_total?: number
   available_total?: number
   unit_price?: number
+  cost_price?: number
   uom?: string
   reorder_qty?: number
+  default_supplier_id?: string
   image_url?: string
   recipes?: Array<{
     id: string
@@ -132,6 +134,7 @@ export type QuoteDetail = {
     unit_price: number
     line_total: number
   }>
+  newer_revision?: { id: string; ui_url?: string }
   revisions?: Array<{
     id: string
     revision_number: number
@@ -143,9 +146,17 @@ export type QuoteDetail = {
 export type Shipment = {
   id: string
   status: string
+  ship_from_warehouse?: string
+  ship_to_line1?: string
+  ship_to_line2?: string
+  ship_to_postal_code?: string
+  ship_to_city?: string
+  ship_to_country?: string
   planned_departure?: string
   planned_arrival?: string
   tracking_ref?: string
+  dispatched_at?: string
+  delivered_at?: string
   sales_order_id?: string
   sales_orders?: Array<{
     sales_order_id: string
@@ -153,6 +164,14 @@ export type Shipment = {
     customer_name: string
     customer_company?: string
     status: string
+  }>
+  lines?: Array<{
+    id: string
+    item_id: string
+    item_sku: string
+    item_name: string
+    uom?: string
+    qty: number
   }>
 }
 
@@ -163,7 +182,10 @@ export type ProductionOrder = {
   item_sku?: string
   item_type?: string
   recipe_id?: string
+  sales_order_id?: string
   status?: string
+  current_operation?: string
+  qty_produced?: number
   started_at?: string
   completed_at?: string
   eta_finish?: string
@@ -224,6 +246,7 @@ export type Recipe = {
   output_qty: number
   output_uom?: string
   production_time_hours: number
+  notes?: string
   ingredients?: RecipeIngredient[]
   operations?: RecipeOperation[]
 }
@@ -244,6 +267,7 @@ export type RecipeOperation = {
   sequence_order: number
   operation_name: string
   duration_hours: number
+  work_center?: string
 }
 
 export type Supplier = {
@@ -252,6 +276,7 @@ export type Supplier = {
   contact_name?: string
   contact_email?: string
   contact_phone?: string
+  lead_time_days?: number
   purchase_orders?: PurchaseOrder[]
 }
 
@@ -265,10 +290,16 @@ export type PurchaseOrder = {
   item_type?: string
   uom?: string
   qty: number
+  unit_price?: number
+  total?: number
+  currency?: string
   status: string
+  ordered_at?: string
   expected_delivery?: string
+  received_at?: string
   contact_name?: string
   contact_email?: string
+  contact_phone?: string
 }
 
 export type Email = {

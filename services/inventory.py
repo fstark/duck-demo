@@ -7,6 +7,26 @@ from services._base import db_conn
 from db import dict_rows
 
 
+def _compute_reserved(conn, item_id: str) -> int:
+    """Compute total reserved qty for an item from open orders."""
+    row = conn.execute("""
+        SELECT COALESCE(SUM(qty), 0) as reserved FROM (
+            SELECT sol.item_id, sol.qty
+            FROM sales_order_lines sol
+            JOIN sales_orders so ON sol.sales_order_id = so.id
+            WHERE so.status IN ('draft', 'confirmed', 'in_production')
+              AND sol.item_id = ?
+            UNION ALL
+            SELECT ri.input_item_id as item_id, ri.input_qty as qty
+            FROM production_orders po
+            JOIN recipe_ingredients ri ON po.recipe_id = ri.recipe_id
+            WHERE po.status IN ('planned', 'waiting', 'ready')
+              AND ri.input_item_id = ?
+        )
+    """, (item_id, item_id)).fetchone()
+    return int(row[0]) if row else 0
+
+
 def get_stock_summary(item_id: str) -> Dict[str, Any]:
     """Get stock summary by location for an item."""
     with db_conn() as conn:
@@ -17,10 +37,15 @@ def get_stock_summary(item_id: str) -> Dict[str, Any]:
             )
         )
         on_hand = sum(r["on_hand"] for r in rows)
+        reserved = _compute_reserved(conn, item_id)
+        for r in rows:
+            r["reserved"] = reserved
+            r["available"] = r["on_hand"] - reserved
         return {
             "item_id": item_id,
             "on_hand_total": on_hand,
-            "available_total": on_hand,
+            "reserved_total": reserved,
+            "available_total": on_hand - reserved,
             "by_location": rows,
         }
 

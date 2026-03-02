@@ -204,6 +204,10 @@ export function SupplierDetailPage({ supplierId }: SupplierDetailPageProps) {
                             <dt className="text-sm font-medium text-gray-500">Contact Phone</dt>
                             <dd className="text-sm text-gray-900">{supplier.contact_phone || '—'}</dd>
                         </div>
+                        <div>
+                            <dt className="text-sm font-medium text-gray-500">Lead Time</dt>
+                            <dd className="text-sm text-gray-900">{supplier.lead_time_days != null ? `${supplier.lead_time_days} days` : '—'}</dd>
+                        </div>
                     </dl>
                 </Card>
             </section>

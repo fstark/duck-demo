@@ -164,9 +164,39 @@ export function ItemDetailPage({ sku }: ItemDetailPageProps) {
                             <div className="text-slate-600">
                                 <span className="font-medium">Type:</span> {item.type ? <Badge>{item.type}</Badge> : '—'}
                             </div>
+                            {item.uom && (
+                                <div className="text-slate-600">
+                                    <span className="font-medium">Unit of Measure:</span> {item.uom}
+                                </div>
+                            )}
                             <div className="text-slate-600">
                                 <span className="font-medium">Unit price:</span> {formatCurrency(item.unit_price)}
                             </div>
+                            {item.cost_price != null && (
+                                <div className="text-slate-600">
+                                    <span className="font-medium">Cost price:</span> {formatCurrency(item.cost_price)}
+                                </div>
+                            )}
+                            {item.reorder_qty != null && item.reorder_qty > 0 && (
+                                <div className="text-slate-600">
+                                    <span className="font-medium">Reorder qty:</span> {formatQtyWithUom(item.reorder_qty, item.uom)}
+                                </div>
+                            )}
+                            {item.default_supplier_id && (
+                                <div className="text-slate-600">
+                                    <span className="font-medium">Default supplier:</span>{' '}
+                                    <button
+                                        className="text-brand-600 hover:underline text-left"
+                                        onClick={() => {
+                                            setReferrer({ page: 'items', id: sku, label: item.name })
+                                            setHash('suppliers', item.default_supplier_id!)
+                                        }}
+                                        type="button"
+                                    >
+                                        {item.default_supplier_id}
+                                    </button>
+                                </div>
+                            )}
                         </div>
                         {item.image_url && (
                             <div className="flex-shrink-0">

@@ -166,6 +166,24 @@ export function ProductionOrderDetailPage({ productionOrderId }: ProductionOrder
                             <div className="font-medium">Status:</div>
                             <div>{productionOrder.status ? <Badge>{productionOrder.status}</Badge> : '—'}</div>
 
+                            {productionOrder.sales_order_id && (
+                                <>
+                                    <div className="font-medium">Sales Order:</div>
+                                    <div>
+                                        <button
+                                            className="text-brand-600 hover:underline text-left"
+                                            onClick={() => {
+                                                setReferrer({ page: 'production', id: productionOrderId, label: `Production Order ${productionOrder.id}` })
+                                                setHash('orders', productionOrder.sales_order_id!)
+                                            }}
+                                            type="button"
+                                        >
+                                            {productionOrder.sales_order_id}
+                                        </button>
+                                    </div>
+                                </>
+                            )}
+
                             <div className="font-medium">Recipe ID:</div>
                             <div>
                                 {productionOrder.recipe_id ? (
@@ -193,6 +211,20 @@ export function ProductionOrderDetailPage({ productionOrderId }: ProductionOrder
 
                             <div className="font-medium">ETA Ship:</div>
                             <div>{productionOrder.eta_ship || '—'}</div>
+
+                            {productionOrder.current_operation && (
+                                <>
+                                    <div className="font-medium">Current Operation:</div>
+                                    <div>{productionOrder.current_operation}</div>
+                                </>
+                            )}
+
+                            {productionOrder.qty_produced != null && productionOrder.qty_produced > 0 && (
+                                <>
+                                    <div className="font-medium">Qty Produced:</div>
+                                    <div><Quantity value={productionOrder.qty_produced} /></div>
+                                </>
+                            )}
 
                             {productionOrder.parent_production_order_id && (
                                 <>
@@ -223,6 +255,7 @@ export function ProductionOrderDetailPage({ productionOrderId }: ProductionOrder
                                         <tr className="bg-slate-50">
                                             <th className="px-3 py-2 text-left text-xs font-medium text-slate-600">Seq</th>
                                             <th className="px-3 py-2 text-left text-xs font-medium text-slate-600">Operation</th>
+                                            <th className="px-3 py-2 text-left text-xs font-medium text-slate-600">Work Center</th>
                                             <th className="px-3 py-2 text-left text-xs font-medium text-slate-600">Duration (hrs)</th>
                                             <th className="px-3 py-2 text-left text-xs font-medium text-slate-600">Status</th>
                                             <th className="px-3 py-2 text-left text-xs font-medium text-slate-600">Started</th>
@@ -234,6 +267,7 @@ export function ProductionOrderDetailPage({ productionOrderId }: ProductionOrder
                                             <tr key={op.id} className="hover:bg-slate-50">
                                                 <td className="px-3 py-2 text-sm text-slate-700">{op.sequence_order}</td>
                                                 <td className="px-3 py-2 text-sm text-slate-700">{op.operation_name}</td>
+                                                <td className="px-3 py-2 text-sm text-slate-700">{op.work_center || '—'}</td>
                                                 <td className="px-3 py-2 text-sm text-slate-700">{op.duration_hours}</td>
                                                 <td className="px-3 py-2 text-sm">
                                                     <Badge>{op.status}</Badge>

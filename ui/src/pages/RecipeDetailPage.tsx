@@ -252,6 +252,12 @@ export function RecipeDetailPage({ recipeId }: RecipeDetailPageProps) {
                             <dt className="text-sm font-medium text-gray-500">Production Time</dt>
                             <dd className="text-sm text-gray-900">{recipe.production_time_hours} hours</dd>
                         </div>
+                        {recipe.notes && (
+                            <div className="sm:col-span-2">
+                                <dt className="text-sm font-medium text-gray-500">Notes</dt>
+                                <dd className="text-sm text-gray-900 whitespace-pre-wrap">{recipe.notes}</dd>
+                            </div>
+                        )}
                     </dl>
                 </Card>
             </section>
@@ -295,6 +301,7 @@ export function RecipeDetailPage({ recipeId }: RecipeDetailPageProps) {
                             columns={[
                                 { key: 'sequence_order', label: '#', sortable: true },
                                 { key: 'operation_name', label: 'Operation', sortable: true },
+                                { key: 'work_center', label: 'Work Center', sortable: true, render: (row) => row.work_center || '—' },
                                 { key: 'duration_hours', label: 'Duration (hrs)', sortable: true },
                             ]}
                             sortKey={operationSort?.key}

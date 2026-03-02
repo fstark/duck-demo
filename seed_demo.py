@@ -198,11 +198,11 @@ def seed(from_admin=False):
 
         # Suppliers
         conn.executemany(
-            "INSERT INTO suppliers (id, name, contact_email, lead_time_days) VALUES (?, ?, ?, ?)",
+            "INSERT INTO suppliers (id, name, contact_name, contact_email, contact_phone, lead_time_days) VALUES (?, ?, ?, ?, ?, ?)",
             [
-                ("SUP-001", "PlasticCorp", "orders@plasticcorp.example", 10),
-                ("SUP-002", "ColorMaster Dyes", "sales@colormaster.example", 7),
-                ("SUP-003", "PackagingPlus", "contact@packagingplus.example", 5),
+                ("SUP-001", "PlasticCorp", "Marc Dupont", "orders@plasticcorp.example", "+33 1 40 00 11 22", 10),
+                ("SUP-002", "ColorMaster Dyes", "Isabelle Morel", "sales@colormaster.example", "+33 4 72 33 44 55", 7),
+                ("SUP-003", "PackagingPlus", "Jean-Pierre Laurent", "contact@packagingplus.example", "+33 3 88 66 77 88", 5),
             ],
         )
 

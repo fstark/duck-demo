@@ -5,6 +5,8 @@ import { PurchaseOrder } from '../types'
 import { api } from '../api'
 import { useNavigation } from '../contexts/NavigationContext'
 import { formatQtyWithUom } from '../utils/quantity'
+import { formatCurrency } from '../utils/currency'
+import { formatDate } from '../utils/date'
 
 function setHash(page: string, id?: string) {
     const path = id ? `#/${page}/${encodeURIComponent(id)}` : `#/${page}`
@@ -157,9 +159,19 @@ export function PurchaseOrderDetailPage({ purchaseOrderId }: PurchaseOrderDetail
                         </dd>
                     </div>
                     <div>
-                        <dt className="text-sm font-medium text-gray-500">Expected Delivery</dt>
-                        <dd className="text-sm text-gray-900">{purchaseOrder.expected_delivery || '—'}</dd>
+                        <dt className="text-sm font-medium text-gray-500">Ordered At</dt>
+                        <dd className="text-sm text-gray-900">{purchaseOrder.ordered_at ? formatDate(purchaseOrder.ordered_at) : '—'}</dd>
                     </div>
+                    <div>
+                        <dt className="text-sm font-medium text-gray-500">Expected Delivery</dt>
+                        <dd className="text-sm text-gray-900">{purchaseOrder.expected_delivery ? formatDate(purchaseOrder.expected_delivery) : '—'}</dd>
+                    </div>
+                    {purchaseOrder.received_at && (
+                        <div>
+                            <dt className="text-sm font-medium text-gray-500">Received At</dt>
+                            <dd className="text-sm text-gray-900">{formatDate(purchaseOrder.received_at)}</dd>
+                        </div>
+                    )}
                     <div>
                         <dt className="text-sm font-medium text-gray-500">Supplier</dt>
                         <dd className="text-sm text-gray-900">
@@ -189,6 +201,12 @@ export function PurchaseOrderDetailPage({ purchaseOrderId }: PurchaseOrderDetail
                             ) : '—'}
                         </dd>
                     </div>
+                    {purchaseOrder.contact_phone && (
+                        <div>
+                            <dt className="text-sm font-medium text-gray-500">Contact Phone</dt>
+                            <dd className="text-sm text-gray-900">{purchaseOrder.contact_phone}</dd>
+                        </div>
+                    )}
                 </dl>
 
                 <div className="mt-6 border-t pt-4">
@@ -221,6 +239,18 @@ export function PurchaseOrderDetailPage({ purchaseOrderId }: PurchaseOrderDetail
                             <dt className="text-sm font-medium text-gray-500">Quantity</dt>
                             <dd className="text-sm text-gray-900">
                                 {formatQtyWithUom(purchaseOrder.qty, purchaseOrder.uom)}
+                            </dd>
+                        </div>
+                        <div>
+                            <dt className="text-sm font-medium text-gray-500">Unit Price</dt>
+                            <dd className="text-sm text-gray-900">
+                                {purchaseOrder.unit_price != null ? formatCurrency(purchaseOrder.unit_price, purchaseOrder.currency) : '—'}
+                            </dd>
+                        </div>
+                        <div>
+                            <dt className="text-sm font-medium text-gray-500">Total</dt>
+                            <dd className="text-sm text-gray-900">
+                                {purchaseOrder.total != null ? formatCurrency(purchaseOrder.total, purchaseOrder.currency) : '—'}
                             </dd>
                         </div>
                     </dl>
