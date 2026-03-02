@@ -259,18 +259,29 @@ class QuoteService:
                 (quote_id,)
             ).fetchall())
 
-            sales_order_lines = [{"sku": line["sku"], "qty": line["qty"]} for line in lines]
+            sales_order_lines = [{"sku": line["sku"], "qty": line["qty"], "unit_price": line["unit_price"], "line_total": line["line_total"]} for line in lines]
 
             ship_to = None
             if quote["ship_to_line1"]:
                 ship_to = ship_to_dict(quote)
+
+            pricing = {
+                "subtotal": quote["subtotal"],
+                "discount": quote["discount"],
+                "shipping": quote["shipping"],
+                "tax": quote["tax"],
+                "total": quote["total"],
+                "currency": quote["currency"],
+            }
 
             sales_result = SalesService.create_order(
                 customer_id=quote["customer_id"],
                 requested_delivery_date=quote["requested_delivery_date"],
                 ship_to=ship_to,
                 lines=sales_order_lines,
-                note=f"Created from quote {quote_id}"
+                note=f"Created from quote {quote_id}",
+                quote_id=quote_id,
+                pricing=pricing,
             )
 
             conn.execute(

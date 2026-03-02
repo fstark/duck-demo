@@ -25,8 +25,7 @@ class InvoiceService:
 
     @staticmethod
     def create_invoice(sales_order_id: str) -> Dict[str, Any]:
-        """Create a draft invoice from a sales order, pulling pricing automatically."""
-        from services.pricing import PricingService
+        """Create a draft invoice from a sales order, using stored pricing."""
         from services.simulation import SimulationService
 
         with db_conn() as conn:
@@ -36,8 +35,15 @@ class InvoiceService:
 
             customer = conn.execute("SELECT name, tax_id FROM customers WHERE id = ?", (so["customer_id"],)).fetchone()
 
-            pricing_result = PricingService.compute_pricing(sales_order_id)
-            p = pricing_result["pricing"]
+            # Use frozen pricing from the sales order
+            p = {
+                "subtotal": so["subtotal"],
+                "discount": so["discount"],
+                "shipping": so["shipping"],
+                "tax": so["tax"],
+                "total": so["total"],
+                "currency": so["currency"],
+            }
 
             sim_time = SimulationService.get_current_time()
             inv_id = generate_id(conn, "INV", "invoices")
@@ -94,7 +100,11 @@ class InvoiceService:
 
             sim_time = SimulationService.get_current_time()
             invoice_date = datetime.fromisoformat(inv["invoice_date"])
-            due_date = (invoice_date + timedelta(days=config.INVOICE_PAYMENT_TERMS_DAYS)).strftime("%Y-%m-%d")
+
+            # Use customer-specific payment terms if available, else global default
+            customer = conn.execute("SELECT payment_terms FROM customers WHERE id = ?", (inv["customer_id"],)).fetchone()
+            payment_days = (customer["payment_terms"] if customer and customer["payment_terms"] else config.INVOICE_PAYMENT_TERMS_DAYS)
+            due_date = (invoice_date + timedelta(days=payment_days)).strftime("%Y-%m-%d")
 
             conn.execute(
                 "UPDATE invoices SET status = 'issued', due_date = ?, issued_at = ? WHERE id = ?",
@@ -145,7 +155,7 @@ class InvoiceService:
                 customer_dict["ui_url"] = ui_href("customers", customer_dict["id"])
 
             lines = dict_rows(conn.execute(
-                "SELECT i.sku, i.uom, sol.qty FROM sales_order_lines sol "
+                "SELECT i.sku, i.uom, sol.qty, sol.unit_price, sol.line_total FROM sales_order_lines sol "
                 "JOIN items i ON sol.item_id = i.id "
                 "WHERE sol.sales_order_id = ?",
                 (inv["sales_order_id"],),
@@ -345,16 +355,16 @@ class InvoiceService:
 
         with db_conn() as conn:
             for line in lines:
-                item = conn.execute("SELECT * FROM items WHERE sku = ?", (line['sku'],)).fetchone()
-                if item:
-                    unit_price = item['unit_price']
-                    line_total = unit_price * line['qty']
-                    line_items_data.append([
-                        f"{item['name']} ({line['sku']})",
-                        f"{format_qty(line['qty'], line.get('uom', 'ea'))}",
-                        f"{inv['currency']} {unit_price:.2f}",
-                        f"{inv['currency']} {line_total:.2f}"
-                    ])
+                unit_price = line.get('unit_price', 0)
+                line_total = line.get('line_total', unit_price * line['qty'])
+                item = conn.execute("SELECT name FROM items WHERE sku = ?", (line['sku'],)).fetchone()
+                item_name = item['name'] if item else line['sku']
+                line_items_data.append([
+                    f"{item_name} ({line['sku']})",
+                    f"{format_qty(line['qty'], line.get('uom', 'ea'))}",
+                    f"{inv['currency']} {unit_price:.2f}",
+                    f"{inv['currency']} {line_total:.2f}"
+                ])
 
         line_items_table = Table(line_items_data, colWidths=[3*inch, 1*inch, 1.25*inch, 1.25*inch])
         line_items_table.setStyle(TableStyle([

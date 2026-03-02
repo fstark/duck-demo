@@ -87,8 +87,8 @@ class LogisticsService:
 
             sim_time = SimulationService.get_current_time()
             conn.execute(
-                "UPDATE shipments SET status = 'in_transit', tracking_ref = ? WHERE id = ?",
-                (f"TRK-{shipment_id}", shipment_id)
+                "UPDATE shipments SET status = 'in_transit', tracking_ref = ?, dispatched_at = ? WHERE id = ?",
+                (f"TRK-{shipment_id}", sim_time, shipment_id)
             )
             conn.commit()
             return {
@@ -114,8 +114,8 @@ class LogisticsService:
 
             sim_time = SimulationService.get_current_time()
             conn.execute(
-                "UPDATE shipments SET status = 'delivered' WHERE id = ?",
-                (shipment_id,)
+                "UPDATE shipments SET status = 'delivered', delivered_at = ? WHERE id = ?",
+                (sim_time, shipment_id,)
             )
             conn.commit()
             return {

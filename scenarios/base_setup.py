@@ -21,20 +21,20 @@ logger = logging.getLogger(__name__)
 
 # -- Raw materials & components ----------------------------------------------
 MATERIALS = [
-    # (id, sku, name, type, unit_price, uom, reorder_qty, default_supplier_id)
-    ("ITEM-PVC",        "PVC-PELLETS",   "PVC Pellets",               "raw_material", None,  "g",  1500000, "SUP-001"),
-    ("ITEM-BLACK-DYE",  "BLACK-DYE",     "Black Dye",                 "raw_material", None,  "ml",  800,  "SUP-002"),
-    ("ITEM-YELLOW-DYE", "YELLOW-DYE",    "Yellow Dye",                "raw_material", None,  "ml",  800,  "SUP-002"),
-    ("ITEM-RED-DYE",    "RED-DYE",       "Red Dye",                   "raw_material", None,  "ml",  600,  "SUP-002"),
-    ("ITEM-GREEN-DYE",  "GREEN-DYE",     "Green Dye",                 "raw_material", None,  "ml",  500,  "SUP-002"),
-    ("ITEM-WHITE-DYE",  "WHITE-DYE",     "White Dye",                 "raw_material", None,  "ml",  600,  "SUP-002"),
-    ("ITEM-ORANGE-DYE", "ORANGE-DYE",    "Orange Dye",                "raw_material", None,  "ml",  500,  "SUP-002"),
-    ("ITEM-BLUE-DYE",   "BLUE-DYE",      "Blue Dye",                  "raw_material", None,  "ml",  500,  "SUP-002"),
-    ("ITEM-PINK-DYE",   "PINK-DYE",      "Pink Dye",                  "raw_material", None,  "ml",  400,  "SUP-002"),
-    ("ITEM-BOX-SMALL",  "BOX-SMALL",     "Small Box",                 "raw_material", None,  "ea",  1000, "SUP-003"),
-    ("ITEM-BOX-MEDIUM", "BOX-MEDIUM",    "Medium Box",                "raw_material", None,  "ea",  500,  "SUP-003"),
-    ("ITEM-FOAM-SHEET", "FOAM-SHEET",    "Foam Padding Sheet",        "raw_material", None,  "ea",  600,  "SUP-003"),
-    ("ITEM-PAINT-GLOSS","PAINT-GLOSS",   "Gloss Finish Paint",        "raw_material", None,  "ml",  400,  "SUP-002"),
+    # (id, sku, name, type, unit_price, cost_price, uom, reorder_qty, default_supplier_id)
+    ("ITEM-PVC",        "PVC-PELLETS",   "PVC Pellets",               "raw_material", None, 0.012, "g",  1500000, "SUP-001"),
+    ("ITEM-BLACK-DYE",  "BLACK-DYE",     "Black Dye",                 "raw_material", None, 0.08,  "ml",  800,  "SUP-002"),
+    ("ITEM-YELLOW-DYE", "YELLOW-DYE",    "Yellow Dye",                "raw_material", None, 0.09,  "ml",  800,  "SUP-002"),
+    ("ITEM-RED-DYE",    "RED-DYE",       "Red Dye",                   "raw_material", None, 0.10,  "ml",  600,  "SUP-002"),
+    ("ITEM-GREEN-DYE",  "GREEN-DYE",     "Green Dye",                 "raw_material", None, 0.09,  "ml",  500,  "SUP-002"),
+    ("ITEM-WHITE-DYE",  "WHITE-DYE",     "White Dye",                 "raw_material", None, 0.07,  "ml",  600,  "SUP-002"),
+    ("ITEM-ORANGE-DYE", "ORANGE-DYE",    "Orange Dye",                "raw_material", None, 0.09,  "ml",  500,  "SUP-002"),
+    ("ITEM-BLUE-DYE",   "BLUE-DYE",      "Blue Dye",                  "raw_material", None, 0.10,  "ml",  500,  "SUP-002"),
+    ("ITEM-PINK-DYE",   "PINK-DYE",      "Pink Dye",                  "raw_material", None, 0.11,  "ml",  400,  "SUP-002"),
+    ("ITEM-BOX-SMALL",  "BOX-SMALL",     "Small Box",                 "raw_material", None, 0.45,  "ea",  1000, "SUP-003"),
+    ("ITEM-BOX-MEDIUM", "BOX-MEDIUM",    "Medium Box",                "raw_material", None, 0.65,  "ea",  500,  "SUP-003"),
+    ("ITEM-FOAM-SHEET", "FOAM-SHEET",    "Foam Padding Sheet",        "raw_material", None, 0.30,  "ea",  600,  "SUP-003"),
+    ("ITEM-PAINT-GLOSS","PAINT-GLOSS",   "Gloss Finish Paint",        "raw_material", None, 0.15,  "ml",  400,  "SUP-002"),
 ]
 
 # -- Finished goods ----------------------------------------------------------
@@ -297,10 +297,10 @@ def populate() -> dict:
 
     with db_conn() as conn:
         # ---- Items (materials) ----
-        for item_id, sku, name, itype, price, uom, reorder, default_supplier_id in MATERIALS:
+        for item_id, sku, name, itype, price, cost, uom, reorder, default_supplier_id in MATERIALS:
             conn.execute(
-                "INSERT INTO items (id, sku, name, type, unit_price, uom, reorder_qty, default_supplier_id) VALUES (?,?,?,?,?,?,?,?)",
-                (item_id, sku, name, itype, price, uom, reorder, default_supplier_id),
+                "INSERT INTO items (id, sku, name, type, unit_price, cost_price, uom, reorder_qty, default_supplier_id) VALUES (?,?,?,?,?,?,?,?,?)",
+                (item_id, sku, name, itype, price, cost, uom, reorder, default_supplier_id),
             )
         logger.info("Inserted %d raw materials", len(MATERIALS))
 

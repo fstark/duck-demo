@@ -34,7 +34,8 @@ class PurchaseService:
             sim_time = SimulationService.get_current_time()
             sim_date = datetime.fromisoformat(sim_time).date()
             expected_delivery = (sim_date + timedelta(days=supplier["lead_time_days"] if supplier["lead_time_days"] else 7)).isoformat()
-            conn.execute("INSERT INTO purchase_orders (id, supplier_id, item_id, qty, status, expected_delivery, ordered_at) VALUES (?, ?, ?, ?, 'ordered', ?, ?)", (po_id, supplier["id"], item["id"], qty, expected_delivery, sim_time))
+            cost = item.get("cost_price") or item.get("unit_price") or 0
+            conn.execute("INSERT INTO purchase_orders (id, supplier_id, item_id, qty, unit_price, total, currency, status, expected_delivery, ordered_at) VALUES (?, ?, ?, ?, ?, ?, 'EUR', 'ordered', ?, ?)", (po_id, supplier["id"], item["id"], qty, cost, cost * qty, expected_delivery, sim_time))
             conn.commit()
             return {"purchase_order_id": po_id, "supplier_name": supplier["name"], "item_sku": item_sku, "item_name": item["name"], "qty": qty, "status": "ordered", "expected_delivery": expected_delivery, "message": f"Purchase order {po_id} created for {qty} {item['uom']} of {item['name']} from {supplier['name']}"}
 
@@ -60,7 +61,9 @@ class PurchaseService:
                 raise ValueError(f"Purchase order {purchase_order_id} not found")
             if po["status"] == "received":
                 raise ValueError(f"Purchase order {purchase_order_id} already received")
-            conn.execute("UPDATE purchase_orders SET status = 'received' WHERE id = ?", (purchase_order_id,))
+            from services.simulation import SimulationService
+            sim_time = SimulationService.get_current_time()
+            conn.execute("UPDATE purchase_orders SET status = 'received', received_at = ? WHERE id = ?", (sim_time, purchase_order_id,))
             stock_id = generate_id(conn, "STK", "stock")
             conn.execute("INSERT INTO stock (id, item_id, warehouse, location, on_hand) VALUES (?, ?, ?, ?, ?)", (stock_id, po["item_id"], warehouse, location, po["qty"]))
             conn.commit()

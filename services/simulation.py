@@ -127,8 +127,8 @@ class SimulationService:
             ).fetchall()
             for ship in in_transit:
                 conn.execute(
-                    "UPDATE shipments SET status = 'delivered' WHERE id = ?",
-                    (ship["id"],)
+                    "UPDATE shipments SET status = 'delivered', delivered_at = ? WHERE id = ?",
+                    (new_time, ship["id"],)
                 )
                 delivered_ships.append(ship["id"])
             if delivered_ships:

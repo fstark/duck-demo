@@ -30,7 +30,8 @@ CREATE TABLE IF NOT EXISTS items (
     sku TEXT NOT NULL UNIQUE,
     name TEXT NOT NULL,
     type TEXT NOT NULL,
-    unit_price REAL,
+    unit_price REAL,           -- selling price (finished goods)
+    cost_price REAL,           -- purchase cost (raw materials / components)
     uom TEXT DEFAULT 'ea',
     reorder_qty INTEGER DEFAULT 0,
     default_supplier_id TEXT,
@@ -82,9 +83,10 @@ CREATE TABLE IF NOT EXISTS quote_lines (
     line_total REAL NOT NULL
 );
 
--- Sales order workflow: draft -> committed (price locked) -> delivery (stock allocated) -> completed
+-- Sales order workflow: draft -> confirmed -> completed
 CREATE TABLE IF NOT EXISTS sales_orders (
     id TEXT PRIMARY KEY,
+    quote_id TEXT NOT NULL,
     customer_id TEXT NOT NULL,
     requested_delivery_date TEXT,
     ship_to_line1 TEXT,
@@ -93,6 +95,12 @@ CREATE TABLE IF NOT EXISTS sales_orders (
     ship_to_city TEXT,
     ship_to_country TEXT,
     note TEXT,
+    subtotal REAL NOT NULL DEFAULT 0,
+    discount REAL NOT NULL DEFAULT 0,
+    shipping REAL NOT NULL DEFAULT 0,
+    tax REAL NOT NULL DEFAULT 0,
+    total REAL NOT NULL DEFAULT 0,
+    currency TEXT NOT NULL DEFAULT 'EUR',
     status TEXT,
     created_at TEXT
 );
@@ -101,7 +109,9 @@ CREATE TABLE IF NOT EXISTS sales_order_lines (
     id TEXT PRIMARY KEY,
     sales_order_id TEXT NOT NULL,
     item_id TEXT NOT NULL,
-    qty INTEGER NOT NULL
+    qty INTEGER NOT NULL,
+    unit_price REAL NOT NULL,
+    line_total REAL NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS shipments (
@@ -115,7 +125,9 @@ CREATE TABLE IF NOT EXISTS shipments (
     planned_departure TEXT NOT NULL,
     planned_arrival TEXT NOT NULL,
     status TEXT NOT NULL,
-    tracking_ref TEXT
+    tracking_ref TEXT,
+    dispatched_at TEXT,
+    delivered_at TEXT
 );
 
 CREATE TABLE IF NOT EXISTS shipment_lines (
@@ -135,6 +147,7 @@ CREATE TABLE IF NOT EXISTS sales_order_shipments (
 -- Each production order produces exactly one batch from one recipe
 CREATE TABLE IF NOT EXISTS production_orders (
     id TEXT PRIMARY KEY,
+    sales_order_id TEXT NOT NULL,
     recipe_id TEXT NOT NULL,
     item_id TEXT NOT NULL,
     status TEXT DEFAULT 'planned',
@@ -208,6 +221,9 @@ CREATE TABLE IF NOT EXISTS purchase_orders (
     item_id TEXT NOT NULL,
     qty INTEGER NOT NULL,
     supplier_id TEXT NOT NULL,
+    unit_price REAL,
+    total REAL,
+    currency TEXT NOT NULL DEFAULT 'EUR',
     status TEXT NOT NULL DEFAULT 'ordered',
     ordered_at TEXT,
     expected_delivery TEXT,

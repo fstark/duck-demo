@@ -253,7 +253,7 @@ def run_full_sales_cycle(
         output_qty = recipe_data["output_qty"]  # units per batch
         batches_needed = max(1, -(-int(line["qty"]) // output_qty))  # ceil division
         for _ in range(batches_needed):
-            mo = production_service.create_order(recipe_id=recipe_id, notes=f"For {so_id}")
+            mo = production_service.create_order(recipe_id=recipe_id, sales_order_id=so_id, notes=f"For {so_id}")
             mo_ids.append(mo["production_order_id"])
             # Start if ready
             if mo["status"] == "ready":
@@ -316,22 +316,27 @@ def create_sales_order_only(
     note: Optional[str] = None,
     confirm: bool = True,
 ) -> str:
-    """Create a sales order (optionally confirmed) without running the full lifecycle.
+    """Create a sales order via quote flow (optionally confirmed).
 
+    Every SO must originate from a quote. This helper creates a quote,
+    sends it, accepts it (which creates the SO), and optionally confirms.
     Returns the sales_order_id.
     """
     if not requested_delivery_date:
         requested_delivery_date = future_date(14)
-    so = sales_service.create_order(
+    q = quote_service.create_quote(
         customer_id=customer_id,
         requested_delivery_date=requested_delivery_date,
         ship_to=ship_to,
         lines=lines,
         note=note,
     )
+    quote_service.send_quote(q["quote_id"])
+    accept = quote_service.accept_quote(q["quote_id"])
+    so_id = accept["sales_order_id"]
     if confirm:
-        sales_service.confirm_order(so["sales_order_id"])
-    return so["sales_order_id"]
+        sales_service.confirm_order(so_id)
+    return so_id
 
 
 def create_quote_only(
@@ -448,7 +453,7 @@ def trigger_production_for_orders(
             recipe_data = recipe_service.get_recipe(recipe_id)
             batches = int(max(1, -(-int(line["qty"]) // int(recipe_data["output_qty"]))))
             for _ in range(batches):
-                mo = production_service.create_order(recipe_id=recipe_id, notes=f"For {so_id}")
+                mo = production_service.create_order(recipe_id=recipe_id, sales_order_id=so_id, notes=f"For {so_id}")
                 mo_ids.append(mo["production_order_id"])
                 if start and mo["status"] == "ready":
                     production_service.start_order(mo["production_order_id"])

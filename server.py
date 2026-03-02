@@ -99,4 +99,7 @@ if __name__ == "__main__":
         UVICORN_DEFAULT_CONFIG["formatters"]["access"]["fmt"] = '%(asctime)s %(levelname)s %(client_addr)s - "%(request_line)s" %(status_code)s'
         UVICORN_DEFAULT_CONFIG["formatters"]["access"]["datefmt"] = "%Y-%m-%dT%H:%M:%S"
         
-        mcp.run(transport="streamable-http")
+        try:
+            mcp.run(transport="streamable-http")
+        except KeyboardInterrupt:
+            logger.info("Duck Demo MCP Server interrupted and stopping...")

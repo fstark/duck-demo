@@ -53,8 +53,8 @@ class ProductionService:
             return [dict(row) for row in rows]
 
     @staticmethod
-    def create_order(recipe_id: str, notes: Optional[str]) -> Dict[str, Any]:
-        """Create a new production order."""
+    def create_order(recipe_id: str, sales_order_id: str, notes: Optional[str] = None) -> Dict[str, Any]:
+        """Create a new production order for a sales order."""
         from services.recipe import RecipeService
         from services.inventory import InventoryService
         from services.simulation import SimulationService
@@ -74,7 +74,7 @@ class ProductionService:
             eta_finish = (sim_date + timedelta(days=1 + int(prod_time_days))).isoformat()
             eta_ship = (sim_date + timedelta(days=2 + int(prod_time_days))).isoformat()
             order_id = generate_id(conn, "MO", "production_orders")
-            conn.execute("INSERT INTO production_orders (id, recipe_id, item_id, status, eta_finish, eta_ship) VALUES (?, ?, ?, ?, ?, ?)", (order_id, recipe_id, recipe_data["output_item_id"], status, eta_finish, eta_ship))
+            conn.execute("INSERT INTO production_orders (id, sales_order_id, recipe_id, item_id, status, eta_finish, eta_ship) VALUES (?, ?, ?, ?, ?, ?, ?)", (order_id, sales_order_id, recipe_id, recipe_data["output_item_id"], status, eta_finish, eta_ship))
             for op in recipe_data["operations"]:
                 pop_id = generate_id(conn, "POP", "production_operations")
                 conn.execute("INSERT INTO production_operations (id, production_order_id, recipe_operation_id, sequence_order, operation_name, duration_hours, status) VALUES (?, ?, ?, ?, ?, ?, ?)", (pop_id, order_id, op["id"], op["sequence_order"], op["operation_name"], op["duration_hours"], "pending"))

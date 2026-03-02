@@ -133,14 +133,19 @@ def register(mcp):
             Confirmation metadata for the quote send action.
         """
         quote = quote_service.get_quote(quote_id)
+        if not quote:
+            raise ValueError(f"Quote {quote_id} not found")
+
+        q = quote.get("quote", {})
+        cust = quote.get("customer", {})
 
         arguments = {"quote_id": quote_id}
 
         field_configs = [
             {"name": "quote_id", "label": "Quote ID", "type": "text", "value": quote_id, "required": True, "display_order": 1},
-            {"name": "customer", "label": "Customer", "type": "text", "value": quote.get("customer_name"), "display_order": 2},
-            {"name": "total", "label": "Total Amount", "type": "text", "value": f"{quote.get('total_amount', 0):.2f} {quote.get('currency', 'EUR')}", "display_order": 3},
-            {"name": "items_count", "label": "Number of Items", "type": "number", "value": len(quote.get("items", [])), "display_order": 4},
+            {"name": "customer", "label": "Customer", "type": "text", "value": cust.get("name") if cust else None, "display_order": 2},
+            {"name": "total", "label": "Total Amount", "type": "text", "value": f"{q.get('total', 0):.2f} {q.get('currency', 'EUR')}", "display_order": 3},
+            {"name": "items_count", "label": "Number of Items", "type": "number", "value": len(quote.get("lines", [])), "display_order": 4},
         ]
 
         return create_confirmation_response(
@@ -173,14 +178,19 @@ def register(mcp):
             Confirmation metadata for the quote acceptance action.
         """
         quote = quote_service.get_quote(quote_id)
+        if not quote:
+            raise ValueError(f"Quote {quote_id} not found")
+
+        q = quote.get("quote", {})
+        cust = quote.get("customer", {})
 
         arguments = {"quote_id": quote_id}
 
         field_configs = [
             {"name": "quote_id", "label": "Quote ID", "type": "text", "value": quote_id, "required": True, "display_order": 1},
-            {"name": "customer", "label": "Customer", "type": "text", "value": quote.get("customer_name"), "display_order": 2},
-            {"name": "total", "label": "Total Amount", "type": "text", "value": f"{quote.get('total_amount', 0):.2f} {quote.get('currency', 'EUR')}", "display_order": 3},
-            {"name": "items_count", "label": "Number of Items", "type": "number", "value": len(quote.get("items", [])), "display_order": 4},
+            {"name": "customer", "label": "Customer", "type": "text", "value": cust.get("name") if cust else None, "display_order": 2},
+            {"name": "total", "label": "Total Amount", "type": "text", "value": f"{q.get('total', 0):.2f} {q.get('currency', 'EUR')}", "display_order": 3},
+            {"name": "items_count", "label": "Number of Items", "type": "number", "value": len(quote.get("lines", [])), "display_order": 4},
         ]
 
         return create_confirmation_response(
@@ -213,13 +223,18 @@ def register(mcp):
             Confirmation metadata for the quote rejection action.
         """
         quote = quote_service.get_quote(quote_id)
+        if not quote:
+            raise ValueError(f"Quote {quote_id} not found")
+
+        q = quote.get("quote", {})
+        cust = quote.get("customer", {})
 
         arguments = {"quote_id": quote_id, "reason": reason}
 
         field_configs = [
             {"name": "quote_id", "label": "Quote ID", "type": "text", "value": quote_id, "required": True, "display_order": 1},
-            {"name": "customer", "label": "Customer", "type": "text", "value": quote.get("customer_name"), "display_order": 2},
-            {"name": "total", "label": "Total Amount", "type": "text", "value": f"{quote.get('total_amount', 0):.2f} {quote.get('currency', 'EUR')}", "display_order": 3},
+            {"name": "customer", "label": "Customer", "type": "text", "value": cust.get("name") if cust else None, "display_order": 2},
+            {"name": "total", "label": "Total Amount", "type": "text", "value": f"{q.get('total', 0):.2f} {q.get('currency', 'EUR')}", "display_order": 3},
             {"name": "reason", "label": "Rejection Reason", "type": "textarea", "value": reason, "display_order": 4},
         ]
 
@@ -265,6 +280,10 @@ def register(mcp):
             Confirmation metadata for the quote revision action.
         """
         quote = quote_service.get_quote(quote_id)
+        if not quote:
+            raise ValueError(f"Quote {quote_id} not found")
+
+        cust = quote.get("customer", {})
 
         arguments = {
             "quote_id": quote_id,
@@ -279,7 +298,7 @@ def register(mcp):
 
         field_configs = [
             {"name": "quote_id", "label": "Original Quote ID", "type": "text", "value": quote_id, "required": True, "display_order": 1},
-            {"name": "customer", "label": "Customer", "type": "text", "value": quote.get("customer_name"), "display_order": 2},
+            {"name": "customer", "label": "Customer", "type": "text", "value": cust.get("name") if cust else None, "display_order": 2},
             {"name": "lines_info", "label": "Line Items", "type": "text", "value": lines_info, "display_order": 3},
             {"name": "requested_delivery_date", "label": "Delivery Date", "type": "date", "value": requested_delivery_date, "display_order": 4},
             {"name": "valid_days", "label": "Valid For (days)", "type": "number", "value": valid_days, "display_order": 5},

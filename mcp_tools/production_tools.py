@@ -55,13 +55,14 @@ def register(mcp):
         }
     }, structured_output=False)
     @log_tool("production_create_order")
-    def production_create_order(recipe_id: str, notes: Optional[str] = None) -> Dict[str, Any]:
+    def production_create_order(recipe_id: str, sales_order_id: str, notes: Optional[str] = None) -> Dict[str, Any]:
         """
         Create a new production order to execute one batch of a recipe.
         Shows confirmation dialog before creating the order.
 
         Parameters:
             recipe_id: The recipe to execute (e.g., 'RCP-ELVIS-20')
+            sales_order_id: The sales order this production fulfills (e.g., 'SO-1000')
             notes: Optional notes for the production order
 
         Returns:
@@ -69,7 +70,7 @@ def register(mcp):
         """
         recipe = recipe_service.get_recipe(recipe_id)
 
-        arguments = {"recipe_id": recipe_id, "notes": notes}
+        arguments = {"recipe_id": recipe_id, "sales_order_id": sales_order_id, "notes": notes}
 
         field_configs = [
             {"name": "recipe_id", "label": "Recipe ID", "type": "text", "value": recipe_id, "required": True, "display_order": 1},

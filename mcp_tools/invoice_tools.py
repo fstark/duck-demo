@@ -29,15 +29,22 @@ def register(mcp):
         Returns:
             Confirmation metadata for the invoice creation action.
         """
-        order = sales_service.get_order(sales_order_id)
+        order = sales_service.get_order_details(sales_order_id)
+        if not order:
+            raise ValueError(f"Sales order {sales_order_id} not found")
 
         arguments = {"sales_order_id": sales_order_id}
 
+        customer_name = order["customer"]["name"] if order.get("customer") else None
+        total = order["pricing"]["total"] if order.get("pricing") else 0
+        currency = order["pricing"]["currency"] if order.get("pricing") else "EUR"
+        lines_count = len(order.get("lines", []))
+
         field_configs = [
             {"name": "sales_order_id", "label": "Sales Order ID", "type": "text", "value": sales_order_id, "required": True, "display_order": 1},
-            {"name": "customer", "label": "Customer", "type": "text", "value": order.get("customer_name"), "display_order": 2},
-            {"name": "total", "label": "Order Total", "type": "text", "value": f"{order.get('total_amount', 0):.2f} {order.get('currency', 'EUR')}", "display_order": 3},
-            {"name": "items_count", "label": "Number of Items", "type": "number", "value": len(order.get("lines", [])), "display_order": 4},
+            {"name": "customer", "label": "Customer", "type": "text", "value": customer_name, "display_order": 2},
+            {"name": "total", "label": "Order Total", "type": "text", "value": f"{total:.2f} {currency}", "display_order": 3},
+            {"name": "items_count", "label": "Number of Items", "type": "number", "value": lines_count, "display_order": 4},
         ]
 
         return create_confirmation_response(
@@ -104,13 +111,18 @@ def register(mcp):
             Confirmation metadata for the invoice issue action.
         """
         invoice = invoice_service.get_invoice(invoice_id)
+        if not invoice:
+            raise ValueError(f"Invoice {invoice_id} not found")
+
+        inv = invoice.get("invoice", {})
+        cust = invoice.get("customer", {})
 
         arguments = {"invoice_id": invoice_id, "payment_due_days": payment_due_days}
 
         field_configs = [
             {"name": "invoice_id", "label": "Invoice ID", "type": "text", "value": invoice_id, "required": True, "display_order": 1},
-            {"name": "customer", "label": "Customer", "type": "text", "value": invoice.get("customer_name"), "display_order": 2},
-            {"name": "total", "label": "Total Amount", "type": "text", "value": f"{invoice.get('total_amount', 0):.2f} {invoice.get('currency', 'EUR')}", "display_order": 3},
+            {"name": "customer", "label": "Customer", "type": "text", "value": cust.get("name") if cust else None, "display_order": 2},
+            {"name": "total", "label": "Total Amount", "type": "text", "value": f"{inv.get('total', 0):.2f} {inv.get('currency', 'EUR')}", "display_order": 3},
             {"name": "payment_due_days", "label": "Payment Terms (days)", "type": "number", "value": payment_due_days, "help_text": "Due date will be calculated from today", "display_order": 4},
         ]
 
@@ -154,6 +166,11 @@ def register(mcp):
             Confirmation metadata for the payment recording action.
         """
         invoice = invoice_service.get_invoice(invoice_id)
+        if not invoice:
+            raise ValueError(f"Invoice {invoice_id} not found")
+
+        inv = invoice.get("invoice", {})
+        cust = invoice.get("customer", {})
 
         arguments = {
             "invoice_id": invoice_id,
@@ -165,9 +182,9 @@ def register(mcp):
 
         field_configs = [
             {"name": "invoice_id", "label": "Invoice ID", "type": "text", "value": invoice_id, "required": True, "group": "Invoice", "display_order": 1},
-            {"name": "customer", "label": "Customer", "type": "text", "value": invoice.get("customer_name"), "group": "Invoice", "display_order": 2},
-            {"name": "invoice_total", "label": "Invoice Total", "type": "text", "value": f"{invoice.get('total_amount', 0):.2f} {invoice.get('currency', 'EUR')}", "group": "Invoice", "display_order": 3},
-            {"name": "balance_due", "label": "Current Balance Due", "type": "text", "value": f"{invoice.get('balance_due', 0):.2f} {invoice.get('currency', 'EUR')}", "group": "Invoice", "display_order": 4},
+            {"name": "customer", "label": "Customer", "type": "text", "value": cust.get("name") if cust else None, "group": "Invoice", "display_order": 2},
+            {"name": "invoice_total", "label": "Invoice Total", "type": "text", "value": f"{inv.get('total', 0):.2f} {inv.get('currency', 'EUR')}", "group": "Invoice", "display_order": 3},
+            {"name": "balance_due", "label": "Current Balance Due", "type": "text", "value": f"{invoice.get('balance_due', 0):.2f} {inv.get('currency', 'EUR')}", "group": "Invoice", "display_order": 4},
             {"name": "amount", "label": "Payment Amount", "type": "number", "value": amount, "required": True, "help_text": "Ensure this amount is correct", "group": "Payment", "display_order": 5},
             {"name": "payment_method", "label": "Payment Method", "type": "text", "value": payment_method, "group": "Payment", "display_order": 6},
             {"name": "reference", "label": "Reference", "type": "text", "value": reference, "help_text": "Bank transaction ID or other reference", "group": "Payment", "display_order": 7},

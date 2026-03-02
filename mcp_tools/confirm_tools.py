@@ -75,13 +75,14 @@ def register(mcp):
                 planned_departure=arguments["planned_departure"],
                 planned_arrival=arguments["planned_arrival"],
                 packages=arguments["packages"],
-                reference={"type": "sales_order", "id": arguments.get("sales_order_id")}
+                reference=arguments.get("reference")
             )
 
         # Production Tools
         elif original_tool == "production_create_order":
             return production_service.create_order(
                 recipe_id=arguments["recipe_id"],
+                sales_order_id=arguments["sales_order_id"],
                 notes=arguments.get("notes")
             )
         elif original_tool == "production_start_order":
@@ -146,10 +147,16 @@ def register(mcp):
                 reason=arguments.get("reason")
             )
         elif original_tool == "quote_revise":
+            changes = {
+                "lines": arguments.get("lines"),
+                "requested_delivery_date": arguments.get("requested_delivery_date"),
+                "ship_to": arguments.get("ship_to"),
+                "note": arguments.get("note"),
+                "valid_days": arguments.get("valid_days", config.QUOTE_VALIDITY_DAYS),
+            }
             return quote_service.revise_quote(
                 quote_id=arguments["quote_id"],
-                items=arguments["items"],
-                notes=arguments.get("notes")
+                changes=changes
             )
 
         # Invoice Tools
@@ -165,8 +172,9 @@ def register(mcp):
             return invoice_service.record_payment(
                 invoice_id=arguments["invoice_id"],
                 amount=arguments["amount"],
-                payment_date=arguments.get("payment_date"),
-                payment_method=arguments.get("payment_method", "bank_transfer")
+                payment_method=arguments.get("payment_method", "bank_transfer"),
+                reference=arguments.get("reference"),
+                notes=arguments.get("notes")
             )
 
         else:
