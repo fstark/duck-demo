@@ -234,8 +234,8 @@ function AppContent() {
           <div key={group.label} className="relative group">
             <button
               className={`px-3 py-1.5 rounded flex items-center gap-1 ${isGroupActive(group)
-                  ? 'bg-slate-900 text-white'
-                  : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                ? 'bg-slate-900 text-white'
+                : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
                 }`}
               type="button"
             >
@@ -249,8 +249,8 @@ function AppContent() {
                 <button
                   key={link.page}
                   className={`w-full text-left px-3 py-1.5 ${view.page === link.page
-                      ? 'bg-slate-100 text-slate-900 font-medium'
-                      : 'text-slate-700 hover:bg-slate-50'
+                    ? 'bg-slate-100 text-slate-900 font-medium'
+                    : 'text-slate-700 hover:bg-slate-50'
                     }`}
                   onClick={() => {
                     clearListContext()
@@ -309,40 +309,6 @@ function AppContent() {
                 <div className="card p-3 cursor-pointer hover:shadow-md" onClick={() => setHash('dashboard')}>
                   <div className="text-xs text-slate-500 mb-1">Total Revenue</div>
                   <div className="text-xl font-semibold text-slate-900">{formatCurrency(dashData.kpis.total_revenue)}</div>
-                </div>
-              </div>
-            )}
-
-            {/* Recent Activity Widget */}
-            {dashData && dashData.recent_activity.length > 0 && (
-              <div className="card p-4">
-                <div className="flex items-center justify-between mb-2">
-                  <div className="section-title">Recent Activity</div>
-                  <a href="#/activity" className="text-xs text-blue-600 hover:underline">View all →</a>
-                </div>
-                <div className="divide-y divide-slate-100">
-                  {dashData.recent_activity.slice(0, 10).map((e) => {
-                    const catColors: Record<string, string> = {
-                      sales: 'bg-blue-100 text-blue-700',
-                      production: 'bg-amber-100 text-amber-700',
-                      logistics: 'bg-green-100 text-green-700',
-                      purchasing: 'bg-purple-100 text-purple-700',
-                      billing: 'bg-rose-100 text-rose-700',
-                    }
-                    const catClass = catColors[e.category] || 'bg-slate-100 text-slate-700'
-                    return (
-                      <div key={e.id} className="flex items-center gap-3 py-1.5 text-sm">
-                        <span className="text-slate-400 tabular-nums text-xs w-36 shrink-0">{e.timestamp}</span>
-                        <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium shrink-0 ${catClass}`}>
-                          {e.category}
-                        </span>
-                        <span className="text-slate-700 truncate">{e.action}</span>
-                        {e.entity_id && (
-                          <span className="font-mono text-xs text-slate-400 shrink-0">{e.entity_id}</span>
-                        )}
-                      </div>
-                    )
-                  })}
                 </div>
               </div>
             )}

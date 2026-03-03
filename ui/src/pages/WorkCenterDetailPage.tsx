@@ -5,6 +5,7 @@ import { Badge } from '../components/Badge'
 import { WorkCenterDetail } from '../types'
 import { api } from '../api'
 import { useNavigation } from '../contexts/NavigationContext'
+import { useTableSort } from '../utils/useTableSort'
 
 function setHash(page: string, id?: string) {
     const path = id ? `#/${page}/${encodeURIComponent(id)}` : `#/${page}`
@@ -94,6 +95,10 @@ export function WorkCenterDetailPage({ workCenterId }: WorkCenterDetailPageProps
     const pendingOps = workCenter.operations.filter(op => op.status === 'pending')
     const completedOps = workCenter.operations.filter(op => op.status === 'completed')
 
+    const inProgressSort = useTableSort(inProgressOps)
+    const pendingSort = useTableSort(pendingOps.slice(0, 20))
+    const completedSort = useTableSort(completedOps.slice(0, 10))
+
     return (
         <div>
             <div className="mb-4 flex items-center justify-between">
@@ -157,8 +162,8 @@ export function WorkCenterDetailPage({ workCenterId }: WorkCenterDetailPageProps
                         <div>
                             <div className="text-sm text-slate-500">Utilization</div>
                             <div className={`text-2xl font-bold ${workCenter.utilization >= 100 ? 'text-red-600' :
-                                    workCenter.utilization >= 75 ? 'text-orange-600' :
-                                        workCenter.utilization >= 50 ? 'text-yellow-600' : 'text-green-600'
+                                workCenter.utilization >= 75 ? 'text-orange-600' :
+                                    workCenter.utilization >= 50 ? 'text-yellow-600' : 'text-green-600'
                                 }`}>
                                 {workCenter.utilization}%
                             </div>
@@ -173,25 +178,28 @@ export function WorkCenterDetailPage({ workCenterId }: WorkCenterDetailPageProps
                     <SectionHeading id="in-progress-ops" title="In Progress Operations" />
                     <Card>
                         <Table
-                            rows={inProgressOps}
+                            rows={inProgressSort.sortedRows}
+                            sortKey={inProgressSort.sortKey}
+                            sortDir={inProgressSort.sortDir}
+                            onSort={inProgressSort.onSort}
                             onRowClick={(row) => setHash('production', row.production_order_id)}
                             columns={[
                                 {
                                     key: 'production_order_id',
                                     label: 'Production Order',
-                                    sortable: false,
+                                    sortable: true,
                                     render: (row) => <span className="font-mono text-sm text-sky-600">{row.production_order_id}</span>,
                                 },
                                 {
                                     key: 'operation_name',
                                     label: 'Operation',
-                                    sortable: false,
+                                    sortable: true,
                                     render: (row) => <span className="font-medium">{row.operation_name}</span>,
                                 },
                                 {
                                     key: 'item_name',
                                     label: 'Item',
-                                    sortable: false,
+                                    sortable: true,
                                     render: (row) => (
                                         <span className="text-sm">
                                             {row.item_name} <span className="text-slate-500">({row.item_sku})</span>
@@ -201,13 +209,13 @@ export function WorkCenterDetailPage({ workCenterId }: WorkCenterDetailPageProps
                                 {
                                     key: 'duration_hours',
                                     label: 'Duration',
-                                    sortable: false,
+                                    sortable: true,
                                     render: (row) => <span className="font-mono text-sm">{row.duration_hours}h</span>,
                                 },
                                 {
                                     key: 'started_at',
                                     label: 'Started',
-                                    sortable: false,
+                                    sortable: true,
                                     render: (row) => (
                                         <span className="text-sm text-slate-600">
                                             {row.started_at ? row.started_at.split('.')[0] : '—'}
@@ -226,25 +234,28 @@ export function WorkCenterDetailPage({ workCenterId }: WorkCenterDetailPageProps
                     <SectionHeading id="pending-ops" title={`Pending Operations (${pendingOps.length})`} />
                     <Card>
                         <Table
-                            rows={pendingOps.slice(0, 20)}
+                            rows={pendingSort.sortedRows}
+                            sortKey={pendingSort.sortKey}
+                            sortDir={pendingSort.sortDir}
+                            onSort={pendingSort.onSort}
                             onRowClick={(row) => setHash('production', row.production_order_id)}
                             columns={[
                                 {
                                     key: 'production_order_id',
                                     label: 'Production Order',
-                                    sortable: false,
+                                    sortable: true,
                                     render: (row) => <span className="font-mono text-sm text-sky-600">{row.production_order_id}</span>,
                                 },
                                 {
                                     key: 'operation_name',
                                     label: 'Operation',
-                                    sortable: false,
+                                    sortable: true,
                                     render: (row) => <span className="font-medium">{row.operation_name}</span>,
                                 },
                                 {
                                     key: 'item_name',
                                     label: 'Item',
-                                    sortable: false,
+                                    sortable: true,
                                     render: (row) => (
                                         <span className="text-sm">
                                             {row.item_name} <span className="text-slate-500">({row.item_sku})</span>
@@ -254,7 +265,7 @@ export function WorkCenterDetailPage({ workCenterId }: WorkCenterDetailPageProps
                                 {
                                     key: 'duration_hours',
                                     label: 'Duration',
-                                    sortable: false,
+                                    sortable: true,
                                     render: (row) => <span className="font-mono text-sm">{row.duration_hours}h</span>,
                                 },
                             ]}
@@ -274,25 +285,28 @@ export function WorkCenterDetailPage({ workCenterId }: WorkCenterDetailPageProps
                     <SectionHeading id="completed-ops" title={`Recently Completed (${Math.min(completedOps.length, 10)})`} />
                     <Card>
                         <Table
-                            rows={completedOps.slice(0, 10)}
+                            rows={completedSort.sortedRows}
+                            sortKey={completedSort.sortKey}
+                            sortDir={completedSort.sortDir}
+                            onSort={completedSort.onSort}
                             onRowClick={(row) => setHash('production', row.production_order_id)}
                             columns={[
                                 {
                                     key: 'production_order_id',
                                     label: 'Production Order',
-                                    sortable: false,
+                                    sortable: true,
                                     render: (row) => <span className="font-mono text-sm text-sky-600">{row.production_order_id}</span>,
                                 },
                                 {
                                     key: 'operation_name',
                                     label: 'Operation',
-                                    sortable: false,
+                                    sortable: true,
                                     render: (row) => <span className="font-medium text-slate-600">{row.operation_name}</span>,
                                 },
                                 {
                                     key: 'item_name',
                                     label: 'Item',
-                                    sortable: false,
+                                    sortable: true,
                                     render: (row) => (
                                         <span className="text-sm text-slate-600">
                                             {row.item_name} <span className="text-slate-400">({row.item_sku})</span>
@@ -302,13 +316,13 @@ export function WorkCenterDetailPage({ workCenterId }: WorkCenterDetailPageProps
                                 {
                                     key: 'duration_hours',
                                     label: 'Duration',
-                                    sortable: false,
+                                    sortable: true,
                                     render: (row) => <span className="font-mono text-sm text-slate-600">{row.duration_hours}h</span>,
                                 },
                                 {
                                     key: 'completed_at',
                                     label: 'Completed',
-                                    sortable: false,
+                                    sortable: true,
                                     render: (row) => (
                                         <span className="text-sm text-slate-600">
                                             {row.completed_at ? row.completed_at.split('.')[0] : '—'}

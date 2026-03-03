@@ -8,6 +8,7 @@ import { useNavigation } from '../contexts/NavigationContext'
 import { formatCurrency } from '../utils/currency'
 import { Quantity } from '../utils/quantity'
 import { formatDate } from '../utils/date'
+import { useTableSort } from '../utils/useTableSort'
 
 function setHash(page: string, id?: string) {
     const path = id ? `#/${page}/${encodeURIComponent(id)}` : `#/${page}`
@@ -95,6 +96,9 @@ export function InvoiceDetailPage({ invoiceId }: InvoiceDetailPageProps) {
     }
 
     const inv = data.invoice
+
+    const linesSort = useTableSort(data.lines || [])
+    const paymentsSort = useTableSort(data.payments || [])
 
     return (
         <section>
@@ -221,11 +225,15 @@ export function InvoiceDetailPage({ invoiceId }: InvoiceDetailPageProps) {
 
                     <Card title="Lines">
                         <Table
-                            rows={data.lines as any}
+                            rows={linesSort.sortedRows as any}
+                            sortKey={linesSort.sortKey}
+                            sortDir={linesSort.sortDir}
+                            onSort={linesSort.onSort}
                             columns={[
                                 {
                                     key: 'sku',
                                     label: 'SKU',
+                                    sortable: true,
                                     render: (row: any) => (
                                         <button
                                             className="text-brand-600 hover:underline text-left"
@@ -240,9 +248,9 @@ export function InvoiceDetailPage({ invoiceId }: InvoiceDetailPageProps) {
                                         </button>
                                     ),
                                 },
-                                { key: 'qty', label: 'Qty', render: (row: any) => <Quantity value={row.qty} /> },
-                                { key: 'unit_price', label: 'Unit Price', render: (row: any) => row.unit_price != null ? formatCurrency(row.unit_price, inv.currency) : '—' },
-                                { key: 'line_total', label: 'Line Total', render: (row: any) => <div className="text-right">{row.line_total != null ? formatCurrency(row.line_total, inv.currency) : '—'}</div> },
+                                { key: 'qty', label: 'Qty', sortable: true, render: (row: any) => <Quantity value={row.qty} /> },
+                                { key: 'unit_price', label: 'Unit Price', sortable: true, render: (row: any) => row.unit_price != null ? formatCurrency(row.unit_price, inv.currency) : '—' },
+                                { key: 'line_total', label: 'Line Total', sortable: true, render: (row: any) => <div className="text-right">{row.line_total != null ? formatCurrency(row.line_total, inv.currency) : '—'}</div> },
                             ]}
                         />
                     </Card>
@@ -251,17 +259,21 @@ export function InvoiceDetailPage({ invoiceId }: InvoiceDetailPageProps) {
                         {data.payments.length > 0 ? (
                             <>
                                 <Table
-                                    rows={data.payments as any}
+                                    rows={paymentsSort.sortedRows as any}
+                                    sortKey={paymentsSort.sortKey}
+                                    sortDir={paymentsSort.sortDir}
+                                    onSort={paymentsSort.onSort}
                                     columns={[
-                                        { key: 'id', label: 'Payment' },
+                                        { key: 'id', label: 'Payment', sortable: true },
                                         {
                                             key: 'amount',
                                             label: 'Amount',
+                                            sortable: true,
                                             render: (row: any) => <div className="text-right">{formatCurrency(row.amount, inv.currency)}</div>,
                                         },
-                                        { key: 'payment_method', label: 'Method' },
-                                        { key: 'payment_date', label: 'Date', render: (row: any) => formatDate(row.payment_date) },
-                                        { key: 'reference', label: 'Reference', render: (row: any) => row.reference || '—' },
+                                        { key: 'payment_method', label: 'Method', sortable: true },
+                                        { key: 'payment_date', label: 'Date', sortable: true, render: (row: any) => formatDate(row.payment_date) },
+                                        { key: 'reference', label: 'Reference', sortable: true, render: (row: any) => row.reference || '—' },
                                     ]}
                                 />
                                 <div className="flex justify-between mt-3 pt-2 border-t text-sm">

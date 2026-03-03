@@ -7,6 +7,7 @@ import type { QuoteDetail } from '../types'
 import { formatCurrency } from '../utils/currency'
 import { formatDate } from '../utils/date'
 import { formatQuantity } from '../utils/quantity'
+import { useTableSort } from '../utils/useTableSort'
 
 function setHash(page: string, id?: string) {
     const path = id ? `#/${page}/${encodeURIComponent(id)}` : `#/${page}`
@@ -84,6 +85,9 @@ function QuoteDetailPage({ quoteId }: QuoteDetailPageProps) {
     const q = quote.quote
     const lines = quote.lines || []
     const revisions = quote.revisions || []
+
+    const linesSort = useTableSort(lines)
+    const revisionsSort = useTableSort(revisions)
 
     return (
         <div className="space-y-4">
@@ -227,10 +231,13 @@ function QuoteDetailPage({ quoteId }: QuoteDetailPageProps) {
                     <p className="text-gray-500">No line items</p>
                 ) : (
                     <Table
-                        rows={lines as any}
+                        rows={linesSort.sortedRows as any}
+                        sortKey={linesSort.sortKey}
+                        sortDir={linesSort.sortDir}
+                        onSort={linesSort.onSort}
                         columns={[
                             {
-                                key: 'sku', label: 'SKU', render: (line: any) => (
+                                key: 'sku', label: 'SKU', sortable: true, render: (line: any) => (
                                     <button
                                         className="text-brand-600 hover:underline text-left"
                                         onClick={() => setHash('items', line.sku)}
@@ -240,10 +247,10 @@ function QuoteDetailPage({ quoteId }: QuoteDetailPageProps) {
                                     </button>
                                 )
                             },
-                            { key: 'item_name', label: 'Item', render: (line: any) => line.item_name || '—' },
-                            { key: 'qty', label: 'Quantity', render: (line: any) => formatQuantity(line.qty) },
-                            { key: 'unit_price', label: 'Unit Price', render: (line: any) => formatCurrency(line.unit_price) },
-                            { key: 'line_total', label: 'Line Total', render: (line: any) => formatCurrency(line.line_total) }
+                            { key: 'item_name', label: 'Item', sortable: true, render: (line: any) => line.item_name || '—' },
+                            { key: 'qty', label: 'Quantity', sortable: true, render: (line: any) => formatQuantity(line.qty) },
+                            { key: 'unit_price', label: 'Unit Price', sortable: true, render: (line: any) => formatCurrency(line.unit_price) },
+                            { key: 'line_total', label: 'Line Total', sortable: true, render: (line: any) => formatCurrency(line.line_total) }
                         ]}
                     />
                 )}
@@ -285,13 +292,16 @@ function QuoteDetailPage({ quoteId }: QuoteDetailPageProps) {
                 <Card>
                     <h2 className="text-xl font-semibold mb-4">Revision History</h2>
                     <Table
-                        rows={revisions as any}
+                        rows={revisionsSort.sortedRows as any}
+                        sortKey={revisionsSort.sortKey}
+                        sortDir={revisionsSort.sortDir}
+                        onSort={revisionsSort.onSort}
                         onRowClick={(r: any) => setHash('quotes', r.id)}
                         columns={[
-                            { key: 'id', label: 'Quote ID' },
-                            { key: 'revision_number', label: 'Revision', render: (r: any) => `R${r.revision_number}` },
-                            { key: 'status', label: 'Status', render: (r: any) => getStatusBadge(r.status) },
-                            { key: 'created_at', label: 'Created', render: (r: any) => formatDate(r.created_at) },
+                            { key: 'id', label: 'Quote ID', sortable: true },
+                            { key: 'revision_number', label: 'Revision', sortable: true, render: (r: any) => `R${r.revision_number}` },
+                            { key: 'status', label: 'Status', sortable: true, render: (r: any) => getStatusBadge(r.status) },
+                            { key: 'created_at', label: 'Created', sortable: true, render: (r: any) => formatDate(r.created_at) },
                         ]}
                     />
                 </Card>

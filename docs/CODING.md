@@ -45,3 +45,13 @@ Update with new rules as needed, but avoid over-engineering or nitpicking.
 - **Use `format_qty(value, uom)` (Python) or `formatQtyWithUom(value, uom)` (TypeScript) for display.** Raw integers are converted to human-readable strings (e.g. `2400` + `"g"` → `"2.4 kg"`).
 - **No `float()` casts on qty columns.** Use `int()` when accepting values from external inputs. All service function signatures that accept a quantity use `int`, not `float`.
 - **No float-tolerance checks** (e.g. `> 0.001`). With integer quantities, use plain `> 0`.
+
+### UI / Frontend
+
+- **Always make tables sortable.** Use the `useTableSort` hook from `ui/src/utils/useTableSort.ts`:
+  1. Add `const myTableSort = useTableSort(rows)` before the return statement
+  2. Pass sorting props to Table: `rows={myTableSort.sortedRows}`, `sortKey={myTableSort.sortKey}`, `sortDir={myTableSort.sortDir}`, `onSort={myTableSort.onSort}`
+  3. Mark columns as sortable: `{ key: 'name', label: 'Name', sortable: true }`
+  
+  The hook automatically handles state management and sorting logic. Sorting is "free" with this pattern — use it consistently across all tables.
+

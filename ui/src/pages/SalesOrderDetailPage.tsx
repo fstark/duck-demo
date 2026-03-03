@@ -8,6 +8,7 @@ import { useNavigation } from '../contexts/NavigationContext'
 import { formatCurrency } from '../utils/currency'
 import { Quantity } from '../utils/quantity.tsx'
 import { formatDate } from '../utils/date'
+import { useTableSort } from '../utils/useTableSort'
 
 function setHash(page: string, id?: string) {
     const path = id ? `#/${page}/${encodeURIComponent(id)}` : `#/${page}`
@@ -110,6 +111,12 @@ export function SalesOrderDetailPage({ orderId }: SalesOrderDetailPageProps) {
             </section>
         )
     }
+
+    const linesSort = useTableSort(order?.lines || [])
+    const shipmentsSort = useTableSort(order?.shipments || [])
+    const emailsSort = useTableSort(emails)
+    const invoicesSort = useTableSort(invoices)
+    const productionOrdersSort = useTableSort(productionOrders)
 
     return (
         <section>
@@ -244,11 +251,15 @@ export function SalesOrderDetailPage({ orderId }: SalesOrderDetailPageProps) {
                     <div className="grid grid-cols-2 gap-3">
                         <Card title="Lines">
                             <Table
-                                rows={order.lines as any}
+                                rows={linesSort.sortedRows as any}
+                                sortKey={linesSort.sortKey}
+                                sortDir={linesSort.sortDir}
+                                onSort={linesSort.onSort}
                                 columns={[
                                     {
                                         key: 'sku',
                                         label: 'SKU',
+                                        sortable: true,
                                         render: (row) => (
                                             <button
                                                 className="text-brand-600 hover:underline text-left"
@@ -263,9 +274,9 @@ export function SalesOrderDetailPage({ orderId }: SalesOrderDetailPageProps) {
                                             </button>
                                         )
                                     },
-                                    { key: 'qty', label: 'Qty', render: (row) => <Quantity value={row.qty} /> },
-                                    { key: 'unit_price', label: 'Unit Price', render: (row) => <div className="text-right">{formatCurrency(row.unit_price, order.pricing.currency)}</div> },
-                                    { key: 'line_total', label: 'Line Total', render: (row) => <div className="text-right">{formatCurrency(row.line_total, order.pricing.currency)}</div> },
+                                    { key: 'qty', label: 'Qty', sortable: true, render: (row) => <Quantity value={row.qty} /> },
+                                    { key: 'unit_price', label: 'Unit Price', sortable: true, render: (row) => <div className="text-right">{formatCurrency(row.unit_price, order.pricing.currency)}</div> },
+                                    { key: 'line_total', label: 'Line Total', sortable: true, render: (row) => <div className="text-right">{formatCurrency(row.line_total, order.pricing.currency)}</div> },
                                 ]}
                                 onRowClick={(row, index) => {
                                     setListContext({
@@ -291,12 +302,15 @@ export function SalesOrderDetailPage({ orderId }: SalesOrderDetailPageProps) {
                     <Card title="Shipments">
                         {order.shipments?.length ? (
                             <Table
-                                rows={order.shipments as any}
+                                rows={shipmentsSort.sortedRows as any}
+                                sortKey={shipmentsSort.sortKey}
+                                sortDir={shipmentsSort.sortDir}
+                                onSort={shipmentsSort.onSort}
                                 columns={[
-                                    { key: 'id', label: 'Shipment' },
-                                    { key: 'status', label: 'Status', render: (row) => <Badge>{row.status}</Badge> },
-                                    { key: 'planned_departure', label: 'Departure', render: (row) => formatDate(row.planned_departure) },
-                                    { key: 'planned_arrival', label: 'Arrival', render: (row) => formatDate(row.planned_arrival) },
+                                    { key: 'id', label: 'Shipment', sortable: true },
+                                    { key: 'status', label: 'Status', sortable: true, render: (row) => <Badge>{row.status}</Badge> },
+                                    { key: 'planned_departure', label: 'Departure', sortable: true, render: (row) => formatDate(row.planned_departure) },
+                                    { key: 'planned_arrival', label: 'Arrival', sortable: true, render: (row) => formatDate(row.planned_arrival) },
                                 ]}
                                 onRowClick={(row, index) => {
                                     setListContext({
@@ -315,16 +329,20 @@ export function SalesOrderDetailPage({ orderId }: SalesOrderDetailPageProps) {
                     {emails.length > 0 && (
                         <Card title="Emails">
                             <Table
-                                rows={emails as any}
+                                rows={emailsSort.sortedRows as any}
+                                sortKey={emailsSort.sortKey}
+                                sortDir={emailsSort.sortDir}
+                                onSort={emailsSort.onSort}
                                 columns={[
-                                    { key: 'subject', label: 'Subject' },
-                                    { key: 'recipient_email', label: 'Recipient' },
+                                    { key: 'subject', label: 'Subject', sortable: true },
+                                    { key: 'recipient_email', label: 'Recipient', sortable: true },
                                     {
                                         key: 'status',
                                         label: 'Status',
+                                        sortable: true,
                                         render: (row: Email) => <Badge>{row.status}</Badge>
                                     },
-                                    { key: 'modified_at', label: 'Modified', render: (row: Email) => formatDate(row.modified_at) },
+                                    { key: 'modified_at', label: 'Modified', sortable: true, render: (row: Email) => formatDate(row.modified_at) },
                                 ]}
                                 onRowClick={(row: Email, index: number) => {
                                     setListContext({
@@ -341,13 +359,16 @@ export function SalesOrderDetailPage({ orderId }: SalesOrderDetailPageProps) {
                     {invoices.length > 0 && (
                         <Card title="Invoices">
                             <Table
-                                rows={invoices as any}
+                                rows={invoicesSort.sortedRows as any}
+                                sortKey={invoicesSort.sortKey}
+                                sortDir={invoicesSort.sortDir}
+                                onSort={invoicesSort.onSort}
                                 columns={[
-                                    { key: 'id', label: 'Invoice' },
-                                    { key: 'total', label: 'Total', render: (row: Invoice) => <div className="text-right">{formatCurrency(row.total, row.currency)}</div> },
-                                    { key: 'status', label: 'Status', render: (row: Invoice) => <Badge>{row.status}</Badge> },
-                                    { key: 'invoice_date', label: 'Invoice Date', render: (row: Invoice) => formatDate(row.invoice_date) },
-                                    { key: 'due_date', label: 'Due Date', render: (row: Invoice) => formatDate(row.due_date) },
+                                    { key: 'id', label: 'Invoice', sortable: true },
+                                    { key: 'total', label: 'Total', sortable: true, render: (row: Invoice) => <div className="text-right">{formatCurrency(row.total, row.currency)}</div> },
+                                    { key: 'status', label: 'Status', sortable: true, render: (row: Invoice) => <Badge>{row.status}</Badge> },
+                                    { key: 'invoice_date', label: 'Invoice Date', sortable: true, render: (row: Invoice) => formatDate(row.invoice_date) },
+                                    { key: 'due_date', label: 'Due Date', sortable: true, render: (row: Invoice) => formatDate(row.due_date) },
                                 ]}
                                 onRowClick={(row: Invoice, index: number) => {
                                     setListContext({
@@ -364,19 +385,22 @@ export function SalesOrderDetailPage({ orderId }: SalesOrderDetailPageProps) {
                     {productionOrders.length > 0 && (
                         <Card title="Production Orders">
                             <Table
-                                rows={productionOrders as any}
+                                rows={productionOrdersSort.sortedRows as any}
+                                sortKey={productionOrdersSort.sortKey}
+                                sortDir={productionOrdersSort.sortDir}
+                                onSort={productionOrdersSort.onSort}
                                 columns={[
-                                    { key: 'id', label: 'Order' },
+                                    { key: 'id', label: 'Order', sortable: true },
                                     {
-                                        key: 'item_sku', label: 'Item', render: (row: ProductionOrder) => (
+                                        key: 'item_sku', label: 'Item', sortable: true, render: (row: ProductionOrder) => (
                                             <div>
                                                 <div>{row.item_sku}</div>
                                                 <div className="text-xs text-slate-500">{row.item_name}</div>
                                             </div>
                                         )
                                     },
-                                    { key: 'status', label: 'Status', render: (row: ProductionOrder) => <Badge>{row.status}</Badge> },
-                                    { key: 'eta_finish', label: 'ETA Finish', render: (row: ProductionOrder) => formatDate(row.eta_finish) },
+                                    { key: 'status', label: 'Status', sortable: true, render: (row: ProductionOrder) => <Badge>{row.status}</Badge> },
+                                    { key: 'eta_finish', label: 'ETA Finish', sortable: true, render: (row: ProductionOrder) => formatDate(row.eta_finish) },
                                 ]}
                                 onRowClick={(row: ProductionOrder, index: number) => {
                                     setListContext({

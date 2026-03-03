@@ -7,6 +7,7 @@ import type { Quote } from '../types'
 import { formatCurrency } from '../utils/currency'
 import { formatDate } from '../utils/date'
 import { useNavigation } from '../contexts/NavigationContext'
+import { useTableSort } from '../utils/useTableSort'
 
 function setHash(page: string, id?: string) {
     const path = id ? `#/${page}/${encodeURIComponent(id)}` : `#/${page}`
@@ -56,6 +57,8 @@ function QuotesListPage() {
         return <Badge variant={variants[status] || 'info'}>{status}</Badge>
     }
 
+    const quotesSort = useTableSort(quotes)
+
     return (
         <div className="space-y-4">
             <div className="flex justify-between items-center">
@@ -102,13 +105,17 @@ function QuotesListPage() {
                     <div className="text-center py-8 text-gray-500">No quotes found</div>
                 ) : (
                     <Table
-                        rows={quotes as any}
+                        rows={quotesSort.sortedRows as any}
+                        sortKey={quotesSort.sortKey}
+                        sortDir={quotesSort.sortDir}
+                        onSort={quotesSort.onSort}
                         onRowClick={(q: Quote) => setHash('quotes', q.id)}
                         columns={[
-                            { key: 'id', label: 'Quote ID' },
+                            { key: 'id', label: 'Quote ID', sortable: true },
                             {
                                 key: 'customer_company',
                                 label: 'Customer',
+                                sortable: true,
                                 render: (q: Quote) => (
                                     <button
                                         className="text-brand-600 hover:underline text-left"
@@ -123,12 +130,12 @@ function QuotesListPage() {
                                     </button>
                                 ),
                             },
-                            { key: 'revision_number', label: 'Revision', render: (q: Quote) => `R${q.revision_number}` },
-                            { key: 'status', label: 'Status', render: (q: Quote) => getStatusBadge(q.status) },
-                            { key: 'total', label: 'Total', render: (q: Quote) => formatCurrency(q.total) },
-                            { key: 'valid_until', label: 'Valid Until', render: (q: Quote) => q.valid_until ? formatDate(q.valid_until) : '—' },
-                            { key: 'created_at', label: 'Created', render: (q: Quote) => formatDate(q.created_at) },
-                            { key: 'sent_at', label: 'Sent', render: (q: Quote) => q.sent_at ? formatDate(q.sent_at) : '—' },
+                            { key: 'revision_number', label: 'Revision', sortable: true, render: (q: Quote) => `R${q.revision_number}` },
+                            { key: 'status', label: 'Status', sortable: true, render: (q: Quote) => getStatusBadge(q.status) },
+                            { key: 'total', label: 'Total', sortable: true, render: (q: Quote) => formatCurrency(q.total) },
+                            { key: 'valid_until', label: 'Valid Until', sortable: true, render: (q: Quote) => q.valid_until ? formatDate(q.valid_until) : '—' },
+                            { key: 'created_at', label: 'Created', sortable: true, render: (q: Quote) => formatDate(q.created_at) },
+                            { key: 'sent_at', label: 'Sent', sortable: true, render: (q: Quote) => q.sent_at ? formatDate(q.sent_at) : '—' },
                         ]}
                     />
                 )}

@@ -8,6 +8,7 @@ import { useNavigation } from '../contexts/NavigationContext'
 import { formatCurrency } from '../utils/currency'
 import { formatQuantity, Quantity, formatQtyWithUom } from '../utils/quantity.tsx'
 import { formatDate } from '../utils/date'
+import { useTableSort } from '../utils/useTableSort'
 
 function setHash(page: string, id?: string) {
     const path = id ? `#/${page}/${encodeURIComponent(id)}` : `#/${page}`
@@ -104,6 +105,30 @@ export function ItemDetailPage({ sku }: ItemDetailPageProps) {
             </section>
         )
     }
+
+    const recipesRows = [
+        ...(item?.recipes || []).map(r => ({
+            ...r,
+            role: 'output',
+            recipe_id: r.id,
+            item_name: item.name,
+            batch_qty: formatQtyWithUom(r.output_qty, item.uom || 'ea'),
+        })),
+        ...(item?.used_in_recipes || []).map(r => ({
+            ...r,
+            role: 'ingredient',
+            id: r.recipe_id,
+            item_name: r.output_name,
+            batch_qty: formatQtyWithUom(r.qty_per_batch, item.uom),
+            production_time_hours: undefined,
+            ingredient_count: undefined,
+            operation_count: undefined,
+        })),
+    ] as any
+
+    const recipesSort = useTableSort(recipesRows)
+    const productionSort = useTableSort(item?.production_orders || [])
+    const purchaseSort = useTableSort(item?.purchase_orders || [])
 
     return (
         <section>
@@ -212,25 +237,10 @@ export function ItemDetailPage({ sku }: ItemDetailPageProps) {
                 {((item.recipes && item.recipes.length > 0) || (item.used_in_recipes && item.used_in_recipes.length > 0)) && (
                     <Card title="Recipes">
                         <Table
-                            rows={[
-                                ...(item.recipes || []).map(r => ({
-                                    ...r,
-                                    role: 'output',
-                                    recipe_id: r.id,
-                                    item_name: item.name,
-                                    batch_qty: formatQtyWithUom(r.output_qty, item.uom || 'ea'),
-                                })),
-                                ...(item.used_in_recipes || []).map(r => ({
-                                    ...r,
-                                    role: 'ingredient',
-                                    id: r.recipe_id,
-                                    item_name: r.output_name,
-                                    batch_qty: formatQtyWithUom(r.qty_per_batch, item.uom),
-                                    production_time_hours: undefined,
-                                    ingredient_count: undefined,
-                                    operation_count: undefined,
-                                })),
-                            ] as any}
+                            rows={recipesSort.sortedRows}
+                            sortKey={recipesSort.sortKey}
+                            sortDir={recipesSort.sortDir}
+                            onSort={recipesSort.onSort}
                             columns={[
                                 {
                                     key: 'role',
@@ -280,7 +290,10 @@ export function ItemDetailPage({ sku }: ItemDetailPageProps) {
                 {item.production_orders && item.production_orders.length > 0 && (
                     <Card title="Production Orders">
                         <Table
-                            rows={item.production_orders as any}
+                            rows={productionSort.sortedRows as any}
+                            sortKey={productionSort.sortKey}
+                            sortDir={productionSort.sortDir}
+                            onSort={productionSort.onSort}
                             columns={[
                                 { key: 'id', label: 'Order ID', sortable: true },
                                 { key: 'recipe_id', label: 'Recipe', sortable: true },
@@ -299,7 +312,10 @@ export function ItemDetailPage({ sku }: ItemDetailPageProps) {
                 {item.purchase_orders && item.purchase_orders.length > 0 && (
                     <Card title="Purchase Orders">
                         <Table
-                            rows={item.purchase_orders as any}
+                            rows={purchaseSort.sortedRows as any}
+                            sortKey={purchaseSort.sortKey}
+                            sortDir={purchaseSort.sortDir}
+                            onSort={purchaseSort.onSort}
                             columns={[
                                 { key: 'id', label: 'PO ID', sortable: true },
                                 { key: 'supplier_name', label: 'Supplier', sortable: true },

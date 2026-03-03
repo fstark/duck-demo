@@ -7,6 +7,7 @@ import { api } from '../api'
 import { useNavigation } from '../contexts/NavigationContext'
 import { formatCurrency } from '../utils/currency'
 import { formatDate } from '../utils/date'
+import { useTableSort } from '../utils/useTableSort'
 
 function setHash(page: string, id?: string) {
     const path = id ? `#/${page}/${encodeURIComponent(id)}` : `#/${page}`
@@ -110,6 +111,12 @@ export function CustomerDetailPage({ customerId }: CustomerDetailPageProps) {
         })
         setHash('customers', nextCustomer.id)
     }
+
+    const salesOrdersSort = useTableSort(customer?.sales_orders || [])
+    const shipmentsSort = useTableSort(customer?.shipments || [])
+    const invoicesSort = useTableSort(invoices)
+    const quotesSort = useTableSort(quotes)
+    const emailsSort = useTableSort(emails)
 
     return (
         <section>
@@ -232,13 +239,16 @@ export function CustomerDetailPage({ customerId }: CustomerDetailPageProps) {
                 {customer.sales_orders && customer.sales_orders.length > 0 && (
                     <Card title="Sales Orders">
                         <Table
-                            rows={customer.sales_orders as any}
+                            rows={salesOrdersSort.sortedRows as any}
+                            sortKey={salesOrdersSort.sortKey}
+                            sortDir={salesOrdersSort.sortDir}
+                            onSort={salesOrdersSort.onSort}
                             columns={[
-                                { key: 'sales_order_id', label: 'Order' },
-                                { key: 'status', label: 'Status', render: (row) => <Badge>{row.status}</Badge> },
-                                { key: 'total', label: 'Total', render: (row: any) => <div className="text-right">{formatCurrency(row.total, row.currency)}</div> },
-                                { key: 'created_at', label: 'Created', render: (row: any) => formatDate(row.created_at) },
-                                { key: 'requested_delivery_date', label: 'Delivery Date', render: (row: any) => formatDate(row.requested_delivery_date) },
+                                { key: 'sales_order_id', label: 'Order', sortable: true },
+                                { key: 'status', label: 'Status', sortable: true, render: (row) => <Badge>{row.status}</Badge> },
+                                { key: 'total', label: 'Total', sortable: true, render: (row: any) => <div className="text-right">{formatCurrency(row.total, row.currency)}</div> },
+                                { key: 'created_at', label: 'Created', sortable: true, render: (row: any) => formatDate(row.created_at) },
+                                { key: 'requested_delivery_date', label: 'Delivery Date', sortable: true, render: (row: any) => formatDate(row.requested_delivery_date) },
                             ]}
                             onRowClick={(row, index) => {
                                 setListContext({
@@ -255,11 +265,14 @@ export function CustomerDetailPage({ customerId }: CustomerDetailPageProps) {
                 {customer.shipments && customer.shipments.length > 0 && (
                     <Card title="Shipments">
                         <Table
-                            rows={customer.shipments as any}
+                            rows={shipmentsSort.sortedRows as any}
+                            sortKey={shipmentsSort.sortKey}
+                            sortDir={shipmentsSort.sortDir}
+                            onSort={shipmentsSort.onSort}
                             columns={[
-                                { key: 'id', label: 'Shipment' },
+                                { key: 'id', label: 'Shipment', sortable: true },
                                 {
-                                    key: 'sales_order_id', label: 'Sales Order', render: (row) => (
+                                    key: 'sales_order_id', label: 'Sales Order', sortable: true, render: (row) => (
                                         <button
                                             className="text-brand-600 hover:underline text-left"
                                             onClick={(e) => {
@@ -273,9 +286,9 @@ export function CustomerDetailPage({ customerId }: CustomerDetailPageProps) {
                                         </button>
                                     )
                                 },
-                                { key: 'status', label: 'Status', render: (row) => <Badge>{row.status}</Badge> },
-                                { key: 'planned_departure', label: 'Departure', render: (row: any) => formatDate(row.planned_departure) },
-                                { key: 'planned_arrival', label: 'Arrival', render: (row: any) => formatDate(row.planned_arrival) },
+                                { key: 'status', label: 'Status', sortable: true, render: (row) => <Badge>{row.status}</Badge> },
+                                { key: 'planned_departure', label: 'Departure', sortable: true, render: (row: any) => formatDate(row.planned_departure) },
+                                { key: 'planned_arrival', label: 'Arrival', sortable: true, render: (row: any) => formatDate(row.planned_arrival) },
                             ]}
                             onRowClick={(row, index) => {
                                 setListContext({
@@ -292,11 +305,14 @@ export function CustomerDetailPage({ customerId }: CustomerDetailPageProps) {
                 {invoices.length > 0 && (
                     <Card title="Invoices">
                         <Table
-                            rows={invoices as any}
+                            rows={invoicesSort.sortedRows as any}
+                            sortKey={invoicesSort.sortKey}
+                            sortDir={invoicesSort.sortDir}
+                            onSort={invoicesSort.onSort}
                             columns={[
-                                { key: 'id', label: 'Invoice' },
+                                { key: 'id', label: 'Invoice', sortable: true },
                                 {
-                                    key: 'sales_order_id', label: 'Sales Order', render: (row: Invoice) => (
+                                    key: 'sales_order_id', label: 'Sales Order', sortable: true, render: (row: Invoice) => (
                                         <button
                                             className="text-brand-600 hover:underline text-left"
                                             onClick={(e) => {
@@ -310,10 +326,10 @@ export function CustomerDetailPage({ customerId }: CustomerDetailPageProps) {
                                         </button>
                                     )
                                 },
-                                { key: 'total', label: 'Total', render: (row: Invoice) => <div className="text-right">{formatCurrency(row.total, row.currency)}</div> },
-                                { key: 'status', label: 'Status', render: (row: Invoice) => <Badge>{row.status}</Badge> },
-                                { key: 'invoice_date', label: 'Invoice Date', render: (row: Invoice) => formatDate(row.invoice_date) },
-                                { key: 'due_date', label: 'Due Date', render: (row: Invoice) => formatDate(row.due_date) },
+                                { key: 'total', label: 'Total', sortable: true, render: (row: Invoice) => <div className="text-right">{formatCurrency(row.total, row.currency)}</div> },
+                                { key: 'status', label: 'Status', sortable: true, render: (row: Invoice) => <Badge>{row.status}</Badge> },
+                                { key: 'invoice_date', label: 'Invoice Date', sortable: true, render: (row: Invoice) => formatDate(row.invoice_date) },
+                                { key: 'due_date', label: 'Due Date', sortable: true, render: (row: Invoice) => formatDate(row.due_date) },
                             ]}
                             onRowClick={(row: Invoice, index: number) => {
                                 setListContext({
@@ -330,14 +346,17 @@ export function CustomerDetailPage({ customerId }: CustomerDetailPageProps) {
                 {quotes.length > 0 && (
                     <Card title="Quotes">
                         <Table
-                            rows={quotes as any}
+                            rows={quotesSort.sortedRows as any}
+                            sortKey={quotesSort.sortKey}
+                            sortDir={quotesSort.sortDir}
+                            onSort={quotesSort.onSort}
                             columns={[
-                                { key: 'id', label: 'Quote' },
-                                { key: 'revision_number', label: 'Rev', render: (q: Quote) => `R${q.revision_number}` },
-                                { key: 'total', label: 'Total', render: (q: Quote) => <div className="text-right">{formatCurrency(q.total)}</div> },
-                                { key: 'status', label: 'Status', render: (q: Quote) => <Badge>{q.status}</Badge> },
-                                { key: 'valid_until', label: 'Valid Until', render: (q: Quote) => q.valid_until ? formatDate(q.valid_until) : '—' },
-                                { key: 'created_at', label: 'Created', render: (q: Quote) => formatDate(q.created_at) },
+                                { key: 'id', label: 'Quote', sortable: true },
+                                { key: 'revision_number', label: 'Rev', sortable: true, render: (q: Quote) => `R${q.revision_number}` },
+                                { key: 'total', label: 'Total', sortable: true, render: (q: Quote) => <div className="text-right">{formatCurrency(q.total)}</div> },
+                                { key: 'status', label: 'Status', sortable: true, render: (q: Quote) => <Badge>{q.status}</Badge> },
+                                { key: 'valid_until', label: 'Valid Until', sortable: true, render: (q: Quote) => q.valid_until ? formatDate(q.valid_until) : '—' },
+                                { key: 'created_at', label: 'Created', sortable: true, render: (q: Quote) => formatDate(q.created_at) },
                             ]}
                             onRowClick={(q: Quote, index: number) => {
                                 setListContext({
@@ -354,16 +373,20 @@ export function CustomerDetailPage({ customerId }: CustomerDetailPageProps) {
                 {emails.length > 0 && (
                     <Card title="Emails">
                         <Table
-                            rows={emails as any}
+                            rows={emailsSort.sortedRows as any}
+                            sortKey={emailsSort.sortKey}
+                            sortDir={emailsSort.sortDir}
+                            onSort={emailsSort.onSort}
                             columns={[
-                                { key: 'subject', label: 'Subject' },
-                                { key: 'recipient_email', label: 'Recipient' },
+                                { key: 'subject', label: 'Subject', sortable: true },
+                                { key: 'recipient_email', label: 'Recipient', sortable: true },
                                 {
                                     key: 'status',
                                     label: 'Status',
+                                    sortable: true,
                                     render: (row: Email) => <Badge>{row.status}</Badge>
                                 },
-                                { key: 'modified_at', label: 'Modified', render: (row: Email) => formatDate(row.modified_at) },
+                                { key: 'modified_at', label: 'Modified', sortable: true, render: (row: Email) => formatDate(row.modified_at) },
                             ]}
                             onRowClick={(row: Email, index: number) => {
                                 setListContext({

@@ -7,6 +7,7 @@ import { api } from '../api'
 import { useNavigation } from '../contexts/NavigationContext'
 import { formatDate } from '../utils/date'
 import { formatQtyWithUom } from '../utils/quantity'
+import { useTableSort } from '../utils/useTableSort'
 
 function setHash(page: string, id?: string) {
     const path = id ? `#/${page}/${encodeURIComponent(id)}` : `#/${page}`
@@ -98,6 +99,9 @@ export function ShipmentDetailPage({ shipmentId }: ShipmentDetailPageProps) {
             </section>
         )
     }
+
+    const linesSort = useTableSort(shipment.lines || [])
+    const salesOrdersSort = useTableSort(shipment.sales_orders || [])
 
     return (
         <section>
@@ -198,11 +202,15 @@ export function ShipmentDetailPage({ shipmentId }: ShipmentDetailPageProps) {
                 {shipment.lines && shipment.lines.length > 0 && (
                     <Card title="Shipment Lines">
                         <Table
-                            rows={shipment.lines as any}
+                            rows={linesSort.sortedRows as any}
+                            sortKey={linesSort.sortKey}
+                            sortDir={linesSort.sortDir}
+                            onSort={linesSort.onSort}
                             columns={[
                                 {
                                     key: 'item_sku',
                                     label: 'SKU',
+                                    sortable: true,
                                     render: (row) => (
                                         <button
                                             className="text-brand-600 hover:underline text-left"
@@ -217,8 +225,8 @@ export function ShipmentDetailPage({ shipmentId }: ShipmentDetailPageProps) {
                                         </button>
                                     ),
                                 },
-                                { key: 'item_name', label: 'Item' },
-                                { key: 'qty', label: 'Qty', render: (row) => formatQtyWithUom(row.qty, row.uom) },
+                                { key: 'item_name', label: 'Item', sortable: true },
+                                { key: 'qty', label: 'Qty', sortable: true, render: (row) => formatQtyWithUom(row.qty, row.uom) },
                             ]}
                         />
                     </Card>
@@ -226,12 +234,16 @@ export function ShipmentDetailPage({ shipmentId }: ShipmentDetailPageProps) {
                 {shipment.sales_orders && shipment.sales_orders.length > 0 && (
                     <Card title="Sales Orders">
                         <Table
-                            rows={shipment.sales_orders as any}
+                            rows={salesOrdersSort.sortedRows as any}
+                            sortKey={salesOrdersSort.sortKey}
+                            sortDir={salesOrdersSort.sortDir}
+                            onSort={salesOrdersSort.onSort}
                             columns={[
-                                { key: 'sales_order_id', label: 'Order' },
+                                { key: 'sales_order_id', label: 'Order', sortable: true },
                                 {
                                     key: 'customer_name',
                                     label: 'Customer',
+                                    sortable: true,
                                     render: (row) => (
                                         <button
                                             className="text-brand-600 hover:underline text-left"
@@ -246,8 +258,8 @@ export function ShipmentDetailPage({ shipmentId }: ShipmentDetailPageProps) {
                                         </button>
                                     ),
                                 },
-                                { key: 'customer_company', label: 'Company' },
-                                { key: 'status', label: 'Status', render: (row) => <Badge>{row.status}</Badge> },
+                                { key: 'customer_company', label: 'Company', sortable: true },
+                                { key: 'status', label: 'Status', sortable: true, render: (row) => <Badge>{row.status}</Badge> },
                             ]}
                             onRowClick={(row, index) => {
                                 setListContext({
