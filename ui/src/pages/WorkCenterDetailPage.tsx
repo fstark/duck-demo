@@ -45,6 +45,16 @@ export function WorkCenterDetailPage({ workCenterId }: WorkCenterDetailPageProps
             })
     }, [workCenterId])
 
+    // Prepare data for sorting - use empty arrays if no data yet
+    const inProgressOps = workCenter?.operations.filter(op => op.status === 'in_progress') ?? []
+    const pendingOps = workCenter?.operations.filter(op => op.status === 'pending') ?? []
+    const completedOps = workCenter?.operations.filter(op => op.status === 'completed') ?? []
+
+    // Call hooks unconditionally before any returns
+    const inProgressSort = useTableSort(inProgressOps)
+    const pendingSort = useTableSort(pendingOps.slice(0, 20))
+    const completedSort = useTableSort(completedOps.slice(0, 10))
+
     const navigateTo = (direction: 'prev' | 'next') => {
         if (!listContext || listContext.listType !== 'work-centers') return
         const { items, currentIndex } = listContext
@@ -90,14 +100,6 @@ export function WorkCenterDetailPage({ workCenterId }: WorkCenterDetailPageProps
             </div>
         )
     }
-
-    const inProgressOps = workCenter.operations.filter(op => op.status === 'in_progress')
-    const pendingOps = workCenter.operations.filter(op => op.status === 'pending')
-    const completedOps = workCenter.operations.filter(op => op.status === 'completed')
-
-    const inProgressSort = useTableSort(inProgressOps)
-    const pendingSort = useTableSort(pendingOps.slice(0, 20))
-    const completedSort = useTableSort(completedOps.slice(0, 10))
 
     return (
         <div>

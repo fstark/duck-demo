@@ -45,6 +45,12 @@ function QuoteDetailPage({ quoteId }: QuoteDetailPageProps) {
         }
     }
 
+    // Prepare data and call hooks before conditional returns
+    const lines = quote?.lines || []
+    const revisions = quote?.revisions || []
+    const linesSort = useTableSort(lines)
+    const revisionsSort = useTableSort(revisions)
+
     const getStatusBadge = (status: string) => {
         const variants: Record<string, 'success' | 'warning' | 'danger' | 'info'> = {
             draft: 'info',
@@ -83,11 +89,6 @@ function QuoteDetailPage({ quoteId }: QuoteDetailPageProps) {
     }
 
     const q = quote.quote
-    const lines = quote.lines || []
-    const revisions = quote.revisions || []
-
-    const linesSort = useTableSort(lines)
-    const revisionsSort = useTableSort(revisions)
 
     return (
         <div className="space-y-4">

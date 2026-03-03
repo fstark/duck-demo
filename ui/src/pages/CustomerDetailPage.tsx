@@ -51,6 +51,13 @@ export function CustomerDetailPage({ customerId }: CustomerDetailPageProps) {
             })
     }, [customerId])
 
+    // Call hooks before conditional returns
+    const salesOrdersSort = useTableSort(customer?.sales_orders || [])
+    const shipmentsSort = useTableSort(customer?.shipments || [])
+    const invoicesSort = useTableSort(invoices)
+    const quotesSort = useTableSort(quotes)
+    const emailsSort = useTableSort(emails)
+
     if (loading) {
         return (
             <section>
@@ -111,12 +118,6 @@ export function CustomerDetailPage({ customerId }: CustomerDetailPageProps) {
         })
         setHash('customers', nextCustomer.id)
     }
-
-    const salesOrdersSort = useTableSort(customer?.sales_orders || [])
-    const shipmentsSort = useTableSort(customer?.shipments || [])
-    const invoicesSort = useTableSort(invoices)
-    const quotesSort = useTableSort(quotes)
-    const emailsSort = useTableSort(emails)
 
     return (
         <section>

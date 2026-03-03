@@ -45,6 +45,32 @@ export function ItemDetailPage({ sku }: ItemDetailPageProps) {
             })
     }, [sku])
 
+    // Prepare data for sorting - before conditional returns
+    const recipesRows = [
+        ...(item?.recipes || []).map(r => ({
+            ...r,
+            role: 'output',
+            recipe_id: r.id,
+            item_name: item?.name || '',
+            batch_qty: formatQtyWithUom(r.output_qty, item?.uom || 'ea'),
+        })),
+        ...(item?.used_in_recipes || []).map(r => ({
+            ...r,
+            role: 'ingredient',
+            id: r.recipe_id,
+            item_name: r.output_name,
+            batch_qty: formatQtyWithUom(r.qty_per_batch, item?.uom || 'ea'),
+            production_time_hours: undefined,
+            ingredient_count: undefined,
+            operation_count: undefined,
+        })),
+    ] as any
+
+    // Call hooks unconditionally before any returns
+    const recipesSort = useTableSort(recipesRows)
+    const productionSort = useTableSort(item?.production_orders || [])
+    const purchaseSort = useTableSort(item?.purchase_orders || [])
+
     const hasPrevious = listContext && listContext.currentIndex > 0
     const hasNext = listContext && listContext.currentIndex < listContext.items.length - 1
 
@@ -105,30 +131,6 @@ export function ItemDetailPage({ sku }: ItemDetailPageProps) {
             </section>
         )
     }
-
-    const recipesRows = [
-        ...(item?.recipes || []).map(r => ({
-            ...r,
-            role: 'output',
-            recipe_id: r.id,
-            item_name: item.name,
-            batch_qty: formatQtyWithUom(r.output_qty, item.uom || 'ea'),
-        })),
-        ...(item?.used_in_recipes || []).map(r => ({
-            ...r,
-            role: 'ingredient',
-            id: r.recipe_id,
-            item_name: r.output_name,
-            batch_qty: formatQtyWithUom(r.qty_per_batch, item.uom),
-            production_time_hours: undefined,
-            ingredient_count: undefined,
-            operation_count: undefined,
-        })),
-    ] as any
-
-    const recipesSort = useTableSort(recipesRows)
-    const productionSort = useTableSort(item?.production_orders || [])
-    const purchaseSort = useTableSort(item?.purchase_orders || [])
 
     return (
         <section>

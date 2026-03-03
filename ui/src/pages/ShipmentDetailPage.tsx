@@ -39,6 +39,10 @@ export function ShipmentDetailPage({ shipmentId }: ShipmentDetailPageProps) {
             })
     }, [shipmentId])
 
+    // Call hooks before conditional returns
+    const linesSort = useTableSort(shipment?.lines || [])
+    const salesOrdersSort = useTableSort(shipment?.sales_orders || [])
+
     const hasPrevious = listContext && listContext.currentIndex > 0
     const hasNext = listContext && listContext.currentIndex < listContext.items.length - 1
 
@@ -99,9 +103,6 @@ export function ShipmentDetailPage({ shipmentId }: ShipmentDetailPageProps) {
             </section>
         )
     }
-
-    const linesSort = useTableSort(shipment.lines || [])
-    const salesOrdersSort = useTableSort(shipment.sales_orders || [])
 
     return (
         <section>

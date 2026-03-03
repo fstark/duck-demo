@@ -40,6 +40,10 @@ export function InvoiceDetailPage({ invoiceId }: InvoiceDetailPageProps) {
             })
     }, [invoiceId])
 
+    // Call hooks before conditional returns
+    const linesSort = useTableSort(data?.lines || [])
+    const paymentsSort = useTableSort(data?.payments || [])
+
     const hasPrevious = listContext && listContext.currentIndex > 0
     const hasNext = listContext && listContext.currentIndex < listContext.items.length - 1
 
@@ -96,9 +100,6 @@ export function InvoiceDetailPage({ invoiceId }: InvoiceDetailPageProps) {
     }
 
     const inv = data.invoice
-
-    const linesSort = useTableSort(data.lines || [])
-    const paymentsSort = useTableSort(data.payments || [])
 
     return (
         <section>

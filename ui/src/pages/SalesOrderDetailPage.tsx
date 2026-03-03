@@ -51,6 +51,13 @@ export function SalesOrderDetailPage({ orderId }: SalesOrderDetailPageProps) {
             })
     }, [orderId])
 
+    // Call hooks before conditional returns
+    const linesSort = useTableSort(order?.lines || [])
+    const shipmentsSort = useTableSort(order?.shipments || [])
+    const emailsSort = useTableSort(emails)
+    const invoicesSort = useTableSort(invoices)
+    const productionOrdersSort = useTableSort(productionOrders)
+
     const hasPrevious = listContext && listContext.currentIndex > 0
     const hasNext = listContext && listContext.currentIndex < listContext.items.length - 1
 
@@ -111,12 +118,6 @@ export function SalesOrderDetailPage({ orderId }: SalesOrderDetailPageProps) {
             </section>
         )
     }
-
-    const linesSort = useTableSort(order?.lines || [])
-    const shipmentsSort = useTableSort(order?.shipments || [])
-    const emailsSort = useTableSort(emails)
-    const invoicesSort = useTableSort(invoices)
-    const productionOrdersSort = useTableSort(productionOrders)
 
     return (
         <section>
