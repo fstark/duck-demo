@@ -422,3 +422,108 @@ export type DashboardData = {
   daily_volumes: { date: string; orders: number; shipped: number; invoiced: number }[]
 }
 
+// ---------------------------------------------------------------------------
+// Timeline / Gantt
+// ---------------------------------------------------------------------------
+
+export type TimelineWait = {
+  id: string
+  production_operation_id?: string | null
+  reason_type: 'material' | 'work_center'
+  reason_ref: string
+  started_at: string
+  resolved_at?: string | null
+}
+
+export type TimelineOperation = {
+  id: string
+  sequence_order: number
+  operation_name: string
+  duration_hours: number
+  work_center?: string | null
+  status: 'pending' | 'in_progress' | 'completed' | 'failed'
+  started_at?: string | null
+  completed_at?: string | null
+  blocked_reason?: string | null
+  blocked_at?: string | null
+}
+
+export type TimelineProductionOrder = {
+  id: string
+  item_id: string
+  item_sku?: string
+  item_name?: string
+  status?: string
+  started_at?: string | null
+  completed_at?: string | null
+  eta_finish?: string | null
+  operations: TimelineOperation[]
+  waits: TimelineWait[]
+}
+
+export type TimelineQuote = {
+  id: string
+  revision_number: number
+  status: string
+  created_at?: string | null
+  sent_at?: string | null
+  accepted_at?: string | null
+  rejected_at?: string | null
+}
+
+export type TimelineShipment = {
+  id: string
+  status: string
+  planned_departure?: string | null
+  planned_arrival?: string | null
+  dispatched_at?: string | null
+  delivered_at?: string | null
+}
+
+export type TimelineInvoice = {
+  id: string
+  status: string
+  created_at?: string | null
+  issued_at?: string | null
+  paid_at?: string | null
+  total?: number
+}
+
+export type SalesOrderTimeline = {
+  sales_order_id: string
+  sales_order: {
+    id: string
+    status?: string
+    created_at?: string | null
+    requested_delivery_date?: string | null
+  }
+  quotes: TimelineQuote[]
+  production_orders: TimelineProductionOrder[]
+  shipments: TimelineShipment[]
+  invoices: TimelineInvoice[]
+}
+
+export type ProductionOrderTimeline = {
+  production_order: TimelineProductionOrder & {
+    sales_order_id?: string | null
+  }
+  children: Array<{
+    id: string
+    item_id: string
+    item_sku?: string
+    item_name?: string
+    status?: string
+    started_at?: string | null
+    completed_at?: string | null
+    eta_finish?: string | null
+  }>
+  sales_order?: {
+    id: string
+    status?: string
+    created_at?: string | null
+    requested_delivery_date?: string | null
+  } | null
+  shipments: TimelineShipment[]
+  invoices: TimelineInvoice[]
+}
+

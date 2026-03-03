@@ -172,7 +172,9 @@ CREATE TABLE IF NOT EXISTS production_operations (
     work_center TEXT,
     status TEXT DEFAULT 'pending',
     started_at TEXT,
-    completed_at TEXT
+    completed_at TEXT,
+    blocked_reason TEXT,
+    blocked_at TEXT
 );
 
 -- Suppliers for raw materials
@@ -304,6 +306,21 @@ CREATE TABLE IF NOT EXISTS documents (
 CREATE INDEX IF NOT EXISTS idx_documents_entity ON documents(entity_type, entity_id);
 CREATE INDEX IF NOT EXISTS idx_documents_type ON documents(document_type);
 
+-- Production wait log: event-sourced tracking of why production orders wait.
+-- Each row is one wait period with a specific cause.
+-- reason_type: 'material' (missing ingredient) or 'work_center' (capacity full)
+-- reason_ref : the item_id (material) or work center name (work_center)
+CREATE TABLE IF NOT EXISTS production_wait_log (
+    id TEXT PRIMARY KEY,
+    production_order_id TEXT NOT NULL,
+    production_operation_id TEXT,
+    reason_type TEXT NOT NULL,
+    reason_ref TEXT NOT NULL,
+    started_at TEXT NOT NULL,
+    resolved_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_pwl_mo ON production_wait_log(production_order_id);
+
 -- Foreign-key / hot-path indexes
 CREATE INDEX IF NOT EXISTS idx_stock_item ON stock(item_id);
 CREATE INDEX IF NOT EXISTS idx_sol_so ON sales_order_lines(sales_order_id);
@@ -320,6 +337,22 @@ CREATE INDEX IF NOT EXISTS idx_purchord_status ON purchase_orders(status, expect
 CREATE INDEX IF NOT EXISTS idx_sos_ship ON sales_order_shipments(shipment_id);
 CREATE INDEX IF NOT EXISTS idx_payments_inv ON payments(invoice_id);
 CREATE INDEX IF NOT EXISTS idx_emails_cust ON emails(customer_id);
+
+-- Stock movements: full audit trail for every stock change
+CREATE TABLE IF NOT EXISTS stock_movements (
+    id TEXT PRIMARY KEY,
+    timestamp TEXT NOT NULL,
+    item_id TEXT NOT NULL,
+    movement_type TEXT NOT NULL,
+    qty INTEGER NOT NULL,
+    stock_id TEXT NOT NULL,
+    reference_type TEXT,
+    reference_id TEXT,
+    notes TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_stock_mov_item ON stock_movements(item_id, timestamp);
+CREATE INDEX IF NOT EXISTS idx_stock_mov_stock ON stock_movements(stock_id);
+CREATE INDEX IF NOT EXISTS idx_stock_mov_ref ON stock_movements(reference_type, reference_id);
 
 -- Activity log: persistent event stream for factory observability
 CREATE TABLE IF NOT EXISTS activity_log (

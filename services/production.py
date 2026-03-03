@@ -9,6 +9,42 @@ from utils import ui_href
 from services._base import db_conn
 
 
+# ---------------------------------------------------------------------------
+# Wait-log helpers
+# ---------------------------------------------------------------------------
+
+def _open_wait(conn, production_order_id: str, production_operation_id: Optional[str],
+               reason_type: str, reason_ref: str, started_at: str) -> str:
+    """Insert a new open wait-log row. Returns the wait ID."""
+    wait_id = generate_id(conn, "WAIT", "production_wait_log")
+    conn.execute(
+        "INSERT INTO production_wait_log "
+        "(id, production_order_id, production_operation_id, reason_type, reason_ref, started_at) "
+        "VALUES (?, ?, ?, ?, ?, ?)",
+        (wait_id, production_order_id, production_operation_id, reason_type, reason_ref, started_at),
+    )
+    return wait_id
+
+
+def _close_open_waits(conn, production_order_id: str, resolved_at: str,
+                      production_operation_id: Optional[str] = None) -> int:
+    """Close all open wait-log rows for a MO (or a specific operation).
+
+    Returns number of rows closed.
+    """
+    if production_operation_id:
+        return conn.execute(
+            "UPDATE production_wait_log SET resolved_at = ? "
+            "WHERE production_order_id = ? AND production_operation_id = ? AND resolved_at IS NULL",
+            (resolved_at, production_order_id, production_operation_id),
+        ).rowcount
+    return conn.execute(
+        "UPDATE production_wait_log SET resolved_at = ? "
+        "WHERE production_order_id = ? AND resolved_at IS NULL",
+        (resolved_at, production_order_id),
+    ).rowcount
+
+
 def get_statistics() -> Dict[str, Any]:
     """Get production statistics."""
     with db_conn() as conn:
@@ -99,6 +135,10 @@ def create_order(recipe_id: str, sales_order_id: str, notes: Optional[str] = Non
         eta_ship = (sim_date + timedelta(days=2 + int(prod_time_days))).isoformat()
         order_id = generate_id(conn, "MO", "production_orders")
         conn.execute("INSERT INTO production_orders (id, sales_order_id, recipe_id, item_id, status, eta_finish, eta_ship) VALUES (?, ?, ?, ?, ?, ?, ?)", (order_id, sales_order_id, recipe_id, recipe_data["output_item_id"], status, eta_finish, eta_ship))
+        # Log material wait if order starts in waiting status
+        if shortfalls:
+            primary = shortfalls[0]
+            _open_wait(conn, order_id, None, "material", primary["ingredient_sku"], sim_time)
         for op in recipe_data["operations"]:
             pop_id = generate_id(conn, "POP", "production_operations")
             conn.execute(
@@ -134,6 +174,8 @@ def start_order(production_order_id: str) -> Dict[str, Any]:
         if order["status"] != "ready":
             raise ValueError(f"Production order {production_order_id} is not ready (current status: {order['status']})")
 
+        sim_time = simulation_service.get_current_time()
+
         # Pre-check ingredient availability before deducting
         ingredients = conn.execute(
             "SELECT ri.input_item_id, ri.input_qty, i.sku "
@@ -158,6 +200,14 @@ def start_order(production_order_id: str) -> Dict[str, Any]:
                 })
 
         if shortfalls:
+            # Record material wait
+            _open_wait(conn, production_order_id, None, "material",
+                       shortfalls[0]["sku"], sim_time)
+            conn.execute(
+                "UPDATE production_orders SET status = 'waiting' WHERE id = ?",
+                (production_order_id,),
+            )
+            conn.commit()
             return {
                 "production_order_id": production_order_id,
                 "status": "waiting_for_stock",
@@ -167,11 +217,16 @@ def start_order(production_order_id: str) -> Dict[str, Any]:
 
         # All ingredients available — deduct and start
         for ing in ingredients:
-            inventory_service.deduct_stock(ing["input_item_id"], ing["input_qty"], conn=conn)
+            inventory_service.deduct_stock(
+                ing["input_item_id"], ing["input_qty"], conn=conn,
+                reference_type="production_order", reference_id=production_order_id,
+            )
+
+        # Close any lingering waits (e.g. from a previous waiting→ready cycle)
+        _close_open_waits(conn, production_order_id, sim_time)
 
         first_op = conn.execute("SELECT operation_name FROM recipe_operations WHERE recipe_id = ? ORDER BY sequence_order LIMIT 1", (order["recipe_id"],)).fetchone()
         current_operation = first_op["operation_name"] if first_op else None
-        sim_time = simulation_service.get_current_time()
         conn.execute("UPDATE production_orders SET status = 'in_progress', started_at = ?, current_operation = ? WHERE id = ?", (sim_time, current_operation, production_order_id))
         # Mark the first production operation as in_progress
         conn.execute(
@@ -198,9 +253,18 @@ def complete_order(production_order_id: str, qty_produced: int, warehouse: str, 
         sim_time = simulation_service.get_current_time()
         # Finalize all operations that are not yet completed
         _finalize_all_operations(conn, production_order_id, order["started_at"], sim_time)
+        # Close any remaining open waits
+        _close_open_waits(conn, production_order_id, sim_time)
         conn.execute("UPDATE production_orders SET status = 'completed', completed_at = ?, qty_produced = ?, current_operation = NULL WHERE id = ?", (sim_time, qty_produced, production_order_id))
         stock_id = generate_id(conn, "STK", "stock")
         conn.execute("INSERT INTO stock (id, item_id, warehouse, location, on_hand) VALUES (?, ?, ?, ?, ?)", (stock_id, order["item_id"], warehouse, location, qty_produced))
+        # Log stock movement for production output
+        movement_id = generate_id(conn, "MOV", "stock_movements")
+        conn.execute(
+            "INSERT INTO stock_movements (id, timestamp, item_id, movement_type, qty, stock_id, reference_type, reference_id) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (movement_id, sim_time, order["item_id"], "production_in", qty_produced, stock_id, "production_order", production_order_id),
+        )
         conn.commit()
         return {"production_order_id": production_order_id, "status": "completed", "qty_produced": qty_produced, "stock_id": stock_id, "warehouse": warehouse, "location": location, "message": f"Production order {production_order_id} completed, {qty_produced} units added to stock"}
 
@@ -212,6 +276,9 @@ def update_readiness() -> Dict[str, Any]:
     where every waiting MO's demand blocks every other waiting MO from
     being promoted.
     """
+    from services.simulation import simulation_service as _sim_svc
+    sim_time = _sim_svc.get_current_time()
+
     with db_conn() as conn:
         waiting = conn.execute(
             "SELECT po.id, po.recipe_id FROM production_orders po WHERE po.status = 'waiting'"
@@ -238,6 +305,7 @@ def update_readiness() -> Dict[str, Any]:
 
             if all_available:
                 conn.execute("UPDATE production_orders SET status = 'ready' WHERE id = ?", (wo["id"],))
+                _close_open_waits(conn, wo["id"], sim_time)
                 promoted.append(wo["id"])
 
         if promoted:
@@ -357,9 +425,11 @@ def advance_operations(production_order_id: str, sim_time: str, conn=None) -> Di
                 if op["status"] != "completed":
                     c.execute(
                         "UPDATE production_operations SET status = 'completed', "
-                        "started_at = ?, completed_at = ? WHERE id = ?",
+                        "started_at = ?, completed_at = ?, blocked_reason = NULL, blocked_at = NULL WHERE id = ?",
                         (op_start.isoformat(), op_end.isoformat(), op["id"]),
                     )
+                    # Resolve any open work-center wait for this op
+                    _close_open_waits(c, production_order_id, op_end.isoformat(), op["id"])
                     # Free up work center slot
                     wc = op.get("work_center")
                     if wc and wc in wc_used:
@@ -374,6 +444,24 @@ def advance_operations(production_order_id: str, sim_time: str, conn=None) -> Di
                         blocked = True
                         all_done = False
                         current_operation = op["operation_name"]
+                        # Record the block on the operation row
+                        if not op.get("blocked_reason"):
+                            c.execute(
+                                "UPDATE production_operations "
+                                "SET blocked_reason = 'work_center_full', blocked_at = ? "
+                                "WHERE id = ?",
+                                (sim_time, op["id"]),
+                            )
+                        # Open a wait-log row if none exists for this op
+                        existing = c.execute(
+                            "SELECT 1 FROM production_wait_log "
+                            "WHERE production_order_id = ? AND production_operation_id = ? "
+                            "AND resolved_at IS NULL",
+                            (production_order_id, op["id"]),
+                        ).fetchone()
+                        if not existing:
+                            _open_wait(c, production_order_id, op["id"],
+                                       "work_center", wc, sim_time)
                         # Revert to pending if it was somehow in_progress
                         if op["status"] == "in_progress":
                             c.execute(
@@ -387,9 +475,11 @@ def advance_operations(production_order_id: str, sim_time: str, conn=None) -> Di
                 if op["status"] != "in_progress":
                     c.execute(
                         "UPDATE production_operations SET status = 'in_progress', "
-                        "started_at = ? WHERE id = ?",
+                        "started_at = ?, blocked_reason = NULL, blocked_at = NULL WHERE id = ?",
                         (op_start.isoformat(), op["id"]),
                     )
+                    # Resolve any open work-center wait for this op
+                    _close_open_waits(c, production_order_id, op_start.isoformat(), op["id"])
                 # Reserve the slot
                 if wc:
                     wc_used[wc] = wc_used.get(wc, 0) + 1
@@ -510,10 +600,99 @@ def complete_operation(production_order_id: str) -> Dict[str, Any]:
             }
 
 
+def get_order_timeline(production_order_id: str) -> Optional[Dict[str, Any]]:
+    """Load the lifecycle timeline for a production order.
+
+    Returns the MO with operations, waits, sub-assemblies,
+    and parent SO / shipment / invoice context.
+    """
+    with db_conn() as conn:
+        mo = conn.execute(
+            "SELECT po.*, i.sku as item_sku, i.name as item_name "
+            "FROM production_orders po "
+            "LEFT JOIN items i ON po.item_id = i.id "
+            "WHERE po.id = ?",
+            (production_order_id,),
+        ).fetchone()
+        if not mo:
+            return None
+        mo_dict = dict(mo)
+
+        # Operations
+        ops = [dict(r) for r in conn.execute(
+            "SELECT id, sequence_order, operation_name, duration_hours, "
+            "work_center, status, started_at, completed_at, blocked_reason, blocked_at "
+            "FROM production_operations WHERE production_order_id = ? ORDER BY sequence_order",
+            (production_order_id,),
+        ).fetchall()]
+
+        # Waits
+        waits = [dict(r) for r in conn.execute(
+            "SELECT id, production_operation_id, reason_type, reason_ref, "
+            "started_at, resolved_at FROM production_wait_log "
+            "WHERE production_order_id = ? ORDER BY started_at",
+            (production_order_id,),
+        ).fetchall()]
+
+        mo_dict["operations"] = ops
+        mo_dict["waits"] = waits
+
+        # Sub-assemblies
+        children = [dict(r) for r in conn.execute(
+            "SELECT po.id, po.item_id, po.status, po.started_at, po.completed_at, "
+            "po.eta_finish, i.sku as item_sku, i.name as item_name "
+            "FROM production_orders po "
+            "LEFT JOIN items i ON po.item_id = i.id "
+            "WHERE po.parent_production_order_id = ? ORDER BY po.id",
+            (production_order_id,),
+        ).fetchall()]
+
+        # Parent SO context
+        so_ctx = None
+        if mo["sales_order_id"]:
+            so = conn.execute(
+                "SELECT id, status, created_at, requested_delivery_date "
+                "FROM sales_orders WHERE id = ?",
+                (mo["sales_order_id"],),
+            ).fetchone()
+            if so:
+                so_ctx = dict(so)
+
+        # Shipments for the parent SO
+        shipments = []
+        if mo["sales_order_id"]:
+            shipments = [dict(r) for r in conn.execute(
+                "SELECT s.id, s.status, s.planned_departure, s.planned_arrival, "
+                "s.dispatched_at, s.delivered_at "
+                "FROM sales_order_shipments sos "
+                "JOIN shipments s ON s.id = sos.shipment_id "
+                "WHERE sos.sales_order_id = ? ORDER BY s.planned_departure",
+                (mo["sales_order_id"],),
+            ).fetchall()]
+
+        # Invoices for the parent SO
+        invoices = []
+        if mo["sales_order_id"]:
+            invoices = [dict(r) for r in conn.execute(
+                "SELECT id, status, created_at, issued_at, paid_at "
+                "FROM invoices WHERE sales_order_id = ? ORDER BY created_at",
+                (mo["sales_order_id"],),
+            ).fetchall()]
+
+        return {
+            "production_order": mo_dict,
+            "children": children,
+            "sales_order": so_ctx,
+            "shipments": shipments,
+            "invoices": invoices,
+        }
+
+
 # Namespace for backward compatibility
 production_service = SimpleNamespace(
     get_statistics=get_statistics,
     get_order_status=get_order_status,
+    get_order_timeline=get_order_timeline,
     find_orders_by_date_range=find_orders_by_date_range,
     create_order=create_order,
     start_order=start_order,

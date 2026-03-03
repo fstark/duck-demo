@@ -471,13 +471,17 @@ def trigger_production_for_orders(
 ) -> List[str]:
     """Create and optionally start production orders for a list of SOs.
 
+    Checks stock availability before creating production orders. Only creates
+    production orders for the shortage (demand - available stock), preventing
+    unbounded stock growth.
+
     Returns list of production_order_ids.
     """
     mo_ids: List[str] = []
     for so_id in sales_order_ids:
         with db_conn() as conn:
             lines = conn.execute(
-                "SELECT i.sku, sol.qty FROM sales_order_lines sol "
+                "SELECT i.id as item_id, i.sku, sol.qty FROM sales_order_lines sol "
                 "JOIN items i ON sol.item_id = i.id WHERE sol.sales_order_id = ?",
                 (so_id,)
             ).fetchall()
@@ -486,7 +490,34 @@ def trigger_production_for_orders(
             if not recipe_id:
                 continue
             recipe_data = recipe_service.get_recipe(recipe_id)
-            batches = int(max(1, -(-int(line["qty"]) // int(recipe_data["output_qty"]))))
+            batch_size = int(recipe_data["output_qty"])
+            order_qty = int(line["qty"])
+            
+            # Check current stock availability
+            with db_conn() as conn:
+                available_stock = conn.execute(
+                    "SELECT COALESCE(SUM(on_hand), 0) FROM stock WHERE item_id = ?",
+                    (line["item_id"],)
+                ).fetchone()[0]
+            
+            # Calculate shortage (only produce what's missing)
+            shortage = max(0, order_qty - available_stock)
+            
+            if shortage == 0:
+                # Sufficient stock available, no production needed
+                logger.debug(
+                    "SO %s: %s has sufficient stock (%d available, %d needed)",
+                    so_id, line["sku"], available_stock, order_qty
+                )
+                continue
+            
+            # Calculate batches needed for the shortage (round up)
+            batches = int(max(1, -(-shortage // batch_size)))
+            logger.debug(
+                "SO %s: %s shortage=%d, creating %d batch(es) of %d",
+                so_id, line["sku"], shortage, batches, batch_size
+            )
+            
             for _ in range(batches):
                 mo = production_service.create_order(recipe_id=recipe_id, sales_order_id=so_id, notes=f"For {so_id}")
                 mo_ids.append(mo["production_order_id"])

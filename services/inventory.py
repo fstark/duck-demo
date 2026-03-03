@@ -4,7 +4,7 @@ from types import SimpleNamespace
 from typing import Any, Dict, Optional
 
 from services._base import db_conn
-from db import dict_rows
+from db import dict_rows, generate_id
 
 
 def _compute_reserved(conn, item_id: str) -> int:
@@ -72,7 +72,8 @@ def check_availability(item_sku: str, quantity: int) -> Dict[str, Any]:
         "stock_locations": summary["by_location"]
     }
 
-def deduct_stock(item_id: str, qty: int, conn=None) -> Dict[str, Any]:
+def deduct_stock(item_id: str, qty: int, conn=None,
+                 reference_type: str = None, reference_id: str = None) -> Dict[str, Any]:
     """Deduct stock for an item using FIFO across locations.
 
     Reduces on_hand across stock rows (oldest/first rows first) until
@@ -80,9 +81,23 @@ def deduct_stock(item_id: str, qty: int, conn=None) -> Dict[str, Any]:
     Accepts an optional *conn* so callers can embed the deduction inside
     their own transaction (no commit is issued when conn is provided).
 
+    When *reference_type* / *reference_id* are supplied, a
+    ``stock_movements`` row is written for every stock record touched,
+    providing a full audit trail.
+
     Returns a summary of what was deducted.
     """
+    # Determine movement_type from context
+    _MOVE_TYPE = {
+        "shipment": "shipment_out",
+        "production_order": "production_consume",
+    }
+
     def _do(c):
+        from services.simulation import simulation_service
+        sim_time = simulation_service.get_current_time()
+        move_type = _MOVE_TYPE.get(reference_type, "adjustment")
+
         rows = c.execute(
             "SELECT id, warehouse, location, on_hand FROM stock "
             "WHERE item_id = ? AND on_hand > 0 ORDER BY id",
@@ -103,6 +118,15 @@ def deduct_stock(item_id: str, qty: int, conn=None) -> Dict[str, Any]:
                     "UPDATE stock SET on_hand = ? WHERE id = ?",
                     (new_on_hand, row["id"]),
                 )
+            # Log the stock movement (negative qty for deduction)
+            movement_id = generate_id(c, "MOV", "stock_movements")
+            c.execute(
+                "INSERT INTO stock_movements "
+                "(id, timestamp, item_id, movement_type, qty, stock_id, reference_type, reference_id) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (movement_id, sim_time, item_id, move_type, -take, row["id"],
+                 reference_type, reference_id),
+            )
             remaining -= take
             deducted_from.append({
                 "stock_id": row["id"],

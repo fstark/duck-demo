@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react'
 import { Card } from '../components/Card'
 import { Table } from '../components/Table'
 import { Badge } from '../components/Badge'
-import { SalesOrder, SalesOrderDetail, Email, Invoice, ProductionOrder } from '../types'
+import { TimelineGantt } from '../components/TimelineGantt'
+import { SalesOrder, SalesOrderDetail, Email, Invoice, ProductionOrder, SalesOrderTimeline } from '../types'
 import { api } from '../api'
 import { useNavigation } from '../contexts/NavigationContext'
 import { formatCurrency } from '../utils/currency'
@@ -26,6 +27,7 @@ export function SalesOrderDetailPage({ orderId }: SalesOrderDetailPageProps) {
     const [emails, setEmails] = useState<Email[]>([])
     const [invoices, setInvoices] = useState<Invoice[]>([])
     const [productionOrders, setProductionOrders] = useState<ProductionOrder[]>([])
+    const [timeline, setTimeline] = useState<SalesOrderTimeline | null>(null)
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
     const { listContext, setListContext, setReferrer, referrer, clearListContext } = useNavigation()
@@ -36,12 +38,14 @@ export function SalesOrderDetailPage({ orderId }: SalesOrderDetailPageProps) {
             api.emails({ sales_order_id: orderId }),
             api.invoices({ sales_order_id: orderId }),
             api.productionOrders({ sales_order_id: orderId }),
+            api.salesOrderTimeline(orderId).catch(() => null),
         ])
-            .then(([orderData, emailsData, invoicesData, prodData]) => {
+            .then(([orderData, emailsData, invoicesData, prodData, timelineData]) => {
                 setOrder(orderData as SalesOrderDetail)
                 setEmails(emailsData.emails)
                 setInvoices(invoicesData.invoices || [])
                 setProductionOrders(prodData.production_orders || [])
+                setTimeline(timelineData)
                 setLoading(false)
             })
             .catch((err) => {
@@ -247,6 +251,17 @@ export function SalesOrderDetailPage({ orderId }: SalesOrderDetailPageProps) {
                             >
                                 {order.sales_order.quote_id}
                             </button>
+                        </Card>
+                    )}
+                    {timeline && (
+                        <Card title="Order Lifecycle">
+                            <TimelineGantt
+                                soTimeline={timeline}
+                                onNavigate={(page, id) => {
+                                    setReferrer({ page: 'orders', id: orderId, label: `Order ${order.sales_order.id}` })
+                                    setHash(page, id)
+                                }}
+                            />
                         </Card>
                     )}
                     <div className="grid grid-cols-2 gap-3">

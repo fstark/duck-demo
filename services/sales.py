@@ -181,10 +181,102 @@ def complete_order(sales_order_id: str) -> Dict[str, Any]:
         }
 
 
+def get_order_timeline(sales_order_id: str) -> Optional[Dict[str, Any]]:
+    """Load the full lifecycle timeline for a sales order.
+
+    Aggregates: quote revision chain → SO → production orders (with
+    operations and wait-log) → shipments → invoices.
+    """
+    with db_conn() as conn:
+        # ---- Sales order ----
+        so = conn.execute("SELECT * FROM sales_orders WHERE id = ?", (sales_order_id,)).fetchone()
+        if not so:
+            return None
+
+        # ---- Quote revision chain ----
+        quotes: List[Dict[str, Any]] = []
+        if so["quote_id"]:
+            # Walk backwards through supersedes_quote_id
+            seen: set = set()
+            q_id: Optional[str] = so["quote_id"]
+            while q_id and q_id not in seen:
+                seen.add(q_id)
+                q_row = conn.execute(
+                    "SELECT id, revision_number, status, created_at, sent_at, "
+                    "accepted_at, rejected_at, supersedes_quote_id FROM quotes WHERE id = ?",
+                    (q_id,),
+                ).fetchone()
+                if not q_row:
+                    break
+                quotes.append(dict(q_row))
+                q_id = q_row["supersedes_quote_id"]
+            quotes.reverse()  # oldest first
+
+        # ---- Production orders + operations + waits ----
+        mo_rows = conn.execute(
+            "SELECT po.*, i.sku as item_sku, i.name as item_name "
+            "FROM production_orders po "
+            "LEFT JOIN items i ON po.item_id = i.id "
+            "WHERE po.sales_order_id = ? ORDER BY po.id",
+            (sales_order_id,),
+        ).fetchall()
+        production_orders = []
+        for mo in mo_rows:
+            mo_dict = dict(mo)
+            ops = [dict(r) for r in conn.execute(
+                "SELECT id, sequence_order, operation_name, duration_hours, "
+                "work_center, status, started_at, completed_at, blocked_reason, blocked_at "
+                "FROM production_operations WHERE production_order_id = ? ORDER BY sequence_order",
+                (mo["id"],),
+            ).fetchall()]
+            waits = [dict(r) for r in conn.execute(
+                "SELECT id, production_operation_id, reason_type, reason_ref, "
+                "started_at, resolved_at FROM production_wait_log "
+                "WHERE production_order_id = ? ORDER BY started_at",
+                (mo["id"],),
+            ).fetchall()]
+            mo_dict["operations"] = ops
+            mo_dict["waits"] = waits
+            production_orders.append(mo_dict)
+
+        # ---- Shipments ----
+        shipments = [dict(r) for r in conn.execute(
+            "SELECT s.id, s.status, s.planned_departure, s.planned_arrival, "
+            "s.dispatched_at, s.delivered_at "
+            "FROM sales_order_shipments sos "
+            "JOIN shipments s ON s.id = sos.shipment_id "
+            "WHERE sos.sales_order_id = ? ORDER BY s.planned_departure",
+            (sales_order_id,),
+        ).fetchall()]
+
+        # ---- Invoices ----
+        invoices = [dict(r) for r in conn.execute(
+            "SELECT id, status, created_at, invoice_date, issued_at, "
+            "due_date, paid_at, total "
+            "FROM invoices WHERE sales_order_id = ? ORDER BY created_at",
+            (sales_order_id,),
+        ).fetchall()]
+
+        return {
+            "sales_order_id": sales_order_id,
+            "sales_order": {
+                "id": so["id"],
+                "status": so["status"],
+                "created_at": so["created_at"],
+                "requested_delivery_date": so["requested_delivery_date"],
+            },
+            "quotes": quotes,
+            "production_orders": production_orders,
+            "shipments": shipments,
+            "invoices": invoices,
+        }
+
+
 sales_service = SimpleNamespace(
     create_order=create_order,
     search_orders=search_orders,
     get_order_details=get_order_details,
+    get_order_timeline=get_order_timeline,
     link_shipment=link_shipment,
     confirm_order=confirm_order,
     complete_order=complete_order,

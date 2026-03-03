@@ -28,6 +28,15 @@ def register(mcp):
             return _json({"error": "Not found"}, status_code=404)
         return _json(detail)
 
+    @mcp.custom_route("/api/sales-orders/{order_id}/timeline", methods=["GET", "OPTIONS"])
+    @cors_handler(["GET"])
+    async def api_sales_order_timeline(request):
+        order_id = request.path_params.get("order_id")
+        timeline = sales_service.get_order_timeline(order_id)
+        if not timeline:
+            return _json({"error": "Not found"}, status_code=404)
+        return _json(timeline)
+
     @mcp.custom_route("/api/quote-options", methods=["GET", "OPTIONS"])
     @cors_handler(["GET"])
     async def api_quote_options(request):

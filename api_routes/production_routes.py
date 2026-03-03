@@ -36,6 +36,15 @@ def register(mcp):
         except Exception as exc:
             return _json({"error": str(exc)}, status_code=404)
 
+    @mcp.custom_route("/api/production-orders/{production_id}/timeline", methods=["GET", "OPTIONS"])
+    @cors_handler(["GET"])
+    async def api_production_timeline(request):
+        production_id = request.path_params.get("production_id")
+        timeline = production_service.get_order_timeline(production_id)
+        if not timeline:
+            return _json({"error": "Not found"}, status_code=404)
+        return _json(timeline)
+
     @mcp.custom_route("/api/work-centers", methods=["GET", "OPTIONS"])
     @cors_handler(["GET"])
     async def api_work_centers(request):

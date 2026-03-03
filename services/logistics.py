@@ -85,7 +85,10 @@ def dispatch_shipment(shipment_id: str) -> Dict[str, Any]:
             (shipment_id,)
         ).fetchall()
         for line in lines:
-            inventory_service.deduct_stock(line["item_id"], line["qty"], conn=conn)
+            inventory_service.deduct_stock(
+                line["item_id"], line["qty"], conn=conn,
+                reference_type="shipment", reference_id=shipment_id,
+            )
 
         sim_time = simulation_service.get_current_time()
         conn.execute(

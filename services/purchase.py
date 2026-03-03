@@ -61,6 +61,13 @@ def receive(purchase_order_id: str, warehouse: str, location: str) -> Dict[str, 
         conn.execute("UPDATE purchase_orders SET status = 'received', received_at = ? WHERE id = ?", (sim_time, purchase_order_id,))
         stock_id = generate_id(conn, "STK", "stock")
         conn.execute("INSERT INTO stock (id, item_id, warehouse, location, on_hand) VALUES (?, ?, ?, ?, ?)", (stock_id, po["item_id"], warehouse, location, po["qty"]))
+        # Log stock movement for purchase receipt
+        movement_id = generate_id(conn, "MOV", "stock_movements")
+        conn.execute(
+            "INSERT INTO stock_movements (id, timestamp, item_id, movement_type, qty, stock_id, reference_type, reference_id) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (movement_id, sim_time, po["item_id"], "purchase_in", po["qty"], stock_id, "purchase_order", purchase_order_id),
+        )
         conn.commit()
         return {"purchase_order_id": purchase_order_id, "item_sku": po["item_sku"], "item_name": po["item_name"], "qty_received": po["qty"], "stock_id": stock_id, "warehouse": warehouse, "location": location, "message": f"Purchase order {purchase_order_id} received, {po['qty']} units added to stock"}
 

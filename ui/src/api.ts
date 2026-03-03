@@ -1,4 +1,4 @@
-import { Customer, Item, SalesOrder, SalesOrderDetail, Shipment, StockSummary, QuoteOption, ProductionOrder, Recipe, Supplier, PurchaseOrder, Email, EmailDetail, Invoice, InvoiceDetail, Quote, QuoteDetail, WorkCenter, WorkCenterDetail, ActivityLogEntry, DashboardData } from './types'
+import { Customer, Item, SalesOrder, SalesOrderDetail, Shipment, StockSummary, QuoteOption, ProductionOrder, Recipe, Supplier, PurchaseOrder, Email, EmailDetail, Invoice, InvoiceDetail, Quote, QuoteDetail, WorkCenter, WorkCenterDetail, ActivityLogEntry, DashboardData, SalesOrderTimeline, ProductionOrderTimeline } from './types'
 
 const API_BASE = import.meta.env.VITE_API_BASE || '/api'
 
@@ -30,6 +30,7 @@ export const api = {
   stockDetail: (id: string) => fetchJson<import('./types').Stock>(`/stock/${encodeURIComponent(id)}`),
   salesOrders: () => fetchJson<{ sales_orders: SalesOrder[] }>(`/sales-orders?limit=50`),
   salesOrder: (id: string) => fetchJson<SalesOrderDetail>(`/sales-orders/${encodeURIComponent(id)}`),
+  salesOrderTimeline: (id: string) => fetchJson<SalesOrderTimeline>(`/sales-orders/${encodeURIComponent(id)}/timeline`),
   shipment: (id: string) => fetchJson<Shipment>(`/shipments/${encodeURIComponent(id)}`),
   shipments: () => fetchJson<{ shipments: Shipment[] }>(`/shipments`),
   productionOrders: (q?: { sales_order_id?: string }) => {
@@ -40,6 +41,7 @@ export const api = {
     return fetchJson<{ production_orders: ProductionOrder[] }>(`/production-orders?${query}`)
   },
   productionOrder: (id: string) => fetchJson<ProductionOrder>(`/production-orders/${encodeURIComponent(id)}`),
+  productionOrderTimeline: (id: string) => fetchJson<ProductionOrderTimeline>(`/production-orders/${encodeURIComponent(id)}/timeline`),
   workCenters: () => fetchJson<{ work_centers: WorkCenter[] }>(`/work-centers`),
   workCenterDetail: (id: string) => fetchJson<WorkCenterDetail>(`/work-centers/${encodeURIComponent(id)}`),
   quote: (sku: string, qty: number) => fetchJson<{ options: QuoteOption[] }>(`/quote-options?sku=${encodeURIComponent(sku)}&qty=${qty}`),

@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { Card } from '../components/Card'
 import { Badge } from '../components/Badge'
-import { ProductionOrder } from '../types'
+import { TimelineGantt } from '../components/TimelineGantt'
+import { ProductionOrder, ProductionOrderTimeline } from '../types'
 import { api } from '../api'
 import { useNavigation } from '../contexts/NavigationContext'
 import { Quantity } from '../utils/quantity.tsx'
@@ -27,15 +28,19 @@ type ProductionOrderDetailPageProps = {
 
 export function ProductionOrderDetailPage({ productionOrderId }: ProductionOrderDetailPageProps) {
     const [productionOrder, setProductionOrder] = useState<ProductionOrder | null>(null)
+    const [timeline, setTimeline] = useState<ProductionOrderTimeline | null>(null)
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
     const { listContext, setListContext, referrer, setReferrer, clearListContext } = useNavigation()
 
     useEffect(() => {
-        api
-            .productionOrder(productionOrderId)
-            .then((res) => {
+        Promise.all([
+            api.productionOrder(productionOrderId),
+            api.productionOrderTimeline(productionOrderId).catch(() => null),
+        ])
+            .then(([res, tl]) => {
                 setProductionOrder(res as ProductionOrder)
+                setTimeline(tl)
                 setLoading(false)
             })
             .catch((err) => {
@@ -245,6 +250,19 @@ export function ProductionOrderDetailPage({ productionOrderId }: ProductionOrder
                             )}
                         </div>
                     </div>
+
+                    {timeline && (
+                        <div className="mt-6">
+                            <div className="text-sm font-semibold text-slate-800 mb-3">Production Timeline</div>
+                            <TimelineGantt
+                                moTimeline={timeline}
+                                onNavigate={(page, id) => {
+                                    setReferrer({ page: 'production', id: productionOrderId, label: `Production Order ${productionOrder.id}` })
+                                    setHash(page, id)
+                                }}
+                            />
+                        </div>
+                    )}
 
                     {productionOrder.operations && productionOrder.operations.length > 0 && (
                         <div className="mt-6">

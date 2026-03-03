@@ -371,12 +371,22 @@ def populate() -> dict:
         logger.info("Inserted %d work centers", len(config.WORK_CENTER_CAPACITY))
 
         # ---- Initial raw material stock ----
+        scenario_start = "2025-08-01 08:00:00"
         for idx, (item_id, wh, loc, qty) in enumerate(INITIAL_STOCK, start=1):
+            stock_id = f"STK-{idx:04d}"
             conn.execute(
                 "INSERT INTO stock (id, item_id, warehouse, location, on_hand) VALUES (?,?,?,?,?)",
-                (f"STK-{idx:04d}", item_id, wh, loc, qty),
+                (stock_id, item_id, wh, loc, qty),
             )
-        logger.info("Inserted %d initial stock rows", len(INITIAL_STOCK))
+            # Log an adjustment movement for initial stock
+            mov_id = f"MOV-{idx:04d}"
+            conn.execute(
+                "INSERT INTO stock_movements "
+                "(id, timestamp, item_id, movement_type, qty, stock_id, reference_type, reference_id, notes) "
+                "VALUES (?, ?, ?, 'adjustment', ?, ?, 'backfill', NULL, 'Initial stock from scenario setup')",
+                (mov_id, scenario_start, item_id, qty, stock_id),
+            )
+        logger.info("Inserted %d initial stock rows (with movements)", len(INITIAL_STOCK))
 
         conn.commit()
 

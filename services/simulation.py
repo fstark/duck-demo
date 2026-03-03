@@ -113,6 +113,13 @@ def advance_time(
                     "VALUES (?, ?, ?, ?, ?)",
                     (stock_id, mo["item_id"], config.LOC_FINISHED_GOODS, config.LOC_PRODUCTION_OUT, mo["output_qty"]),
                 )
+                # Log stock movement for production output
+                mov_id = generate_id(conn, "MOV", "stock_movements")
+                conn.execute(
+                    "INSERT INTO stock_movements (id, timestamp, item_id, movement_type, qty, stock_id, reference_type, reference_id) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                    (mov_id, new_time, mo["item_id"], "production_in", mo["output_qty"], stock_id, "production_order", mo["id"]),
+                )
                 completed_mos.append(mo["id"])
 
         # Phase B: safety-net — force-complete MOs past eta_finish that
@@ -137,6 +144,13 @@ def advance_time(
                 "INSERT INTO stock (id, item_id, warehouse, location, on_hand) "
                 "VALUES (?, ?, ?, ?, ?)",
                 (stock_id, mo["item_id"], config.LOC_FINISHED_GOODS, config.LOC_PRODUCTION_OUT, mo["output_qty"]),
+            )
+            # Log stock movement for production output
+            mov_id = generate_id(conn, "MOV", "stock_movements")
+            conn.execute(
+                "INSERT INTO stock_movements (id, timestamp, item_id, movement_type, qty, stock_id, reference_type, reference_id) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (mov_id, new_time, mo["item_id"], "production_in", mo["output_qty"], stock_id, "production_order", mo["id"]),
             )
             completed_mos.append(mo["id"])
         if completed_mos:
