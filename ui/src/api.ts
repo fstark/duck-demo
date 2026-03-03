@@ -110,5 +110,11 @@ export const api = {
     const q = p.toString()
     return fetchJson<{ date: string; category: string; action: string; count: number }[]>(`/activity-log/summary${q ? `?${q}` : ''}`)
   },
-  dashboard: () => fetchJson<DashboardData>(`/dashboard`),
+  dashboard: (params?: { since?: string; until?: string }) => {
+    const p = new URLSearchParams()
+    if (params?.since) p.set('since', params.since)
+    if (params?.until) p.set('until', params.until)
+    const q = p.toString()
+    return fetchJson<DashboardData>(`/dashboard${q ? `?${q}` : ''}`)
+  },
 }

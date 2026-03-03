@@ -3,87 +3,25 @@
 Things that needs to be done -- but are not specific issues (ISSUES.md)
 
 
-## Factory Observability — Activity Log, Daily Simulation, Dashboard
+## Factory Observability — Activity Log, Daily Simulation, Dashboard  ✅
 
-**Goal:** Make it possible to "feel" what's happening in the factory. Today the
-scenario runs in opaque weekly chunks, nothing is persisted about *what happened
-when*, and the UI has no timeline or dashboard.
+**Completed.** All five phases shipped:
 
-Three pillars:
+1. **Phase 1 — Daily Simulation Loop:** S01 rewritten from weekly batches to a
+   61-day daily loop with intra-day timestamps (08:00 → 18:00).
+2. **Phase 2 — `activity_log` table & service:** Schema, `services/activity.py`,
+   injected into scenarios (`helpers.py`, `s01_steady_state.py`), side-effects
+   (`simulation.py`), and MCP tool decorator (`_common.py`). ~4 000 log rows
+   per run.
+3. **Phase 3 — API endpoints:** `api_routes/activity_routes.py` (paginated log
+   + daily summary) and `api_routes/dashboard_routes.py` (KPIs, status
+   distributions, daily volumes, recent activity).
+4. **Phase 4 — Frontend:** `ActivityLogPage` (filterable, paginated),
+   `DashboardPage` (KPI cards, status bars, SVG volume chart, activity feed),
+   home-page KPI banner, "Monitoring" nav group.
+5. **Phase 5 — MCP tool:** `mcp_tools/activity_tools.py` with
+   `activity_get_log` for agent queries.
 
-1. **Daily simulation granularity** — rewrite S01 to step day-by-day so events
-   spread realistically over time.
-2. **`activity_log` table** — a persistent event stream recording every
-   significant business action, written by scenarios, side-effects, and MCP
-   tool calls.
-3. **UI: Dashboard + Activity Feed** — surface the data as a dashboard on the
-   Home page and a dedicated Activity Log page.
-
----
-
-### Phase 1 — Daily Simulation Loop (rewrite S01)
-
-The current S01 processes in weekly batches: creates a whole week of orders in
-one go, then jumps 4 days, then 3 days. This means all orders in a week share
-the same timestamp, production decisions are weekly, and restocking only happens
-once a week. That's unrealistic.
-
-**Target model — a daily heartbeat:**
-
-```
-for each sim day:
-    1. Morning: receive due POs (materials arriving)
-    2. Morning: promote waiting→ready MOs (side-effect of new stock)
-    3. Morning: start any ready MOs immediately (production line is free → go)
-    4. Mid-day: create today's new sales orders (randomized per day)
-    5. Mid-day: trigger production for new SOs
-    6. Afternoon: ship orders whose FG stock is available
-    7. Afternoon: restock check — create POs for low raw materials
-    8. End of day: invoice delivered/shipped orders, record payments
-    9. End of day: advance_and_settle(days=1) — completes MOs, delivers
-       shipments, expires quotes, marks overdue invoices
-```
-
-Each step happens at its own sim-time within the day (8:00, 9:00, 12:00, 14:00,
-16:00, 17:00) so timestamps on entities look realistic.
-
-**Key behaviour changes:**
-
-- [ ] Orders are created day-by-day (2–4 per day) with daily timestamps, not
-  batched for the whole week.
-- [ ] `_start_ready_mos()` runs every morning — free capacity picks up work
-  ASAP, not once a week.
-- [ ] `restock_materials()` runs every afternoon — POs are placed daily when
-  stock hits reorder point, not weekly.
-- [ ] `_receive_due_pos()` runs every morning — materials arrive on their
-  actual due date.
-- [ ] `_ship_ready_orders()` runs every afternoon — orders ship the same day
-  stock becomes available.
-- [ ] `_invoice_shipped_orders()` runs daily — invoicing happens promptly.
-- [ ] `advance_and_settle(days=1)` is called once per day (63 calls over 9
-  weeks, vs 19 today). Side-effects fire daily.
-- [ ] Keep the weekly variation in orders-per-day via the existing `weeks`
-  config, but unroll into days.
-
-**Files to change:**
-
-- `scenarios/s01_steady_state.py` — rewrite `run()` with daily loop.
-- `scenarios/helpers.py` — possibly add a `set_day_time(hour)` helper to set
-  intra-day timestamps.
-- Possibly `services/simulation.py` — ensure `advance_time(hours=N)` works
-  cleanly for intra-day steps.
-
----
-
-### Phase 2 — `activity_log` Table & Service
-
-#### 2a. Schema
-
-- [ ] Add to `schema.sql`:
-
-```sql
-CREATE TABLE IF NOT EXISTS activity_log (
-    id          TEXT PRIMARY KEY,
     timestamp   TEXT NOT NULL,           -- sim time (ISO)
     actor       TEXT NOT NULL,           -- 'scenario', 'system', 'mcp:sales', …
     category    TEXT NOT NULL,           -- 'sales', 'production', 'logistics', 'purchasing', 'billing'

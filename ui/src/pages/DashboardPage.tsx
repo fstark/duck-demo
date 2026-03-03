@@ -98,7 +98,7 @@ function StatusBar({ items, label }: { items: { status: string; count: number }[
 /** Simple inline SVG bar chart for daily volumes. */
 function DailyVolumeChart({ data }: { data: DashboardData['daily_volumes'] }) {
     if (data.length === 0) return <div className="text-slate-400 text-sm py-4 text-center">No volume data</div>
-    const maxVal = Math.max(...data.map((d) => Math.max(d.created, d.shipped, d.invoiced)), 1)
+    const maxVal = Math.max(...data.map((d) => Math.max(d.orders, d.shipped, d.invoiced)), 1)
     const barW = Math.max(4, Math.min(12, Math.floor(600 / data.length)))
     const chartW = data.length * (barW * 3 + 4) + 40
     const chartH = 120
@@ -111,13 +111,13 @@ function DailyVolumeChart({ data }: { data: DashboardData['daily_volumes'] }) {
                 <text x={4} y={chartH + 2} className="fill-slate-400" fontSize={10}>0</text>
                 {data.map((d, i) => {
                     const x0 = 40 + i * (barW * 3 + 4)
-                    const hC = (d.created / maxVal) * chartH
+                    const hC = (d.orders / maxVal) * chartH
                     const hS = (d.shipped / maxVal) * chartH
                     const hI = (d.invoiced / maxVal) * chartH
                     return (
                         <g key={d.date}>
                             <rect x={x0} y={chartH - hC} width={barW} height={hC} fill="#3b82f6" rx={1}>
-                                <title>{d.date} created: {d.created}</title>
+                                <title>{d.date} orders: {d.orders}</title>
                             </rect>
                             <rect x={x0 + barW} y={chartH - hS} width={barW} height={hS} fill="#22c55e" rx={1}>
                                 <title>{d.date} shipped: {d.shipped}</title>
@@ -135,7 +135,7 @@ function DailyVolumeChart({ data }: { data: DashboardData['daily_volumes'] }) {
                 {/* Legend */}
                 <g transform={`translate(${chartW - 200}, ${chartH + 18})`}>
                     <rect x={0} y={0} width={8} height={8} fill="#3b82f6" rx={1} />
-                    <text x={10} y={8} className="fill-slate-500" fontSize={9}>Created</text>
+                    <text x={10} y={8} className="fill-slate-500" fontSize={9}>Orders</text>
                     <rect x={55} y={0} width={8} height={8} fill="#22c55e" rx={1} />
                     <text x={65} y={8} className="fill-slate-500" fontSize={9}>Shipped</text>
                     <rect x={110} y={0} width={8} height={8} fill="#f59e0b" rx={1} />
@@ -146,17 +146,68 @@ function DailyVolumeChart({ data }: { data: DashboardData['daily_volumes'] }) {
     )
 }
 
+const RANGE_PRESETS = [
+    { key: 'day', label: 'Day', days: 1 },
+    { key: 'week', label: 'Week', days: 7 },
+    { key: 'month', label: 'Month', days: 30 },
+    { key: 'quarter', label: 'Quarter', days: 90 },
+    { key: 'year', label: 'Year', days: 365 },
+] as const
+
+type RangeKey = typeof RANGE_PRESETS[number]['key']
+
+function computeDateRange(rangeKey: RangeKey, anchorDate: string): { since: string; until: string } {
+    const anchor = new Date(anchorDate + 'T00:00:00')
+    const until = anchorDate
+    const sinceDate = new Date(anchor)
+    const days = RANGE_PRESETS.find((r) => r.key === rangeKey)!.days
+    sinceDate.setDate(sinceDate.getDate() - days + 1)
+    return { since: sinceDate.toISOString().slice(0, 10), until }
+}
+
+function RangeSelector({ value, onChange }: { value: RangeKey; onChange: (v: RangeKey) => void }) {
+    return (
+        <div className="inline-flex rounded-lg bg-slate-100 p-0.5 gap-0.5">
+            {RANGE_PRESETS.map((r) => (
+                <button
+                    key={r.key}
+                    onClick={() => onChange(r.key)}
+                    className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${value === r.key
+                            ? 'bg-blue-600 text-white shadow-sm'
+                            : 'text-slate-600 hover:bg-slate-200'
+                        }`}
+                >
+                    {r.label}
+                </button>
+            ))}
+        </div>
+    )
+}
+
 export function DashboardPage() {
     const [data, setData] = useState<DashboardData | null>(null)
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
+    const [range, setRange] = useState<RangeKey>('week')
+    const [simTime, setSimTime] = useState<string | null>(null)
 
+    // On mount, fetch simulation time (the authoritative "now")
     useEffect(() => {
-        api.dashboard()
+        api.simulationTime()
+            .then((res) => setSimTime(res.current_time.slice(0, 10)))
+            .catch(() => setSimTime(new Date().toISOString().slice(0, 10)))
+    }, [])
+
+    // When range or simTime changes, fetch dashboard with time filter
+    useEffect(() => {
+        if (!simTime) return
+        setLoading(true)
+        const { since, until } = computeDateRange(range, simTime)
+        api.dashboard({ since, until })
             .then((d) => { setData(d); setError(null) })
             .catch((err) => setError(String(err)))
             .finally(() => setLoading(false))
-    }, [])
+    }, [range, simTime])
 
     if (loading) return <div className="py-12 text-center text-sm text-slate-400">Loading dashboard…</div>
     if (error) return <div className="rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>
@@ -164,7 +215,10 @@ export function DashboardPage() {
 
     return (
         <section className="space-y-6">
-            <h1 className="text-xl font-semibold text-slate-800">Dashboard</h1>
+            <div className="flex items-center justify-between">
+                <h1 className="text-xl font-semibold text-slate-800">Dashboard</h1>
+                <RangeSelector value={range} onChange={setRange} />
+            </div>
 
             {/* KPI row */}
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
@@ -172,7 +226,7 @@ export function DashboardPage() {
                 <KpiCard label="In-Progress MOs" value={data.kpis.in_progress_mos} />
                 <KpiCard label="Pending Shipments" value={data.kpis.pending_shipments} />
                 <KpiCard label="Overdue Invoices" value={data.kpis.overdue_invoices} accent={data.kpis.overdue_invoices > 0 ? 'red' : undefined} />
-                <KpiCard label="Total Revenue" value={formatCurrency(data.kpis.total_revenue)} />
+                <KpiCard label={`Revenue (${RANGE_PRESETS.find((r) => r.key === range)!.label})`} value={formatCurrency(data.kpis.total_revenue)} />
             </div>
 
             {/* Status distributions */}
@@ -187,7 +241,7 @@ export function DashboardPage() {
 
             {/* Daily volume chart */}
             <div className="card p-4">
-                <div className="section-title">Daily Volume</div>
+                <div className="section-title">Daily Volume — Last {RANGE_PRESETS.find((r) => r.key === range)!.days} {range === 'day' ? 'day' : 'days'}</div>
                 <DailyVolumeChart data={data.daily_volumes} />
             </div>
 

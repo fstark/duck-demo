@@ -419,6 +419,6 @@ export type DashboardData = {
     total_revenue: number
   }
   recent_activity: ActivityLogEntry[]
-  daily_volumes: { date: string; created: number; shipped: number; invoiced: number }[]
+  daily_volumes: { date: string; orders: number; shipped: number; invoiced: number }[]
 }
 
