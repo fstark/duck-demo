@@ -31,7 +31,7 @@ type LayoutNode = SupplyChainNode & { x: number; y: number; col: number; row: nu
 // Layout helpers
 // ---------------------------------------------------------------------------
 
-function layoutNodes(nodes: SupplyChainNode[]): LayoutNode[] {
+function layoutNodes(nodes: SupplyChainNode[], edges: { source: string; target: string }[]): LayoutNode[] {
     // Group by column
     const cols: Record<number, SupplyChainNode[]> = { 0: [], 1: [], 2: [], 3: [] }
     for (const n of nodes) {
@@ -39,11 +39,82 @@ function layoutNodes(nodes: SupplyChainNode[]): LayoutNode[] {
         cols[col].push(n)
     }
 
-    // Sort within each column by timestamp
+    // Sort within each column by timestamp (primary), then by ID (stable secondary)
     for (const c of Object.values(cols)) {
-        c.sort((a, b) => (a.timestamp || '').localeCompare(b.timestamp || ''))
+        c.sort((a, b) => {
+            const tCmp = (a.timestamp || '').localeCompare(b.timestamp || '')
+            if (tCmp !== 0) return tCmp
+            return a.id.localeCompare(b.id)
+        })
     }
 
+    // First pass: assign preliminary positions
+    const nodeRowMap = new Map<string, number>()
+    for (const [colStr, colNodes] of Object.entries(cols)) {
+        colNodes.forEach((n, idx) => nodeRowMap.set(n.id, idx))
+    }
+
+    // Build adjacency map for connections
+    const connectionsMap = new Map<string, string[]>()
+    for (const e of edges) {
+        if (!connectionsMap.has(e.source)) connectionsMap.set(e.source, [])
+        if (!connectionsMap.has(e.target)) connectionsMap.set(e.target, [])
+        connectionsMap.get(e.source)!.push(e.target)
+        connectionsMap.get(e.target)!.push(e.source)
+    }
+
+    // Second pass: within each timestamp group, reorder by topological position
+    // This reduces edge crossings by keeping connected nodes vertically aligned
+    for (const [colStr, colNodes] of Object.entries(cols)) {
+        // Group nodes by timestamp
+        const timestampGroups: SupplyChainNode[][] = []
+        let currentGroup: SupplyChainNode[] = []
+        let currentTimestamp = ''
+
+        for (const n of colNodes) {
+            const ts = n.timestamp || ''
+            if (ts !== currentTimestamp) {
+                if (currentGroup.length > 0) timestampGroups.push(currentGroup)
+                currentGroup = [n]
+                currentTimestamp = ts
+            } else {
+                currentGroup.push(n)
+            }
+        }
+        if (currentGroup.length > 0) timestampGroups.push(currentGroup)
+
+        // For each group with multiple nodes, compute connection-based position scores
+        const sortedNodes: SupplyChainNode[] = []
+        for (const group of timestampGroups) {
+            if (group.length === 1) {
+                sortedNodes.push(group[0])
+            } else {
+                // Compute average row of connected nodes for each node in this group
+                const scored = group.map(n => {
+                    const connections = connectionsMap.get(n.id) || []
+                    const connectedRows = connections
+                        .map(cid => nodeRowMap.get(cid))
+                        .filter((r): r is number => r !== undefined)
+                    const avgRow = connectedRows.length > 0
+                        ? connectedRows.reduce((sum, r) => sum + r, 0) / connectedRows.length
+                        : nodeRowMap.get(n.id) || 0
+                    return { node: n, score: avgRow }
+                })
+                // Sort by score, then by ID for stability
+                scored.sort((a, b) => {
+                    const sCmp = a.score - b.score
+                    if (sCmp !== 0) return sCmp
+                    return a.node.id.localeCompare(b.node.id)
+                })
+                sortedNodes.push(...scored.map(s => s.node))
+            }
+        }
+
+        // Update the column with reordered nodes
+        cols[Number(colStr)] = sortedNodes
+    }
+
+    // Final pass: assign positions
     const result: LayoutNode[] = []
     for (const [colStr, colNodes] of Object.entries(cols)) {
         const col = Number(colStr)
@@ -91,7 +162,7 @@ export function SupplyChainFlow({ trace, onNavigate }: SupplyChainFlowProps) {
     const [hoveredNode, setHoveredNode] = useState<string | null>(null)
     const [hoveredEdge, setHoveredEdge] = useState<string | null>(null)
 
-    const laidOut = useMemo(() => layoutNodes(trace.nodes), [trace.nodes])
+    const laidOut = useMemo(() => layoutNodes(trace.nodes, trace.edges), [trace.nodes, trace.edges])
     const nodeMap = useMemo(() => {
         const m = new Map<string, LayoutNode>()
         for (const n of laidOut) m.set(n.id, n)
