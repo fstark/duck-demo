@@ -29,18 +29,11 @@ from scenarios.helpers import (
     sim_date,
     trigger_production_for_orders,
 )
-from utils import ship_to_dict
 from services import (
-    activity_service,
-    inventory_service,
-    invoice_service,
-    logistics_service,
-    production_service,
-    purchase_service,
+    fulfillment_service,
+    mrp_service,
     quote_service,
-    sales_service,
 )
-import config
 from services._base import db_conn
 
 logger = logging.getLogger(__name__)
@@ -123,249 +116,6 @@ def _create_day_orders(
     return so_ids
 
 
-def _start_ready_mos() -> int:
-    """Find ready production orders and start them. Returns count started."""
-    with db_conn() as conn:
-        ready = conn.execute(
-            "SELECT id FROM production_orders WHERE status = 'ready'"
-        ).fetchall()
-    started = 0
-    for mo in ready:
-        result = production_service.start_order(mo["id"])
-        if result["status"] == "in_progress":
-            started += 1
-            activity_service.log_activity("scenario", "production", "production_order.started", "production_order", mo["id"])
-    return started
-
-
-def _receive_due_pos() -> int:
-    """Receive POs whose expected_delivery has passed. Returns count received."""
-    with db_conn() as conn:
-        due = conn.execute(
-            "SELECT id FROM purchase_orders "
-            "WHERE status = 'ordered' AND expected_delivery <= ?",
-            (sim_date(),),
-        ).fetchall()
-    received = 0
-    for po in due:
-        try:
-            purchase_service.receive(po["id"], warehouse=config.WAREHOUSE_DEFAULT, location=config.LOC_RAW_MATERIAL_RECV)
-            received += 1
-            activity_service.log_activity("scenario", "purchasing", "purchase_order.received", "purchase_order", po["id"])
-        except Exception as e:
-            logger.debug("PO %s receive skipped: %s", po["id"], e)
-    return received
-
-
-def _replan_unfulfilled_orders() -> int:
-    """MRP net requirements: create MOs for the global shortfall across unshipped SOs.
-
-    Textbook MRP regeneration per finished-good item:
-        net_req = gross_demand − on_hand − scheduled_receipts (open MOs)
-    Creates production orders for any positive net requirement, linked to the
-    oldest waiting sales order for traceability.
-
-    Returns count of MOs created.
-    """
-    with db_conn() as conn:
-        # All confirmed SOs that have no dispatched / delivered shipment
-        unshipped = conn.execute(
-            "SELECT so.id FROM sales_orders so "
-            "WHERE so.status = 'confirmed' "
-            "AND NOT EXISTS ("
-            "  SELECT 1 FROM sales_order_shipments sos "
-            "  JOIN shipments s ON s.id = sos.shipment_id "
-            "  WHERE sos.sales_order_id = so.id "
-            "  AND s.status IN ('in_transit','delivered')"
-            ")",
-        ).fetchall()
-        unshipped_ids = [r["id"] for r in unshipped]
-
-        if not unshipped_ids:
-            return 0
-
-        # Aggregate demand per item across all un-shipped SOs
-        placeholders = ",".join("?" * len(unshipped_ids))
-        demand_rows = conn.execute(
-            f"SELECT sol.item_id, SUM(sol.qty) as total_qty, "
-            f"MIN(sol.sales_order_id) as first_so_id "
-            f"FROM sales_order_lines sol "
-            f"WHERE sol.sales_order_id IN ({placeholders}) "
-            f"GROUP BY sol.item_id",
-            unshipped_ids,
-        ).fetchall()
-
-        mo_count = 0
-        for row in demand_rows:
-            item_id = row["item_id"]
-            gross = int(row["total_qty"])
-            so_id = row["first_so_id"]
-
-            on_hand = conn.execute(
-                "SELECT COALESCE(SUM(on_hand), 0) FROM stock WHERE item_id = ?",
-                (item_id,),
-            ).fetchone()[0]
-
-            # Scheduled receipts: output from MOs still in the pipeline
-            scheduled = conn.execute(
-                "SELECT COALESCE(SUM(r.output_qty), 0) "
-                "FROM production_orders po "
-                "JOIN recipes r ON po.recipe_id = r.id "
-                "WHERE po.status IN ('ready','waiting','in_progress') "
-                "AND r.output_item_id = ?",
-                (item_id,),
-            ).fetchone()[0]
-
-            net_req = gross - on_hand - scheduled
-            if net_req <= 0:
-                continue
-
-            # Find recipe and batch size for this item
-            recipe_row = conn.execute(
-                "SELECT id, output_qty FROM recipes "
-                "WHERE output_item_id = ? LIMIT 1",
-                (item_id,),
-            ).fetchone()
-            if not recipe_row:
-                continue
-
-            batch_size = int(recipe_row["output_qty"])
-            batches = max(1, -(-net_req // batch_size))  # ceiling division
-
-            for _ in range(batches):
-                mo = production_service.create_order(
-                    recipe_id=recipe_row["id"],
-                    sales_order_id=so_id,
-                    notes=f"MRP re-plan for {so_id}",
-                )
-                mo_count += 1
-                activity_service.log_activity(
-                    "scenario", "production",
-                    "production_order.created",
-                    "production_order", mo["production_order_id"],
-                    {"sales_order_id": so_id,
-                     "recipe_id": recipe_row["id"],
-                     "replan": True},
-                )
-                if mo["status"] == "ready":
-                    production_service.start_order(mo["production_order_id"])
-                    activity_service.log_activity(
-                        "scenario", "production",
-                        "production_order.started",
-                        "production_order", mo["production_order_id"],
-                    )
-
-    if mo_count:
-        logger.info("  MRP re-plan: created %d MOs for unshipped demand", mo_count)
-    return mo_count
-
-
-def _ship_ready_orders(so_ids: List[str]) -> List[str]:
-    """Ship SOs whose items are in stock. Returns shipment IDs."""
-    ship_ids: List[str] = []
-    for so_id in so_ids:
-        with db_conn() as conn:
-            so = conn.execute(
-                "SELECT * FROM sales_orders WHERE id = ?", (so_id,)
-            ).fetchone()
-            if not so or so["status"] == "completed":
-                continue
-            existing = conn.execute(
-                "SELECT 1 FROM sales_order_shipments WHERE sales_order_id = ?",
-                (so_id,),
-            ).fetchone()
-            if existing:
-                continue
-            lines = conn.execute(
-                "SELECT i.sku, sol.qty FROM sales_order_lines sol "
-                "JOIN items i ON sol.item_id = i.id "
-                "WHERE sol.sales_order_id = ?", (so_id,)
-            ).fetchall()
-
-        # Use raw on_hand stock (not check_availability which includes
-        # reservations from ALL open SOs, creating a death-spiral where
-        # growing demand always exceeds produced supply).
-        can_ship = True
-        for ln in lines:
-            with db_conn() as c2:
-                on_hand = c2.execute(
-                    "SELECT COALESCE(SUM(s.on_hand), 0) "
-                    "FROM stock s JOIN items i ON s.item_id = i.id "
-                    "WHERE i.sku = ?", (ln["sku"],)
-                ).fetchone()[0]
-            if on_hand < int(ln["qty"]):
-                can_ship = False
-                break
-        if not can_ship:
-            continue
-
-        ship_to = ship_to_dict(so) or {
-            "line1": "1 Rue du Commerce",
-            "city": "Paris",
-            "postal_code": "75001",
-            "country": "FR",
-        }
-        pkgs = [{"contents": [{"sku": l["sku"], "qty": int(l["qty"])} for l in lines]}]
-        try:
-            ship = logistics_service.create_shipment(
-                ship_from={"warehouse": config.WAREHOUSE_DEFAULT},
-                ship_to=ship_to,
-                planned_departure=sim_date(),
-                planned_arrival=future_date(random.randint(2, 4)),
-                packages=pkgs,
-                reference={"type": "sales_order", "id": so_id},
-            )
-            logistics_service.dispatch_shipment(ship["shipment_id"])
-            ship_ids.append(ship["shipment_id"])
-            activity_service.log_activity("scenario", "logistics", "shipment.dispatched", "shipment", ship["shipment_id"], {"sales_order_id": so_id})
-        except Exception as e:
-            logger.warning("Ship failed for %s: %s", so_id, e)
-    return ship_ids
-
-
-def _invoice_shipped_orders(so_ids: List[str], pay_pct: float = 0.75,
-                            completed_set: set | None = None) -> int:
-    """Invoice SOs that have dispatched/delivered shipments. Returns count."""
-    count = 0
-    for so_id in so_ids:
-        with db_conn() as conn:
-            already = conn.execute(
-                "SELECT 1 FROM invoices WHERE sales_order_id = ?", (so_id,)
-            ).fetchone()
-            if already:
-                continue
-            has_ship = conn.execute(
-                "SELECT 1 FROM sales_order_shipments sos "
-                "JOIN shipments s ON s.id = sos.shipment_id "
-                "WHERE sos.sales_order_id = ? "
-                "AND s.status IN ('in_transit','delivered')",
-                (so_id,),
-            ).fetchone()
-        if not has_ship:
-            continue
-        try:
-            inv = invoice_service.create_invoice(so_id)
-            invoice_service.issue_invoice(inv["invoice_id"])
-            count += 1
-            activity_service.log_activity("scenario", "billing", "invoice.issued", "invoice", inv["invoice_id"], {"sales_order_id": so_id, "total": inv["total"]})
-            if random.random() < pay_pct:
-                invoice_service.record_payment(
-                    invoice_id=inv["invoice_id"],
-                    amount=inv["total"],
-                    payment_method=random.choice([
-                        "bank_transfer", "bank_transfer", "credit_card",
-                    ]),
-                    reference=f"VIR-{so_id}",
-                )
-                activity_service.log_activity("scenario", "billing", "payment.recorded", "invoice", inv["invoice_id"], {"amount": inv["total"]})
-            sales_service.complete_order(so_id)
-            activity_service.log_activity("scenario", "sales", "sales_order.completed", "sales_order", so_id)
-            if completed_set is not None:
-                completed_set.add(so_id)
-        except Exception as e:
-            logger.warning("Invoice/pay failed for %s: %s", so_id, e)
-    return count
-
 
 def _log_daily_status(day_index: int) -> None:
     """Log a snapshot of entity status counts for the current sim day."""
@@ -446,14 +196,14 @@ def run(ctx: Dict[str, Any]) -> Dict[str, Any]:
             set_day_time(8)
 
             # 1. Receive POs that have arrived
-            n_rcv = _receive_due_pos()
+            n_rcv = fulfillment_service.receive_due_pos(sim_date())
             wk_received += n_rcv
 
             # 2. Start any MOs that are ready (promoted overnight or new stock)
-            started = _start_ready_mos()
+            started = fulfillment_service.start_ready_mos()
 
             # 2b. MRP re-plan — create MOs for unshipped demand with net shortfall
-            n_replan = _replan_unfulfilled_orders()
+            n_replan = mrp_service.replan_unfulfilled_orders()
             wk_replan += n_replan
             wk_mos += n_replan
 
@@ -483,7 +233,9 @@ def run(ctx: Dict[str, Any]) -> Dict[str, Any]:
 
             # 5. Ship orders with available FG stock
             pending_ship = [sid for sid in all_so_ids if sid not in _completed_so_ids]
-            ship_ids = _ship_ready_orders(pending_ship)
+            ship_ids = fulfillment_service.ship_ready_orders(
+                pending_ship, sim_date_fn=sim_date, future_date_fn=future_date,
+            )
             wk_shipped += len(ship_ids)
 
             # 6. Restock raw materials (daily check)
@@ -499,7 +251,9 @@ def run(ctx: Dict[str, Any]) -> Dict[str, Any]:
 
             # 7. Invoice shipped orders
             pending_inv = [sid for sid in all_so_ids if sid not in _completed_so_ids]
-            inv_n = _invoice_shipped_orders(pending_inv, completed_set=_completed_so_ids)
+            inv_n = fulfillment_service.invoice_shipped_orders(
+                pending_inv, completed_set=_completed_so_ids,
+            )
             wk_invoiced += inv_n
 
             # ----- End of day — advance clock by 1 day -----
