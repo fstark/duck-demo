@@ -288,7 +288,7 @@ export function ShipmentDetailPage({ shipmentId }: ShipmentDetailPageProps) {
                 )}
                 {supplyChainTrace && supplyChainTrace.nodes.length > 0 && (
                     <Card title="Supply Chain Trace">
-                        <SupplyChainFlow 
+                        <SupplyChainFlow
                             trace={supplyChainTrace}
                             onNavigate={(page, id) => {
                                 setReferrer({ page: 'shipments', id: shipmentId, label: `Shipment ${shipment.id}` })
