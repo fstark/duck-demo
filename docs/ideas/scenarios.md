@@ -66,7 +66,7 @@ scenarios/
   s03_material_shortage.py# ✅ Implemented — PVC supply disruption Nov 2025
   s04_geo_expansion.py    # ✅ Implemented — Germany expansion Dec 2025
   s05_price_revision.py   # ✅ Implemented — Price revision Jan 2026
-  s06_new_year_recovery.py# 🔲 Not yet implemented
+  s06_new_year_recovery.py# ✅ Implemented — New Year recovery Jan–Feb 2026
 ```
 
 **`engine.py`** — Deletes and recreates the DB from `schema.sql` (no seed_demo),
@@ -326,15 +326,37 @@ emails about the increase add to the narrative.
 +57 invoices, +61 quotes (16 new-price + rest from SO flow), +58 shipments,
 +16 emails (6 announcements + 10 complaints), +46 payments.
 
-### S06 — New Year Recovery
+### S06 — New Year Recovery  ✅ Implemented
 
-| | |
-|---|---|
-| **Period** | Jan – Feb 2026 (sim clock: 2026-01-16 → 2026-02-28) |
-| **Story** | Operations normalize.  Material supply fully restored.  Production backlog clears.  Overdue invoices get paid.  System reaches a healthy current state suitable for live demo. |
-| **Key actions** | • Normal order volume resumes (~2–3/day)<br>• All `waiting` MOs get unblocked (materials arrive)<br>• Overdue invoices from previous months get paid<br>• Final settle: advance to end of Feb, let side-effects clear everything<br>• Database in clean, demo-ready state |
-| **Expected additions** | ~60–80 SOs, backlog clearance, payment catch-up |
-| **Helpers to use** | `advance_and_settle()`, `create_demand_burst()` |
+**Period:** 2026-01-16 → 2026-02-28 (44 days), sim clock ends at ~2026-03-03.
+
+**Story:** Operations normalize after the S05 price shock and prior disruptions.
+Material supply fully restored.  Production backlog clears.  Overdue invoices
+get paid.  Demand recovers to baseline levels.  The database ends in a clean,
+demo-ready state suitable for live demo.
+
+**Design:**
+
+- Phase 0: Accept ~70% of remaining `sent` quotes → confirmed SOs (volume
+  recovery signal); reject ~30%.
+- Phase 1: Overdue invoice payment catch-up — pay ~85% of overdue invoices
+  and ~60% of old issued invoices (>30 days).  Models delayed customers
+  finally settling up.
+- Phase 2: 44-day daily loop with normalized volumes:
+  - FR weekly: W1 (2,3), W2 (2,4), W3 (2,4), W4 (2,4), W5 (2,3), W6 (2,3).
+  - DE weekly: W1 (1,2), W2 (1,2), W3 (1,3), W4 (1,3), W5 (1,2), W6 (1,2).
+  - SKU pool: Core (1×) only for FR; Core (1×) + German (2×) for DE.
+  - No seasonal weighting — Christmas is over.
+  - `pay_pct=0.75` in daily invoicing (good payment behaviour).
+- Phase 3: Backlog clearance sweep — receive remaining POs, start MOs,
+  advance 3 days with settle, ship remaining confirmed SOs, invoice + pay
+  remaining shipped SOs, final payment sweep (~80% of unpaid).
+- Phase 4: 8 post-loop emails — 4 thank-you/satisfaction from FR customers,
+  4 new-year planning inquiries from DE customers.
+- Phase 5: 10 standalone quotes (5 FR + 5 DE) at current prices with normal
+  30% rejection rate (price shock absorbed).
+- Phase 6: 2-day final settle.
+- Returns `s06_so_ids`, `final_sim_time` in ctx.
 
 ---
 
