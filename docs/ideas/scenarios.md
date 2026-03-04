@@ -65,7 +65,7 @@ scenarios/
   s02_halloween_spike.py  # ✅ Implemented — Halloween demand spike Oct 2025
   s03_material_shortage.py# ✅ Implemented — PVC supply disruption Nov 2025
   s04_geo_expansion.py    # ✅ Implemented — Germany expansion Dec 2025
-  s05_price_revision.py   # 🔲 Not yet implemented
+  s05_price_revision.py   # ✅ Implemented — Price revision Jan 2026
   s06_new_year_recovery.py# 🔲 Not yet implemented
 ```
 
@@ -277,15 +277,54 @@ Cross-border shipments visible in logistics data.  Supply chain runs normally
 **S04 delta:** +171 SOs (100 FR + 71 DE), +636 MOs, +208 POs, +123 invoices,
 +181 quotes, +124 shipments, +16 emails, +92 payments, +12 DE customers.
 
-### S05 — Price Revision
+### S05 — Price Revision  ✅ Implemented
 
-| | |
-|---|---|
-| **Period** | Jan 2026 (sim clock: 2026-01-01 → 2026-01-15) |
-| **Story** | 8% price increase across the board.  Old quotes still in pipeline at old prices (some get accepted — margin dip).  New quotes at new prices — some customers reject. Before/after visible in pricing data. |
-| **Key actions** | • UPDATE item prices +8% on all finished goods<br>• Accept a handful of pre-existing sent quotes (still at old prices)<br>• Create new quotes at new prices — ~30% rejection rate<br>• Some customers send complaint emails about prices<br>• Reduced order volume in the first week (price shock) |
-| **Expected additions** | ~30–50 SOs, ~20–30 new quotes, price-change visible in line-item data |
-| **Helpers to use** | `create_quote_only()`, `create_sales_order_only()`, `send_email()` |
+**Period:** 2026-01-01 → 2026-01-15 (15 days), sim clock ends at 2026-01-17.
+
+**Story:** Duck Inc raises prices by 8 % on all finished goods effective
+1 January 2026.  Pre-existing quotes still in the pipeline carry old (lower)
+prices — some get accepted, creating a visible margin dip.  New quotes at the
+new prices see a 40 % rejection rate (vs. normal 30 %).  Order volume drops in
+Week 1 ("price shock"), then partially recovers in Week 2.  Customer complaint
+emails about the increase add to the narrative.
+
+**Design:**
+
+- Phase 0: `UPDATE items SET unit_price = ROUND(unit_price * 1.08, 2)
+  WHERE type = 'finished_good'` — bulk 8 % increase on all 37 FGs.
+- Accept ~65 % of pre-existing `sent` quotes at their frozen old prices → SOs
+  at old prices (margin dip visible in analytics).  Remaining ~35 % rejected.
+- 6 price-announcement emails to random customers (FR + DE, mix of languages).
+- Two parallel order streams (FR + DE) with reduced weekly volumes:
+  - FR: W1 (1,2), W2 (2,3), W3 (2,3).
+  - DE: W1 (0,1), W2 (1,2), W3 (1,2).
+- SKU pool: core (1×) + Christmas (1×, de-weighted from S04's 3×) + German (2×
+  for DE stream).  Qty per line: (5,20) — lower than baseline.
+- Post-loop: 16 new quotes at new prices (8 FR + 8 DE) with 40 % rejection
+  rate — reasons cite the price increase explicitly.
+- 10 customer complaint emails about the increase (FR + DE, referencing recent
+  SOs where possible).
+- 1-day settle.
+- Returns `s05_so_ids`, `old_prices`, `price_increase_pct`,
+  `s05_sent_quotes` in ctx.
+
+**Actual volumes after s01 + s02 + s03 + s04 + s05 (latest run):**
+
+| Entity | Count | Status breakdown |
+|--------|-------|------------------|
+| Customers | 42 | 30 FR + 12 DE |
+| Sales Orders | 675 | 550 completed, 125 confirmed |
+| Production Orders | 2 429 | ~1 970 completed, ~371 waiting, rest other |
+| Purchase Orders | 880 | ~830 received, ~50 ordered |
+| Invoices | 550 | 403 paid, ~34 issued, ~112 overdue, rest other |
+| Quotes | 711 | ~675 accepted, ~16 sent, ~20 rejected |
+| Shipments | 558 | ~546 delivered, rest in_transit/planned |
+| Emails | 64 | 10 (S01) + 10 (S02) + 12 (S03) + 16 (S04) + 16 (S05) |
+| Payments | 403 | — |
+
+**S05 delta:** +50 SOs (5 old-price + 31 FR + 14 DE), +142 MOs, +100 POs,
++57 invoices, +61 quotes (16 new-price + rest from SO flow), +58 shipments,
++16 emails (6 announcements + 10 complaints), +46 payments.
 
 ### S06 — New Year Recovery
 
