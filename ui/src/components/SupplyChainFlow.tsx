@@ -196,10 +196,12 @@ export function SupplyChainFlow({ trace, onNavigate }: SupplyChainFlowProps) {
                     const tgt = nodeMap.get(e.target)
                     if (!src || !tgt) return null
 
-                    const x1 = src.x + NODE_W
-                    const y1 = src.y + NODE_H / 2
-                    const x2 = tgt.x
-                    const y2 = tgt.y + NODE_H / 2
+                    // Traceability direction: Shipment → FG → MO → PO (left to right)
+                    // Draw arrow from target (left) to source (right)
+                    const x1 = tgt.x + NODE_W
+                    const y1 = tgt.y + NODE_H / 2
+                    const x2 = src.x
+                    const y2 = src.y + NODE_H / 2
                     const cx1 = x1 + (x2 - x1) * 0.4
                     const cx2 = x1 + (x2 - x1) * 0.6
 
