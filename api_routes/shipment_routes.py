@@ -19,6 +19,15 @@ def register(mcp):
         except Exception as exc:
             return _json({"error": str(exc)}, status_code=404)
 
+    @mcp.custom_route("/api/shipments/{shipment_id}/supply-chain", methods=["GET", "OPTIONS"])
+    @cors_handler(["GET"])
+    async def api_shipment_supply_chain(request):
+        shipment_id = request.path_params.get("shipment_id")
+        result = logistics_service.get_supply_chain_trace_for_shipment(shipment_id)
+        if not result:
+            return _json({"error": "Not found"}, status_code=404)
+        return _json(result)
+
     @mcp.custom_route("/api/shipments", methods=["GET", "OPTIONS"])
     @cors_handler(["GET"])
     async def api_shipments(request):

@@ -50,7 +50,7 @@ def register(mcp):
     @cors_handler(["GET"])
     async def api_sales_order_supply_chain(request):
         order_id = request.path_params.get("order_id")
-        result = sales_service.get_supply_chain_trace(order_id)
+        result = sales_service.get_supply_chain_trace_for_order(order_id)
         if not result:
             return _json({"error": "Not found"}, status_code=404)
         return _json(result)

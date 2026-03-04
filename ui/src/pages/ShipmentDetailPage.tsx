@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react'
 import { Card } from '../components/Card'
 import { Table } from '../components/Table'
 import { Badge } from '../components/Badge'
-import { Shipment } from '../types'
+import { SupplyChainFlow } from '../components/SupplyChainFlow'
+import { Shipment, SupplyChainTrace } from '../types'
 import { api } from '../api'
 import { useNavigation } from '../contexts/NavigationContext'
 import { formatDate } from '../utils/date'
@@ -24,6 +25,7 @@ export function ShipmentDetailPage({ shipmentId }: ShipmentDetailPageProps) {
     const [shipment, setShipment] = useState<Shipment | null>(null)
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
+    const [supplyChainTrace, setSupplyChainTrace] = useState<SupplyChainTrace | null>(null)
     const { listContext, setListContext, referrer, setReferrer, clearListContext } = useNavigation()
 
     useEffect(() => {
@@ -36,6 +38,16 @@ export function ShipmentDetailPage({ shipmentId }: ShipmentDetailPageProps) {
                 console.error(err)
                 setError('Failed to load shipment details')
                 setLoading(false)
+            })
+    }, [shipmentId])
+
+    useEffect(() => {
+        api.shipmentSupplyChain(shipmentId)
+            .then((trace) => {
+                setSupplyChainTrace(trace)
+            })
+            .catch((err) => {
+                console.error('Failed to load supply chain trace:', err)
             })
     }, [shipmentId])
 
@@ -270,6 +282,17 @@ export function ShipmentDetailPage({ shipmentId }: ShipmentDetailPageProps) {
                                 })
                                 setReferrer({ page: 'shipments', id: shipmentId, label: `Shipment ${shipment.id}` })
                                 setHash('orders', row.sales_order_id)
+                            }}
+                        />
+                    </Card>
+                )}
+                {supplyChainTrace && supplyChainTrace.nodes.length > 0 && (
+                    <Card title="Supply Chain Trace">
+                        <SupplyChainFlow 
+                            trace={supplyChainTrace}
+                            onNavigate={(page, id) => {
+                                setReferrer({ page: 'shipments', id: shipmentId, label: `Shipment ${shipment.id}` })
+                                setHash(page, id)
                             }}
                         />
                     </Card>

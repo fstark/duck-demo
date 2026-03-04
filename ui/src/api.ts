@@ -35,6 +35,7 @@ export const api = {
   salesOrderSupplyChain: (id: string) => fetchJson<import('./types').SupplyChainTrace>(`/sales-orders/${encodeURIComponent(id)}/supply-chain`),
   shipment: (id: string) => fetchJson<Shipment>(`/shipments/${encodeURIComponent(id)}`),
   shipments: () => fetchJson<{ shipments: Shipment[] }>(`/shipments`),
+  shipmentSupplyChain: (id: string) => fetchJson<import('./types').SupplyChainTrace>(`/shipments/${encodeURIComponent(id)}/supply-chain`),
   productionOrders: (q?: { sales_order_id?: string }) => {
     const params = new URLSearchParams()
     params.set('limit', '100')

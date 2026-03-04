@@ -355,8 +355,8 @@ def get_fulfillment_sources(sales_order_id: str) -> Optional[Dict[str, Any]]:
         }
 
 
-def get_supply_chain_trace(sales_order_id: str) -> Optional[Dict[str, Any]]:
-    """Trace the full supply chain DAG for a fulfilled sales order.
+def get_supply_chain_trace(shipment_ids: list[str], cutoff_date: Optional[str] = None) -> Dict[str, Any]:
+    """Trace the full supply chain DAG for one or more shipments.
 
     Walks backwards from shipment(s) through:
       Shipment → FG batches (shipment_out)
@@ -364,38 +364,32 @@ def get_supply_chain_trace(sales_order_id: str) -> Optional[Dict[str, Any]]:
               → RM batches consumed by those MOs (production_consume)
               → POs that delivered those RM batches (purchase_in)
 
-    Events before the SO creation date are excluded (pre-existing stock).
+    Args:
+        shipment_ids: List of shipment IDs to trace
+        cutoff_date: Optional cutoff date to exclude pre-existing stock
+                     (typically the sales order creation date)
 
     Returns a graph with ``nodes`` and ``edges`` suitable for flow rendering.
     """
+    if not shipment_ids:
+        return {"nodes": [], "edges": []}
+
     with db_conn() as conn:
-        so = conn.execute(
-            "SELECT id, created_at FROM sales_orders WHERE id = ?",
-            (sales_order_id,),
-        ).fetchone()
-        if not so:
-            return None
-
-        cutoff = so["created_at"]
-
         # --- Layer 1: shipments → FG batches consumed ----------------------
+        placeholders = ','.join('?' * len(shipment_ids))
         fg_rows = conn.execute(
-            "SELECT sm.reference_id AS shipment_id, sm.stock_id AS fg_stock_id, "
-            "       sm.item_id, i.sku AS fg_sku, i.name AS fg_name, "
-            "       -sm.qty AS qty, sm.timestamp "
-            "FROM stock_movements sm "
-            "JOIN items i ON sm.item_id = i.id "
-            "WHERE sm.movement_type = 'shipment_out' "
-            "  AND sm.reference_id IN ("
-            "    SELECT s.id FROM shipments s "
-            "    JOIN sales_order_shipments sos ON sos.shipment_id = s.id "
-            "    WHERE sos.sales_order_id = ?"
-            "  )",
-            (sales_order_id,),
+            f"SELECT sm.reference_id AS shipment_id, sm.stock_id AS fg_stock_id, "
+            f"       sm.item_id, i.sku AS fg_sku, i.name AS fg_name, "
+            f"       -sm.qty AS qty, sm.timestamp "
+            f"FROM stock_movements sm "
+            f"JOIN items i ON sm.item_id = i.id "
+            f"WHERE sm.movement_type = 'shipment_out' "
+            f"  AND sm.reference_id IN ({placeholders})",
+            shipment_ids,
         ).fetchall()
 
         if not fg_rows:
-            return {"sales_order_id": sales_order_id, "nodes": [], "edges": []}
+            return {"nodes": [], "edges": []}
 
         # Collect unique entities
         nodes = {}   # id -> node dict
@@ -491,9 +485,9 @@ def get_supply_chain_trace(sales_order_id: str) -> Optional[Dict[str, Any]]:
                     (rm_stk,),
                 ).fetchone()
 
-                # Skip if the RM was acquired before the SO was created
+                # Skip if the RM was acquired before cutoff (pre-existing stock)
                 source_ts = po_row["timestamp"] if po_row else None
-                if source_ts and source_ts < cutoff:
+                if cutoff_date and source_ts and source_ts < cutoff_date:
                     continue
 
                 # PO node
@@ -529,11 +523,49 @@ def get_supply_chain_trace(sales_order_id: str) -> Optional[Dict[str, Any]]:
                 unique_edges.append(e)
 
         return {
-            "sales_order_id": sales_order_id,
-            "so_created_at": cutoff,
             "nodes": list(nodes.values()),
             "edges": unique_edges,
         }
+
+
+def get_supply_chain_trace_for_order(sales_order_id: str) -> Optional[Dict[str, Any]]:
+    """Get supply chain trace for a sales order (wrapper for get_supply_chain_trace).
+    
+    Fetches all shipments for the order and traces their supply chain.
+    """
+    with db_conn() as conn:
+        # Get sales order info
+        so = conn.execute(
+            "SELECT id, created_at FROM sales_orders WHERE id = ?",
+            (sales_order_id,),
+        ).fetchone()
+        if not so:
+            return None
+        
+        # Get all shipments for this order
+        shipment_rows = conn.execute(
+            "SELECT s.id FROM shipments s "
+            "JOIN sales_order_shipments sos ON sos.shipment_id = s.id "
+            "WHERE sos.sales_order_id = ?",
+            (sales_order_id,),
+        ).fetchall()
+        
+        if not shipment_rows:
+            return {
+                "sales_order_id": sales_order_id,
+                "so_created_at": so["created_at"],
+                "nodes": [],
+                "edges": [],
+            }
+        
+        shipment_ids = [row["id"] for row in shipment_rows]
+        trace = get_supply_chain_trace(shipment_ids, cutoff_date=so["created_at"])
+        
+        # Add sales order context to response
+        trace["sales_order_id"] = sales_order_id
+        trace["so_created_at"] = so["created_at"]
+        
+        return trace
 
 
 sales_service = SimpleNamespace(
@@ -543,6 +575,7 @@ sales_service = SimpleNamespace(
     get_order_timeline=get_order_timeline,
     get_fulfillment_sources=get_fulfillment_sources,
     get_supply_chain_trace=get_supply_chain_trace,
+    get_supply_chain_trace_for_order=get_supply_chain_trace_for_order,
     link_shipment=link_shipment,
     confirm_order=confirm_order,
     complete_order=complete_order,

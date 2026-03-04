@@ -131,10 +131,38 @@ def deliver_shipment(shipment_id: str) -> Dict[str, Any]:
         }
 
 
+def get_supply_chain_trace_for_shipment(shipment_id: str) -> Optional[Dict[str, Any]]:
+    """Get supply chain trace for a single shipment.
+    
+    Traces the supply chain backwards from this shipment through production and purchasing.
+    """
+    from services.sales import get_supply_chain_trace
+    
+    with db_conn() as conn:
+        # Verify shipment exists and get dispatch date
+        shipment = conn.execute(
+            "SELECT id, dispatched_at FROM shipments WHERE id = ?",
+            (shipment_id,),
+        ).fetchone()
+        
+        if not shipment:
+            return None
+        
+        # Use dispatch date as cutoff (or None if not yet dispatched)
+        cutoff_date = shipment["dispatched_at"]
+        trace = get_supply_chain_trace([shipment_id], cutoff_date=cutoff_date)
+        
+        # Add shipment context to response
+        trace["shipment_id"] = shipment_id
+        
+        return trace
+
+
 # Namespace for backward compatibility
 logistics_service = SimpleNamespace(
     create_shipment=create_shipment,
     get_shipment_status=get_shipment_status,
+    get_supply_chain_trace_for_shipment=get_supply_chain_trace_for_shipment,
     dispatch_shipment=dispatch_shipment,
     deliver_shipment=deliver_shipment,
 )
