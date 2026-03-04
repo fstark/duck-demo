@@ -8,6 +8,12 @@ Update with new rules as needed, but avoid over-engineering or nitpicking.
 
 ---
 
+### Defensive programming
+
+Do NOT use defensive programming as a crutch for sloppy code. If something is missing, don't invent it. You can assert, or return an error status, but don't fabricate data or silently ignore any problem.
+
+In general I consider the biggest source of defect to be "if" statements. If you find yourself writing an "if" think why it would be needed. Common cases are testing for null values (can they really exist), or checking that an array is non-empy (why not just loop zero times?).
+
 ### Constants
 
 - **No magic numbers.** Numeric literals (prices, thresholds) go in `config.py`.

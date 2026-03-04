@@ -119,6 +119,31 @@ export function CustomerDetailPage({ customerId }: CustomerDetailPageProps) {
         setHash('customers', nextCustomer.id)
     }
 
+    // Compute customer status badge
+    const hasLateInvoices = invoices.some(inv => inv.status === 'overdue')
+    const hasInvoices = invoices.length > 0
+    const thirtyDaysAgo = new Date()
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
+    const isActive = (customer.sales_orders || []).some(o =>
+        o.created_at && new Date(o.created_at) >= thirtyDaysAgo
+    )
+
+    let customerStatusLabel: string
+    let customerStatusVariant: 'danger' | 'info' | 'success' | 'neutral'
+    if (hasLateInvoices) {
+        customerStatusLabel = 'Late Invoices'
+        customerStatusVariant = 'danger'
+    } else if (hasInvoices) {
+        customerStatusLabel = 'Has Invoices'
+        customerStatusVariant = 'info'
+    } else if (isActive) {
+        customerStatusLabel = 'Active'
+        customerStatusVariant = 'success'
+    } else {
+        customerStatusLabel = 'Inactive'
+        customerStatusVariant = 'neutral'
+    }
+
     return (
         <section>
             <div className="text-lg font-semibold text-slate-800 mb-4">Customer Details</div>
@@ -168,35 +193,39 @@ export function CustomerDetailPage({ customerId }: CustomerDetailPageProps) {
                         </div>
                     )}
                 </div>
-                <div className="space-y-4 text-sm text-slate-700">
-                    <div className="font-semibold text-lg">{customer.name}</div>
-                    <div className="text-slate-600">
-                        <span className="font-medium">ID:</span> {customer.id}
+                <div className="space-y-3 text-sm text-slate-800">
+                    <div className="font-semibold text-lg">
+                        {customer.id} — {customer.name}
+                        <span className="ml-3 align-middle">
+                            <Badge variant={customerStatusVariant}>{customerStatusLabel}</Badge>
+                        </span>
                     </div>
                     {customer.company && (
-                        <div className="text-slate-600">
-                            <span className="font-medium">Company:</span> {customer.company}
-                        </div>
+                        <div className="text-slate-600">{customer.company}</div>
                     )}
-
-                    {/* Contact Section */}
-                    <div className="border-t pt-3 mt-3">
-                        <div className="font-medium text-slate-800 mb-2">Contact</div>
-                        <div className="grid grid-cols-2 gap-x-4 gap-y-1">
-                            <div className="text-slate-600">
-                                <span className="font-medium">Email:</span> {customer.email || '—'}
-                            </div>
-                            <div className="text-slate-600">
-                                <span className="font-medium">Phone:</span> {customer.phone || '—'}
-                            </div>
-                        </div>
+                    <div className="text-slate-500 text-xs">
+                        Created {formatDate(customer.created_at)}
                     </div>
 
-                    {/* Address Section */}
-                    <div className="border-t pt-3 mt-3">
-                        <div className="font-medium text-slate-800 mb-2">Address</div>
+                    <div className="grid grid-cols-2 gap-3">
+                        <Card title="Contact">
+                            <div className="space-y-1 text-sm text-slate-600">
+                                <div><span className="font-medium">Email:</span> {customer.email || '—'}</div>
+                                <div><span className="font-medium">Phone:</span> {customer.phone || '—'}</div>
+                            </div>
+                        </Card>
+                        <Card title="Billing">
+                            <div className="space-y-1 text-sm text-slate-600">
+                                <div><span className="font-medium">Tax ID:</span> {customer.tax_id || '—'}</div>
+                                <div><span className="font-medium">Payment Terms:</span> {customer.payment_terms ? `Net ${customer.payment_terms}` : '—'}</div>
+                                <div><span className="font-medium">Currency:</span> {customer.currency || '—'}</div>
+                            </div>
+                        </Card>
+                    </div>
+
+                    <Card title="Address">
                         {customer.address_line1 || customer.city ? (
-                            <div className="text-slate-600">
+                            <div className="text-sm text-slate-600">
                                 {customer.address_line1 && <div>{customer.address_line1}</div>}
                                 {customer.address_line2 && <div>{customer.address_line2}</div>}
                                 <div>
@@ -205,38 +234,43 @@ export function CustomerDetailPage({ customerId }: CustomerDetailPageProps) {
                                 </div>
                             </div>
                         ) : (
-                            <div className="text-slate-400 italic">No address on file</div>
+                            <div className="text-sm text-slate-400 italic">No address on file</div>
                         )}
-                    </div>
+                    </Card>
 
-                    {/* Billing Section */}
-                    <div className="border-t pt-3 mt-3">
-                        <div className="font-medium text-slate-800 mb-2">Billing</div>
-                        <div className="grid grid-cols-2 gap-x-4 gap-y-1">
-                            <div className="text-slate-600">
-                                <span className="font-medium">Tax ID:</span> {customer.tax_id || '—'}
-                            </div>
-                            <div className="text-slate-600">
-                                <span className="font-medium">Payment Terms:</span> {customer.payment_terms ? `Net ${customer.payment_terms}` : '—'}
-                            </div>
-                            <div className="text-slate-600">
-                                <span className="font-medium">Currency:</span> {customer.currency || '—'}
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Notes Section */}
                     {customer.notes && (
-                        <div className="border-t pt-3 mt-3">
-                            <div className="font-medium text-slate-800 mb-2">Notes</div>
-                            <div className="text-slate-600 whitespace-pre-wrap">{customer.notes}</div>
-                        </div>
+                        <Card title="Notes">
+                            <div className="text-sm text-slate-600 whitespace-pre-wrap">{customer.notes}</div>
+                        </Card>
                     )}
-
-                    <div className="border-t pt-3 mt-3 text-slate-500 text-xs">
-                        Created: {formatDate(customer.created_at)}
-                    </div>
                 </div>
+                {quotes.length > 0 && (
+                    <Card title="Quotes">
+                        <Table
+                            rows={quotesSort.sortedRows as any}
+                            sortKey={quotesSort.sortKey}
+                            sortDir={quotesSort.sortDir}
+                            onSort={quotesSort.onSort}
+                            columns={[
+                                { key: 'id', label: 'Quote', sortable: true },
+                                { key: 'revision_number', label: 'Rev', sortable: true, render: (q: Quote) => `R${q.revision_number}` },
+                                { key: 'total', label: 'Total', sortable: true, render: (q: Quote) => <div className="text-right">{formatCurrency(q.total)}</div> },
+                                { key: 'status', label: 'Status', sortable: true, render: (q: Quote) => <Badge>{q.status}</Badge> },
+                                { key: 'valid_until', label: 'Valid Until', sortable: true, render: (q: Quote) => q.valid_until ? formatDate(q.valid_until) : '—' },
+                                { key: 'created_at', label: 'Created', sortable: true, render: (q: Quote) => formatDate(q.created_at) },
+                            ]}
+                            onRowClick={(q: Quote, index: number) => {
+                                setListContext({
+                                    listType: 'quotes',
+                                    items: quotes.map(qt => ({ id: qt.id })) as any,
+                                    currentIndex: index,
+                                })
+                                setReferrer({ page: 'customers', id: customerId, label: customer.name })
+                                setHash('quotes', q.id)
+                            }}
+                        />
+                    </Card>
+                )}
                 {customer.sales_orders && customer.sales_orders.length > 0 && (
                     <Card title="Sales Orders">
                         <Table
@@ -340,33 +374,6 @@ export function CustomerDetailPage({ customerId }: CustomerDetailPageProps) {
                                 })
                                 setReferrer({ page: 'customers', id: customerId, label: customer.name })
                                 setHash('invoices', row.id)
-                            }}
-                        />
-                    </Card>
-                )}
-                {quotes.length > 0 && (
-                    <Card title="Quotes">
-                        <Table
-                            rows={quotesSort.sortedRows as any}
-                            sortKey={quotesSort.sortKey}
-                            sortDir={quotesSort.sortDir}
-                            onSort={quotesSort.onSort}
-                            columns={[
-                                { key: 'id', label: 'Quote', sortable: true },
-                                { key: 'revision_number', label: 'Rev', sortable: true, render: (q: Quote) => `R${q.revision_number}` },
-                                { key: 'total', label: 'Total', sortable: true, render: (q: Quote) => <div className="text-right">{formatCurrency(q.total)}</div> },
-                                { key: 'status', label: 'Status', sortable: true, render: (q: Quote) => <Badge>{q.status}</Badge> },
-                                { key: 'valid_until', label: 'Valid Until', sortable: true, render: (q: Quote) => q.valid_until ? formatDate(q.valid_until) : '—' },
-                                { key: 'created_at', label: 'Created', sortable: true, render: (q: Quote) => formatDate(q.created_at) },
-                            ]}
-                            onRowClick={(q: Quote, index: number) => {
-                                setListContext({
-                                    listType: 'quotes',
-                                    items: quotes.map(qt => ({ id: qt.id })) as any,
-                                    currentIndex: index,
-                                })
-                                setReferrer({ page: 'customers', id: customerId, label: customer.name })
-                                setHash('quotes', q.id)
                             }}
                         />
                     </Card>

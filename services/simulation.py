@@ -13,6 +13,11 @@ def get_current_time() -> str:
         result = conn.execute(
             "SELECT sim_time FROM simulation_state WHERE id = 1"
         ).fetchone()
+        if result is None:
+            raise RuntimeError(
+                "simulation_state row missing — the database was not properly initialised. "
+                "Run 'python seed_demo.py' or 'python -m scenarios' to populate it."
+            )
         return result[0]
 
 def advance_time(
@@ -41,8 +46,13 @@ def advance_time(
     with db_conn() as conn:
         old_time = conn.execute(
             "SELECT sim_time FROM simulation_state WHERE id = 1"
-        ).fetchone()[0]
-
+        ).fetchone()
+        if old_time is None:
+            raise RuntimeError(
+                "simulation_state row missing — the database was not properly initialised. "
+                "Run 'python seed_demo.py' or 'python -m scenarios' to populate it."
+            )
+        old_time = old_time[0]
         if to_time:
             conn.execute(
                 "UPDATE simulation_state SET sim_time = ? WHERE id = 1",
