@@ -87,7 +87,7 @@ def register(mcp):
         Returns:
             Dictionary with invoices array
         """
-        return invoice_service.list_invoices(customer_id, status, limit)
+        return invoice_service.list_invoices(customer_id=customer_id, status=status, limit=limit)
 
     # MUTATING TOOL
     @mcp.tool(name="invoice_issue", meta={

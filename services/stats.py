@@ -18,7 +18,9 @@ def get_statistics(
         city: Optional[str],
         limit: int,
         return_chart: Optional[str] = None,
-        chart_title: Optional[str] = None
+        chart_title: Optional[str] = None,
+        date_from: Optional[str] = None,
+        date_to: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Get flexible statistics for any entity, optionally returning a chart."""
         import config as cfg
@@ -26,7 +28,7 @@ def get_statistics(
         entity_config = {
             "customers": {"table": "customers", "join": None, "field_mapping": {}, "date_field_table": None, "valid_fields": ["id"], "valid_groups": ["city", "company"], "date_fields": ["created_at"]},
             "sales_orders": {"table": "sales_orders", "join": None, "field_mapping": {}, "date_field_table": None, "valid_fields": ["id"], "valid_groups": ["status", "customer_id"], "date_fields": ["created_at", "requested_delivery_date"]},
-            "sales_order_lines": {"table": "sales_order_lines", "join": None, "field_mapping": {}, "date_field_table": None, "valid_fields": ["qty"], "valid_groups": ["sales_order_id", "item_id"], "date_fields": []},
+            "sales_order_lines": {"table": "sales_order_lines", "join": "LEFT JOIN sales_orders ON sales_order_lines.sales_order_id = sales_orders.id", "field_mapping": {}, "date_field_table": "sales_orders", "valid_fields": ["qty"], "valid_groups": ["sales_order_id", "item_id"], "date_fields": ["created_at"]},
             "items": {"table": "items", "join": None, "field_mapping": {}, "date_field_table": None, "valid_fields": ["unit_price"], "valid_groups": ["type"], "date_fields": []},
             "stock": {"table": "stock", "join": None, "field_mapping": {}, "date_field_table": None, "valid_fields": ["on_hand"], "valid_groups": ["warehouse", "location", "item_id"], "date_fields": []},
             "production_orders": {"table": "production_orders", "join": "LEFT JOIN recipes ON production_orders.recipe_id = recipes.id", "field_mapping": {"qty": "recipes.output_qty"}, "date_field_table": None, "valid_fields": ["id", "qty"], "valid_groups": ["status", "item_id"], "date_fields": ["started_at", "completed_at", "eta_finish", "eta_ship"]},
@@ -87,6 +89,19 @@ def get_statistics(
         if city:
             filters.append(f"{table}.city = ?")
             params.append(city)
+
+        # Date range filtering
+        if date_from or date_to:
+            if not ecfg["date_fields"]:
+                return {"error": f"Entity '{entity}' has no date fields for date range filtering."}
+            primary_date_field = ecfg["date_fields"][0]
+            date_table = ecfg.get("date_field_table") or table
+            if date_from:
+                filters.append(f"DATE({date_table}.{primary_date_field}) >= ?")
+                params.append(date_from)
+            if date_to:
+                filters.append(f"DATE({date_table}.{primary_date_field}) <= ?")
+                params.append(date_to)
         where_clause = f"WHERE {' AND '.join(filters)}" if filters else ""
 
         with db_conn() as conn:

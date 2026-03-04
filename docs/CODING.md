@@ -39,6 +39,10 @@ Update with new rules as needed, but avoid over-engineering or nitpicking.
 
 - **Centralize dict↔column mappings.** When a dict is stored across prefixed DB columns (e.g. `ship_to_*`), use shared helpers (`utils.py`) instead of inline `.get()` calls in every service.
 
+### Services
+
+- **Services should use keyword-only arguments.** This ensures clarity and prevents accidental positional argument misuse.
+
 ### Quantities
 
 - **All quantity columns are `INTEGER`.** Store in the smallest base unit (grams for `"g"` items, millilitres for `"ml"` items, pieces for `"ea"` items). Never use `REAL` for quantities.
