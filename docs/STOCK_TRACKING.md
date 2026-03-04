@@ -506,6 +506,7 @@ Add optional `lot_number` to stock records for products requiring batch tracking
 - [x] Update `services/logistics.py` → `dispatch_shipment()` — pass reference context to `deduct_stock()`
 - [x] Update `scenarios/base_setup.py` → initial stock — log adjustment movements
 - [x] Regenerate with `python -m scenarios --only s01` and verify movements
+- [x] Add MRP re-plan to `scenarios/s01_steady_state.py` — daily net requirements check creates replacement MOs when FIFO consumes stock meant for other orders
 - [ ] Create helper queries in `services/inventory.py` (trace shipment, trace production)
 - [ ] Update Gantt chart visualization to show actual flows (planned vs actual lines)
 - [ ] Document in API/MCP tools if needed

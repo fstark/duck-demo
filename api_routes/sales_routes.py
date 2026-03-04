@@ -37,6 +37,24 @@ def register(mcp):
             return _json({"error": "Not found"}, status_code=404)
         return _json(timeline)
 
+    @mcp.custom_route("/api/sales-orders/{order_id}/fulfillment", methods=["GET", "OPTIONS"])
+    @cors_handler(["GET"])
+    async def api_sales_order_fulfillment(request):
+        order_id = request.path_params.get("order_id")
+        result = sales_service.get_fulfillment_sources(order_id)
+        if not result:
+            return _json({"error": "Not found"}, status_code=404)
+        return _json(result)
+
+    @mcp.custom_route("/api/sales-orders/{order_id}/supply-chain", methods=["GET", "OPTIONS"])
+    @cors_handler(["GET"])
+    async def api_sales_order_supply_chain(request):
+        order_id = request.path_params.get("order_id")
+        result = sales_service.get_supply_chain_trace(order_id)
+        if not result:
+            return _json({"error": "Not found"}, status_code=404)
+        return _json(result)
+
     @mcp.custom_route("/api/quote-options", methods=["GET", "OPTIONS"])
     @cors_handler(["GET"])
     async def api_quote_options(request):

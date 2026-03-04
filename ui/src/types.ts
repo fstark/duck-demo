@@ -503,6 +503,56 @@ export type SalesOrderTimeline = {
   invoices: TimelineInvoice[]
 }
 
+export type FulfillmentSource = {
+  item_sku: string
+  item_name: string
+  qty_taken: number
+  stock_id: string
+  source_type: string | null
+  source_id: string | null
+  source_timestamp: string | null
+  cross_order: boolean
+}
+
+export type FulfillmentShipment = {
+  shipment_id: string
+  status: string
+  dispatched_at: string | null
+  sources: FulfillmentSource[]
+}
+
+export type FulfillmentData = {
+  sales_order_id: string
+  shipments: FulfillmentShipment[]
+}
+
+export type SupplyChainNode = {
+  id: string
+  type: 'po' | 'mo' | 'fg_batch' | 'shipment'
+  label: string
+  timestamp?: string | null
+  status?: string | null
+  sku?: string
+  item_name?: string
+  sales_order_id?: string | null
+  ordered_at?: string | null
+}
+
+export type SupplyChainEdge = {
+  source: string
+  target: string
+  label?: string
+  qty?: number
+  sku?: string
+}
+
+export type SupplyChainTrace = {
+  sales_order_id: string
+  so_created_at: string
+  nodes: SupplyChainNode[]
+  edges: SupplyChainEdge[]
+}
+
 export type ProductionOrderTimeline = {
   production_order: TimelineProductionOrder & {
     sales_order_id?: string | null

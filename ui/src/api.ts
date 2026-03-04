@@ -31,6 +31,8 @@ export const api = {
   salesOrders: () => fetchJson<{ sales_orders: SalesOrder[] }>(`/sales-orders?limit=50`),
   salesOrder: (id: string) => fetchJson<SalesOrderDetail>(`/sales-orders/${encodeURIComponent(id)}`),
   salesOrderTimeline: (id: string) => fetchJson<SalesOrderTimeline>(`/sales-orders/${encodeURIComponent(id)}/timeline`),
+  salesOrderFulfillment: (id: string) => fetchJson<import('./types').FulfillmentData>(`/sales-orders/${encodeURIComponent(id)}/fulfillment`),
+  salesOrderSupplyChain: (id: string) => fetchJson<import('./types').SupplyChainTrace>(`/sales-orders/${encodeURIComponent(id)}/supply-chain`),
   shipment: (id: string) => fetchJson<Shipment>(`/shipments/${encodeURIComponent(id)}`),
   shipments: () => fetchJson<{ shipments: Shipment[] }>(`/shipments`),
   productionOrders: (q?: { sales_order_id?: string }) => {

@@ -3,7 +3,8 @@ import { Card } from '../components/Card'
 import { Table } from '../components/Table'
 import { Badge } from '../components/Badge'
 import { TimelineGantt } from '../components/TimelineGantt'
-import { SalesOrder, SalesOrderDetail, Email, Invoice, ProductionOrder, SalesOrderTimeline } from '../types'
+import { SalesOrder, SalesOrderDetail, Email, Invoice, ProductionOrder, SalesOrderTimeline, FulfillmentData, SupplyChainTrace } from '../types'
+import { SupplyChainFlow } from '../components/SupplyChainFlow'
 import { api } from '../api'
 import { useNavigation } from '../contexts/NavigationContext'
 import { formatCurrency } from '../utils/currency'
@@ -28,6 +29,8 @@ export function SalesOrderDetailPage({ orderId }: SalesOrderDetailPageProps) {
     const [invoices, setInvoices] = useState<Invoice[]>([])
     const [productionOrders, setProductionOrders] = useState<ProductionOrder[]>([])
     const [timeline, setTimeline] = useState<SalesOrderTimeline | null>(null)
+    const [fulfillment, setFulfillment] = useState<FulfillmentData | null>(null)
+    const [supplyChain, setSupplyChain] = useState<SupplyChainTrace | null>(null)
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
     const { listContext, setListContext, setReferrer, referrer, clearListContext } = useNavigation()
@@ -39,13 +42,17 @@ export function SalesOrderDetailPage({ orderId }: SalesOrderDetailPageProps) {
             api.invoices({ sales_order_id: orderId }),
             api.productionOrders({ sales_order_id: orderId }),
             api.salesOrderTimeline(orderId).catch(() => null),
+            api.salesOrderFulfillment(orderId).catch(() => null),
+            api.salesOrderSupplyChain(orderId).catch(() => null),
         ])
-            .then(([orderData, emailsData, invoicesData, prodData, timelineData]) => {
+            .then(([orderData, emailsData, invoicesData, prodData, timelineData, fulfillmentData, supplyChainData]) => {
                 setOrder(orderData as SalesOrderDetail)
                 setEmails(emailsData.emails)
                 setInvoices(invoicesData.invoices || [])
                 setProductionOrders(prodData.production_orders || [])
                 setTimeline(timelineData)
+                setFulfillment(fulfillmentData as FulfillmentData | null)
+                setSupplyChain(supplyChainData as SupplyChainTrace | null)
                 setLoading(false)
             })
             .catch((err) => {
@@ -342,6 +349,99 @@ export function SalesOrderDetailPage({ orderId }: SalesOrderDetailPageProps) {
                             <div className="text-slate-500">No shipments linked.</div>
                         )}
                     </Card>
+                    {fulfillment && fulfillment.shipments.length > 0 && (
+                        <Card title="Fulfillment Sources">
+                            <p className="text-xs text-slate-500 mb-3">
+                                Actual stock batches consumed by each shipment, traced via FIFO deductions.
+                                <span className="ml-1 inline-block px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 text-[10px] font-medium">cross-order</span> = stock originally produced for a different sales order.
+                            </p>
+                            {fulfillment.shipments.map((ship) => (
+                                <div key={ship.shipment_id} className="mb-4 last:mb-0">
+                                    <div className="flex items-center gap-2 mb-1.5">
+                                        <button
+                                            className="text-sm font-medium text-brand-600 hover:underline"
+                                            onClick={() => {
+                                                setReferrer({ page: 'orders', id: orderId, label: `Order ${order.sales_order.id}` })
+                                                setHash('shipments', ship.shipment_id)
+                                            }}
+                                            type="button"
+                                        >
+                                            {ship.shipment_id}
+                                        </button>
+                                        <Badge>{ship.status}</Badge>
+                                        {ship.dispatched_at && <span className="text-xs text-slate-500">{formatDate(ship.dispatched_at)}</span>}
+                                    </div>
+                                    <table className="w-full text-xs">
+                                        <thead>
+                                            <tr className="text-left text-slate-500 border-b">
+                                                <th className="py-1 pr-2 font-medium">Item</th>
+                                                <th className="py-1 pr-2 font-medium text-right">Qty</th>
+                                                <th className="py-1 pr-2 font-medium">Batch</th>
+                                                <th className="py-1 pr-2 font-medium">Source</th>
+                                                <th className="py-1 font-medium">Produced</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {ship.sources.map((src, idx) => (
+                                                <tr key={idx} className="border-b border-slate-100">
+                                                    <td className="py-1 pr-2">
+                                                        <span className="font-medium">{src.item_sku}</span>
+                                                        <span className="text-slate-400 ml-1">{src.item_name}</span>
+                                                    </td>
+                                                    <td className="py-1 pr-2 text-right tabular-nums">{src.qty_taken}</td>
+                                                    <td className="py-1 pr-2 text-slate-500">{src.stock_id}</td>
+                                                    <td className="py-1 pr-2">
+                                                        {src.source_id ? (
+                                                            <span className="flex items-center gap-1">
+                                                                <button
+                                                                    className="text-brand-600 hover:underline"
+                                                                    onClick={() => {
+                                                                        setReferrer({ page: 'orders', id: orderId, label: `Order ${order.sales_order.id}` })
+                                                                        if (src.source_type === 'production_in') {
+                                                                            setHash('production', src.source_id!)
+                                                                        } else if (src.source_type === 'purchase_in') {
+                                                                            setHash('purchase-orders', src.source_id!)
+                                                                        }
+                                                                    }}
+                                                                    type="button"
+                                                                >
+                                                                    {src.source_id}
+                                                                </button>
+                                                                {src.cross_order && (
+                                                                    <span className="px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 text-[10px] font-medium" title="Stock produced for a different order">
+                                                                        cross-order
+                                                                    </span>
+                                                                )}
+                                                            </span>
+                                                        ) : (
+                                                            <span className="text-slate-400">initial stock</span>
+                                                        )}
+                                                    </td>
+                                                    <td className="py-1 text-slate-500">{src.source_timestamp ? formatDate(src.source_timestamp) : '—'}</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            ))}
+                        </Card>
+                    )}
+                    {supplyChain && supplyChain.nodes.length > 0 && (
+                        <Card title="Supply Chain Trace">
+                            <p className="text-xs text-slate-500 mb-3">
+                                Full material flow from purchase orders through manufacturing to shipment.
+                                Only shows activity after the order was created ({supplyChain.so_created_at ? formatDate(supplyChain.so_created_at) : ''}).
+                                Hover to highlight connections. Click a node to navigate.
+                            </p>
+                            <SupplyChainFlow
+                                trace={supplyChain}
+                                onNavigate={(page: string, id: string) => {
+                                    setReferrer({ page: 'orders', id: orderId, label: `Order ${order.sales_order.id}` })
+                                    setHash(page, id)
+                                }}
+                            />
+                        </Card>
+                    )}
                     {emails.length > 0 && (
                         <Card title="Emails">
                             <Table
