@@ -62,7 +62,7 @@ scenarios/
   helpers.py              # Reusable story primitives
   base_setup.py           # Foundation data (catalog, suppliers, recipes, customers)
   s01_steady_state.py     # ✅ Implemented — Normal operations Aug–Sep 2025
-  s02_halloween_spike.py  # 🔲 Not yet implemented
+  s02_halloween_spike.py  # ✅ Implemented — Halloween demand spike Oct 2025
   s03_material_shortage.py# 🔲 Not yet implemented
   s04_geo_expansion.py    # 🔲 Not yet implemented
   s05_price_revision.py   # 🔲 Not yet implemented
@@ -146,19 +146,47 @@ and a 2-day final settle for in-flight deliveries.
 
 ## Scenarios To Implement
 
-The remaining five scenarios build on the s01 baseline.  Each receives a `ctx`
-dict from the engine (containing `customer_ids`, `s01_so_ids`, `core_skus`, etc.)
-and can pass data downstream to later scenarios.
+The remaining four scenarios build on the s01 + s02 baseline.  Each receives a
+`ctx` dict from the engine (containing `customer_ids`, `s01_so_ids`,
+`core_skus`, `s02_so_ids`, `halloween_skus`, `costume_skus`, etc.) and can
+pass data downstream to later scenarios.
 
-### S02 — Halloween Spike
+### S02 — Halloween Spike (implemented)
 
-| | |
-|---|---|
-| **Period** | Oct 2025 (sim clock: 2025-10-01 → 2025-10-31) |
-| **Story** | Massive order surge for spooky-themed ducks.  Production capacity stressed, some orders ship late. Visible demand peak in charts. |
-| **Key actions** | • Demand burst on Halloween SKUs (Witch, Pumpkin, Vampire, Ghost, Frankenstein, Zombie) at 2–3× normal volume<br>• Ninja + Pirate orders also spike (costume season)<br>• Some MOs stuck in `waiting` due to material consumption outpacing restocking<br>• A few late shipments (orders placed late October won't complete before month end)<br>• Customer emails: "When will my order ship?" |
-| **Expected additions** | ~100–150 SOs, ~300–400 MOs, visible spike in all charts |
-| **Helpers to use** | `create_demand_burst()`, `trigger_production_for_orders()`, `restock_materials()`, `send_email()` |
+**Period:** 2025-10-01 → 2025-10-31 (31 days), sim clock ends at 2025-11-02.
+
+**Story:** Massive order surge for spooky-themed ducks. Production capacity
+stressed, some orders ship late. Visible demand peak in charts.
+
+**Design:**
+
+- Halloween SKU pool weighted 4× (Witch, Pumpkin, Vampire, Ghost, Frankenstein,
+  Zombie), Costume SKUs 3× (Ninja, Pirate), core SKUs 1× baseline.
+- Weekly volume ramp: W1 (4,6) → W2 (5,8) → W3 (6,9) → W4 (6,8) → W5 (4,6).
+- Qty per line: 8–30 (higher than S01's 5–25) to stress materials faster.
+- **Restock cutoff at day 21 (Oct 22):** no more material POs after this point,
+  causing raw material depletion and MOs stuck in `waiting`.
+- Late-October orders naturally won't complete before month end.
+- Post-loop: 10 customer inquiry emails ("Where is my order?") linked to
+  delayed SOs still in `confirmed` status.
+- 1-day settle only (preserves backlog for S03).
+- Returns `s02_so_ids`, `halloween_skus`, `costume_skus` in ctx.
+
+**Actual volumes after s01 + s02 (latest run):**
+
+| Entity | Count | Status breakdown |
+|--------|-------|------------------|
+| Sales Orders | 377 | 275 completed, 102 confirmed |
+| Production Orders | 1 335 | 901 completed, 425 waiting, 9 other |
+| Purchase Orders | 402 | 402 received |
+| Invoices | 275 | 202 paid, 33 issued, 37 overdue, 3 draft |
+| Quotes | 392 | 377 accepted, 9 sent, 6 rejected |
+| Shipments | 279 | 270 delivered, 5 in_transit, 4 planned |
+| Emails | 20 | 10 from S01 + 10 inquiry emails from S02 |
+| Payments | 202 | — |
+
+**S02 delta:** +201 SOs, +804 MOs, +133 POs, +115 invoices, +201 quotes,
++118 shipments, +10 emails, +80 payments.
 
 ### S03 — Material Shortage
 
@@ -204,17 +232,17 @@ and can pass data downstream to later scenarios.
 
 ## Volume Targets (all 6 scenarios combined)
 
-| Entity | Target | After s01 |
-|--------|--------|-----------|
-| Customers | 60–80 | 30 |
-| Items | 50 | 50 (stable) |
-| Sales Orders | 500–700 | 176 |
-| Production Orders | 1 000–1 500 | 531 |
-| Purchase Orders | 350–500 | 269 |
-| Invoices | 400–600 | 160 |
-| Quotes | 250–400 | 191 |
-| Shipments | 400–600 | 161 |
-| Emails | 40–60 | 10 |
+| Entity | Target | After s01 | After s02 |
+|--------|--------|-----------|-----------|
+| Customers | 60–80 | 30 | 30 |
+| Items | 50 | 50 (stable) | 50 |
+| Sales Orders | 500–700 | 176 | 377 |
+| Production Orders | 1 000–1 500 | 531 | 1 335 |
+| Purchase Orders | 350–500 | 269 | 402 |
+| Invoices | 400–600 | 160 | 275 |
+| Quotes | 250–400 | 191 | 392 |
+| Shipments | 400–600 | 161 | 279 |
+| Emails | 40–60 | 10 | 20 |
 
 ---
 
