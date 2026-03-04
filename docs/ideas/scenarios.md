@@ -63,7 +63,7 @@ scenarios/
   base_setup.py           # Foundation data (catalog, suppliers, recipes, customers)
   s01_steady_state.py     # ✅ Implemented — Normal operations Aug–Sep 2025
   s02_halloween_spike.py  # ✅ Implemented — Halloween demand spike Oct 2025
-  s03_material_shortage.py# 🔲 Not yet implemented
+  s03_material_shortage.py# ✅ Implemented — PVC supply disruption Nov 2025
   s04_geo_expansion.py    # 🔲 Not yet implemented
   s05_price_revision.py   # 🔲 Not yet implemented
   s06_new_year_recovery.py# 🔲 Not yet implemented
@@ -188,15 +188,50 @@ stressed, some orders ship late. Visible demand peak in charts.
 **S02 delta:** +201 SOs, +804 MOs, +133 POs, +115 invoices, +201 quotes,
 +118 shipments, +10 emails, +80 payments.
 
-### S03 — Material Shortage
+### S03 — Material Shortage (implemented)
 
-| | |
-|---|---|
-| **Period** | Nov 2025 (sim clock: 2025-11-01 → 2025-11-30) |
-| **Story** | PlasticCorp (SUP-001) PVC delivery delays (+3 weeks).  Production orders pile up in `waiting`.  Expedited POs placed with EuroPlast GmbH (SUP-004) or DuraPoly (SUP-009) at higher cost.  Customer complaint emails. Visible production dip. |
-| **Key actions** | • `create_supply_disruption("PVC-PELLETS", 21)` on existing POs<br>• Normal order volume continues (demand doesn't stop)<br>• MOs accumulate in `waiting` status — chart shows production dip<br>• Expedited POs to alternate suppliers with shorter lead times<br>• Customer complaint emails about delays<br>• Mid-month: partial PVC delivery arrives, some MOs unblock |
-| **Expected additions** | ~60–80 SOs, high `waiting` MO count, 5–10 expedited POs, complaint emails |
-| **Helpers to use** | `create_supply_disruption()`, `create_demand_burst()`, `send_email()` |
+**Period:** 2025-11-01 → 2025-11-30 (30 days), sim clock ends at 2025-12-03.
+
+**Story:** PlasticCorp (SUP-001) PVC delivery delays (+3 weeks).  Production
+orders pile up in `waiting`.  Expedited POs placed with EuroPlast GmbH
+(SUP-004) and DuraPoly Industries (SUP-009).  Customer complaint emails.
+Visible production dip in charts.
+
+**Design:**
+
+- Supply disruption applied on days 1, 8, and 15 via
+  `create_supply_disruption("PVC-PELLETS", 21)` — catches newly-created
+  restock POs to SUP-001 each week (ongoing disruption, not one-shot).
+- Normal demand continues at s01 baseline: (2,3) orders/day across all weeks,
+  core SKU pool only (Halloween season is over).
+- 6 expedited POs placed on days 3, 6, 9, 13, 17, 21 alternating between
+  EuroPlast GmbH (12-day lead) and DuraPoly Industries (14-day lead),
+  500 000 g PVC each.
+- Restocking runs throughout — PVC POs to SUP-001 keep getting created and
+  delayed, realistically modelling a procurement system unaware of the
+  disruption.
+- Mid-month: first expedited POs arrive (~day 14–15), partially unblocking
+  production.  `waiting` MO count peaks then gradually recovers.
+- Post-loop: 12 customer complaint emails about delays and material shortages,
+  drawn from both s03 and s02 backlog SOs still in `confirmed`.
+- 2-day settle (lets some in-flight expedited POs arrive).
+- Returns `s03_so_ids`, `disruption_material` in ctx.
+
+**Actual volumes after s01 + s02 + s03 (latest run):**
+
+| Entity | Count | Status breakdown |
+|--------|-------|------------------|
+| Sales Orders | 454 | 365 completed, 84 confirmed, 5 other |
+| Production Orders | 1 651 | 1 241 completed, 120 waiting, 279 ready, 11 other |
+| Purchase Orders | 572 | 536 received, 36 ordered (incl. 5 delayed PVC) |
+| Invoices | 370 | 265 paid, 34 issued, 69 overdue, 2 other |
+| Quotes | 469 | 454 accepted, 9 sent, 6 rejected |
+| Shipments | 376 | 354 delivered, 11 in_transit, 6 planned, 5 other |
+| Emails | 32 | 10 (S01) + 10 (S02) + 12 (S03 complaints) |
+| Payments | 265 | — |
+
+**S03 delta:** +77 SOs, +316 MOs, +170 POs (incl. 6 expedited), +95 invoices,
++77 quotes, +97 shipments, +12 emails, +63 payments.
 
 ### S04 — Geo Expansion (Germany)
 
