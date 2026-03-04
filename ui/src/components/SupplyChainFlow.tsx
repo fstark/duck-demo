@@ -39,19 +39,9 @@ function layoutNodes(nodes: SupplyChainNode[], edges: { source: string; target: 
         cols[col].push(n)
     }
 
-    // Sort within each column by timestamp (primary), then by ID (stable secondary)
+    // Initial sort by ID for stability
     for (const c of Object.values(cols)) {
-        c.sort((a, b) => {
-            const tCmp = (a.timestamp || '').localeCompare(b.timestamp || '')
-            if (tCmp !== 0) return tCmp
-            return a.id.localeCompare(b.id)
-        })
-    }
-
-    // First pass: assign preliminary positions
-    const nodeRowMap = new Map<string, number>()
-    for (const [colStr, colNodes] of Object.entries(cols)) {
-        colNodes.forEach((n, idx) => nodeRowMap.set(n.id, idx))
+        c.sort((a, b) => a.id.localeCompare(b.id))
     }
 
     // Build adjacency map for connections
@@ -63,55 +53,35 @@ function layoutNodes(nodes: SupplyChainNode[], edges: { source: string; target: 
         connectionsMap.get(e.target)!.push(e.source)
     }
 
-    // Second pass: within each timestamp group, reorder by topological position
-    // This reduces edge crossings by keeping connected nodes vertically aligned
-    for (const [colStr, colNodes] of Object.entries(cols)) {
-        // Group nodes by timestamp
-        const timestampGroups: SupplyChainNode[][] = []
-        let currentGroup: SupplyChainNode[] = []
-        let currentTimestamp = ''
-
-        for (const n of colNodes) {
-            const ts = n.timestamp || ''
-            if (ts !== currentTimestamp) {
-                if (currentGroup.length > 0) timestampGroups.push(currentGroup)
-                currentGroup = [n]
-                currentTimestamp = ts
-            } else {
-                currentGroup.push(n)
-            }
-        }
-        if (currentGroup.length > 0) timestampGroups.push(currentGroup)
-
-        // For each group with multiple nodes, compute connection-based position scores
-        const sortedNodes: SupplyChainNode[] = []
-        for (const group of timestampGroups) {
-            if (group.length === 1) {
-                sortedNodes.push(group[0])
-            } else {
-                // Compute average row of connected nodes for each node in this group
-                const scored = group.map(n => {
-                    const connections = connectionsMap.get(n.id) || []
-                    const connectedRows = connections
-                        .map(cid => nodeRowMap.get(cid))
-                        .filter((r): r is number => r !== undefined)
-                    const avgRow = connectedRows.length > 0
-                        ? connectedRows.reduce((sum, r) => sum + r, 0) / connectedRows.length
-                        : nodeRowMap.get(n.id) || 0
-                    return { node: n, score: avgRow }
-                })
-                // Sort by score, then by ID for stability
-                scored.sort((a, b) => {
-                    const sCmp = a.score - b.score
-                    if (sCmp !== 0) return sCmp
-                    return a.node.id.localeCompare(b.node.id)
-                })
-                sortedNodes.push(...scored.map(s => s.node))
-            }
+    // Iteratively reorder nodes to minimize edge crossings
+    // Run multiple passes to converge on a good layout
+    for (let iteration = 0; iteration < 3; iteration++) {
+        // Assign current positions
+        const nodeRowMap = new Map<string, number>()
+        for (const [colStr, colNodes] of Object.entries(cols)) {
+            colNodes.forEach((n, idx) => nodeRowMap.set(n.id, idx))
         }
 
-        // Update the column with reordered nodes
-        cols[Number(colStr)] = sortedNodes
+        // Reorder each column based on average position of connected nodes
+        for (const [colStr, colNodes] of Object.entries(cols)) {
+            const scored = colNodes.map(n => {
+                const connections = connectionsMap.get(n.id) || []
+                const connectedRows = connections
+                    .map(cid => nodeRowMap.get(cid))
+                    .filter((r): r is number => r !== undefined)
+                const avgRow = connectedRows.length > 0
+                    ? connectedRows.reduce((sum, r) => sum + r, 0) / connectedRows.length
+                    : nodeRowMap.get(n.id) || 0
+                return { node: n, score: avgRow }
+            })
+            // Sort by score, then by ID for stability
+            scored.sort((a, b) => {
+                const sCmp = a.score - b.score
+                if (sCmp !== 0) return sCmp
+                return a.node.id.localeCompare(b.node.id)
+            })
+            cols[Number(colStr)] = scored.map(s => s.node)
+        }
     }
 
     // Final pass: assign positions
