@@ -135,22 +135,22 @@ def get_supply_chain_trace_for_shipment(shipment_id: str) -> Optional[Dict[str, 
     """Get supply chain trace for a single shipment.
     
     Traces the supply chain backwards from this shipment through production and purchasing.
+    Shows the complete trace without cutoff filtering.
     """
     from services.sales import get_supply_chain_trace
     
     with db_conn() as conn:
-        # Verify shipment exists and get dispatch date
+        # Verify shipment exists
         shipment = conn.execute(
-            "SELECT id, dispatched_at FROM shipments WHERE id = ?",
+            "SELECT id FROM shipments WHERE id = ?",
             (shipment_id,),
         ).fetchone()
         
         if not shipment:
             return None
         
-        # Use dispatch date as cutoff (or None if not yet dispatched)
-        cutoff_date = shipment["dispatched_at"]
-        trace = get_supply_chain_trace([shipment_id], cutoff_date=cutoff_date)
+        # No cutoff date - show complete supply chain for this shipment
+        trace = get_supply_chain_trace([shipment_id], cutoff_date=None)
         
         # Add shipment context to response
         trace["shipment_id"] = shipment_id
