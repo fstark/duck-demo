@@ -12,7 +12,7 @@ Update with new rules as needed, but avoid over-engineering or nitpicking.
 
 Do NOT use defensive programming as a crutch for sloppy code. If something is missing, don't invent it. You can assert, or return an error status, but don't fabricate data or silently ignore any problem.
 
-In general I consider the biggest source of defect to be "if" statements. If you find yourself writing an "if" think why it would be needed. Common cases are testing for null values (can they really exist), or checking that an array is non-empy (why not just loop zero times?).
+The biggest source of defect are the ``if`` statements. If you find yourself writing an ``if`` statement, think why it would be needed. Common cases are testing for null values (can they really exist), or checking that an array is non-empty (why not just loop zero times?).
 
 ### Constants
 

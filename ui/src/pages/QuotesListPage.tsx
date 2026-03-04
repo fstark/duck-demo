@@ -22,7 +22,7 @@ function QuotesListPage() {
     const [showSuperseded, setShowSuperseded] = useState(false)
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
-    const { setReferrer } = useNavigation()
+    const { setReferrer, setListContext } = useNavigation()
 
     useEffect(() => {
         loadQuotes()
@@ -109,7 +109,14 @@ function QuotesListPage() {
                         sortKey={quotesSort.sortKey}
                         sortDir={quotesSort.sortDir}
                         onSort={quotesSort.onSort}
-                        onRowClick={(q: Quote) => setHash('quotes', q.id)}
+                        onRowClick={(q: Quote, index: number) => {
+                            setListContext({
+                                listType: 'quotes',
+                                items: quotesSort.sortedRows as Quote[],
+                                currentIndex: index,
+                            })
+                            setHash('quotes', q.id)
+                        }}
                         columns={[
                             { key: 'id', label: 'Quote ID', sortable: true },
                             {
