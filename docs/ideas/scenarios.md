@@ -64,7 +64,7 @@ scenarios/
   s01_steady_state.py     # ✅ Implemented — Normal operations Aug–Sep 2025
   s02_halloween_spike.py  # ✅ Implemented — Halloween demand spike Oct 2025
   s03_material_shortage.py# ✅ Implemented — PVC supply disruption Nov 2025
-  s04_geo_expansion.py    # 🔲 Not yet implemented
+  s04_geo_expansion.py    # ✅ Implemented — Germany expansion Dec 2025
   s05_price_revision.py   # 🔲 Not yet implemented
   s06_new_year_recovery.py# 🔲 Not yet implemented
 ```
@@ -233,15 +233,49 @@ Visible production dip in charts.
 **S03 delta:** +77 SOs, +316 MOs, +170 POs (incl. 6 expedited), +95 invoices,
 +77 quotes, +97 shipments, +12 emails, +63 payments.
 
-### S04 — Geo Expansion (Germany)
+### S04 — Geo Expansion (Germany)  ✅ Implemented
 
-| | |
-|---|---|
-| **Period** | Dec 2025 (sim clock: 2025-12-01 → 2025-12-31) |
-| **Story** | Duck Inc expands into Germany.  New customers, Lederhosen + Oktoberfest ducks promoted, cross-border shipments.  Christmas season overlap drives volume. |
-| **Key actions** | • `create_customer_batch(12, country="DE")` — new German customers<br>• Demand burst on Lederhosen, Oktoberfest + Christmas SKUs (Santa, Snowman, Reindeer, Elf, Gingerbread)<br>• German customers get `payment_terms=60`<br>• Cross-border shipments (country="DE" in ship_to)<br>• Some French Christmas orders too<br>• New revenue stream visible by country in analytics |
-| **Expected additions** | ~12 DE customers, ~80–120 SOs, seasonal SKU mix shift |
-| **Helpers to use** | `create_customer_batch()`, `create_demand_burst()`, `run_full_sales_cycle()` |
+**Period:** 2025-12-01 → 2025-12-31 (31 days), sim clock ends at 2026-01-03.
+
+**Story:** Duck Inc expands into Germany.  12 new German customers, Lederhosen
++ Oktoberfest ducks promoted (4× weighted), Christmas seasonal push (Santa,
+Snowman, Reindeer, Elf, Gingerbread — 3× weighted) in both FR and DE markets.
+Cross-border shipments visible in logistics data.  Supply chain runs normally
+(PVC restored post-S03) — contrast with November dip.
+
+**Design:**
+
+- 12 German customers via `create_customer_batch(12, country="DE",
+  payment_terms_choices=[45, 60])`.
+- Two parallel daily order streams: French (Christmas pool) + German
+  (German + Christmas pool) with separate weekly volume ramps.
+- FR weekly: W1 (2,3), W2 (2,4), W3 (3,5), W4 (3,4), W5 (2,3).
+- DE weekly: W1 (1,2), W2 (2,3), W3 (2,4), W4 (2,3), W5 (1,2).
+- German orders placed at 11:00 (FR at 10:00) for timestamp differentiation.
+- Materials restock normally throughout (restored supply chain).
+- Post-loop: 8 welcome/onboarding emails to DE customers (mix of German
+  and English), 8 Christmas inquiry emails (FR+DE), 10 standalone quotes
+  (5 DE, 5 FR — ~30% rejected).
+- 2-day settle.
+- Returns `s04_so_ids`, `de_customer_ids`, `customer_ids` (merged),
+  `german_skus`, `christmas_skus` in ctx.
+
+**Actual volumes after s01 + s02 + s03 + s04 (latest run):**
+
+| Entity | Count | Status breakdown |
+|--------|-------|------------------|
+| Customers | 42 | 30 FR + 12 DE |
+| Sales Orders | 625 | 493 completed, 132 confirmed |
+| Production Orders | 2 287 | ~1 700 completed, ~508 waiting, rest other |
+| Purchase Orders | 780 | ~730 received, ~50 ordered |
+| Invoices | 493 | 357 paid, ~30 issued, ~102 overdue, rest other |
+| Quotes | 650 | ~625 accepted, ~15 sent, ~10 rejected |
+| Shipments | 500 | ~480 delivered, rest in_transit/planned |
+| Emails | 48 | 10 (S01) + 10 (S02) + 12 (S03) + 16 (S04) |
+| Payments | 357 | — |
+
+**S04 delta:** +171 SOs (100 FR + 71 DE), +636 MOs, +208 POs, +123 invoices,
++181 quotes, +124 shipments, +16 emails, +92 payments, +12 DE customers.
 
 ### S05 — Price Revision
 
