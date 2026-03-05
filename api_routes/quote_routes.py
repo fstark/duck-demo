@@ -16,7 +16,7 @@ def register(mcp):
         limit = int(qp.get("limit", 50))
         show_superseded = qp.get("show_superseded", "false").lower() == "true"
         result = quote_service.list_quotes(
-            customer_id=qp.get("customer_id"),
+            customer_ids=[qp["customer_id"]] if "customer_id" in qp else None,
             status=qp.get("status"),
             limit=limit,
             show_superseded=show_superseded

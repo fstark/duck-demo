@@ -17,7 +17,7 @@ def register(mcp):
             category=qp.get("category"),
             action=qp.get("action"),
             entity_type=qp.get("entity_type"),
-            entity_id=qp.get("entity_id"),
+            entity_ids=[qp["entity_id"]] if "entity_id" in qp else None,
             since=qp.get("since"),
             until=qp.get("until"),
         )

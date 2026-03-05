@@ -13,7 +13,7 @@ def register(mcp):
         qp = request.query_params
         limit = int(qp.get("limit", 20))
         result = sales_service.search_orders(
-            customer_id=qp.get("customer_id"),
+            customer_ids=[qp["customer_id"]] if "customer_id" in qp else None,
             limit=limit,
             sort=qp.get("sort", "most_recent"),
         )

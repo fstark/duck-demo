@@ -13,8 +13,8 @@ def register(mcp):
         qp = request.query_params
         limit = int(qp.get("limit", 20))
         result = messaging_service.list_emails(
-            customer_id=qp.get("customer_id"),
-            sales_order_id=qp.get("sales_order_id"),
+            customer_ids=[qp["customer_id"]] if "customer_id" in qp else None,
+            sales_order_ids=[qp["sales_order_id"]] if "sales_order_id" in qp else None,
             status=qp.get("status"),
             limit=limit
         )

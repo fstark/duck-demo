@@ -1,8 +1,7 @@
 -- SQLite schema for duck-demo MCP server
 
 -- Simulation state - single row table for tracking simulated time
-DROP TABLE IF EXISTS simulation_state;
-CREATE TABLE simulation_state (
+CREATE TABLE IF NOT EXISTS simulation_state (
     id INTEGER PRIMARY KEY CHECK (id = 1),
     sim_time TEXT NOT NULL
 );

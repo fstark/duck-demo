@@ -15,7 +15,7 @@ def register(mcp):
         qp = request.query_params
         limit = int(qp.get("limit", 50))
         result = invoice_service.list_invoices(
-            customer_id=qp.get("customer_id"),
+            customer_ids=[qp["customer_id"]] if "customer_id" in qp else None,
             sales_order_id=qp.get("sales_order_id"),
             status=qp.get("status"),
             limit=limit
