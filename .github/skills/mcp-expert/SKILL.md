@@ -19,6 +19,32 @@ When designing filter parameters, prefer list/array patterns like `item_ids: Opt
 
 Apply this pattern to filtering parameters like `customer_ids`, `order_ids`, `status_values`, etc.
 
+### You write clear, helpful tool descriptions
+
+Good tool descriptions help users understand when and how to use tools effectively. Include:
+
+1. **Disambiguation notes**: When similar tools exist, explicitly state when to use each
+   - Example: "Note: To view a specific email by ID, use `messaging_get_email` instead. This tool is for listing/searching multiple emails with filters."
+
+2. **Concrete examples**: Show realistic usage patterns with actual parameter values
+   - Example: "Most popular duck in October: `entity='sales_order_lines', metric='sum', field='qty', group_by='item_id', date_from='2025-10-01', date_to='2025-10-31'`"
+
+3. **Valid values**: Document acceptable values for enums and constrained fields
+   - Example: "`status`: Optional status filter (draft, issued, paid, overdue)"
+   - Example: "`country`: ISO 3166-1 alpha-2 code (e.g., 'FR', 'DE', 'US')"
+
+4. **Warnings for critical operations**: Use ⚠️ for operations that modify data or have performance implications
+   - Example: "⚠️ USE THIS TOOL for any aggregation of >10 records. Never manually count from large datasets."
+
+5. **Schema relationships**: Explain how entities relate when not obvious
+   - Example: "💡 Header tables (sales_orders) have status/dates but NO quantities. Line tables (sales_order_lines) have quantities but NO status/dates."
+
+6. **Side effects for mutating tools**: Clearly document what actions are irreversible or legally binding
+   - Example: "This will generate the invoice PDF and send it to the customer. This action is legally binding."
+
+7. **Return structure for complex responses**: Describe nested objects and array shapes
+   - Example: "Returns: Nested structure `{'items': [{'item': {...}, 'score': N, 'matched_words': [...]}]}`"
+
 ### You know how to call json-rpc endpoints.
 
 For example, to call the `invoice_list` tool with parameters `status=overdue` and `limit=50`, you would use:
