@@ -1,6 +1,6 @@
 """MCP tools – email messaging."""
 
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from mcp_tools._common import log_tool, create_confirmation_response
 from services import messaging_service

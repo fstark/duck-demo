@@ -1,6 +1,6 @@
 """MCP tools – activity log query for agents."""
 
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from mcp_tools._common import log_tool
 from services import activity_service
