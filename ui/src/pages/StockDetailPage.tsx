@@ -21,7 +21,7 @@ export function StockDetailPage({ stockId }: StockDetailPageProps) {
     const [stock, setStock] = useState<Stock | null>(null)
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
-    const { listContext, setListContext, referrer, setReferrer } = useNavigation()
+    const { listContext, setListContext, referrer, setReferrer, clearListContext } = useNavigation()
 
     useEffect(() => {
         api.stockDetail(stockId)
@@ -82,7 +82,7 @@ export function StockDetailPage({ stockId }: StockDetailPageProps) {
                         className="mt-3 text-brand-600 hover:underline text-sm"
                         onClick={() => {
                             if (referrer) {
-                                setReferrer(null)
+                                clearListContext()
                                 setHash(referrer.page, referrer.id)
                             } else {
                                 setHash('stock')
@@ -90,7 +90,7 @@ export function StockDetailPage({ stockId }: StockDetailPageProps) {
                         }}
                         type="button"
                     >
-                        ← Back to {referrer?.label || 'Stock'}
+                        ← {referrer ? `Back to ${referrer.label}` : 'Back to Stock'}
                     </button>
                 </Card>
             </section>
@@ -106,7 +106,7 @@ export function StockDetailPage({ stockId }: StockDetailPageProps) {
                         className="text-brand-600 hover:underline text-sm"
                         onClick={() => {
                             if (referrer) {
-                                setReferrer(null)
+                                clearListContext()
                                 setHash(referrer.page, referrer.id)
                             } else {
                                 setHash('stock')
@@ -114,7 +114,7 @@ export function StockDetailPage({ stockId }: StockDetailPageProps) {
                         }}
                         type="button"
                     >
-                        ← Back to {referrer?.label || 'Stock'}
+                        ← {referrer ? `Back to ${referrer.label}` : 'Back to Stock'}
                     </button>
                     {listContext && (
                         <div className="flex items-center gap-2">
@@ -147,47 +147,46 @@ export function StockDetailPage({ stockId }: StockDetailPageProps) {
                     )}
                 </div>
                 <div className="space-y-3 text-sm text-slate-800">
-                    <div className="font-semibold text-lg">
-                        <button
-                            className="text-brand-600 hover:underline text-left"
-                            onClick={() => {
-                                setReferrer({ page: 'stock', id: stockId, label: `Stock ${stock.id}` })
-                                setHash('items', stock.item_sku)
-                            }}
-                            type="button"
-                        >
-                            {stock.item_sku}
-                        </button>
-                        <span className="text-slate-600 font-normal"> — {stock.item_name}</span>
-                    </div>
+                    <div className="font-semibold text-lg">Stock {stock.id}</div>
                     <div className="grid grid-cols-2 gap-3">
                         <Card title="Item">
-                            <div className="space-y-1">
-                                <div><span className="font-medium">SKU:</span> {stock.item_sku}</div>
-                                <div><span className="font-medium">Name:</span> {stock.item_name}</div>
-                                <div><span className="font-medium">Type:</span> <Badge>{stock.item_type}</Badge></div>
+                            <div className="space-y-2">
+                                <div>
+                                    <button
+                                        className="text-brand-600 hover:underline font-medium"
+                                        onClick={() => {
+                                            setReferrer({ page: 'stock', id: stockId, label: `Stock ${stock.id}` })
+                                            setHash('items', stock.item_sku)
+                                        }}
+                                        type="button"
+                                    >
+                                        {stock.item_sku}
+                                    </button>
+                                </div>
+                                <div className="text-slate-600">{stock.item_name}</div>
+                                <div><Badge>{stock.item_type}</Badge></div>
                             </div>
                         </Card>
                         <Card title="Location">
-                            <div className="space-y-1">
-                                <div><span className="font-medium">Warehouse:</span> {stock.warehouse}</div>
-                                <div><span className="font-medium">Location:</span> {stock.location}</div>
+                            <div className="space-y-2">
+                                <div><span className="text-slate-500">Warehouse:</span> {stock.warehouse}</div>
+                                <div><span className="text-slate-500">Location:</span> {stock.location}</div>
                             </div>
                         </Card>
                     </div>
                     <Card title="Quantities">
                         <div className="grid grid-cols-3 gap-4 text-center">
                             <div>
-                                <div className="text-2xl font-semibold text-red-600 font-mono">{formatQuantity(stock.on_hand)}</div>
-                                <div className="text-xs text-slate-600">On Hand</div>
+                                <div className="text-2xl font-semibold text-slate-800 font-mono">{formatQuantity(stock.on_hand)}</div>
+                                <div className="text-xs text-slate-500">On Hand</div>
                             </div>
                             <div>
-                                <div className="text-2xl font-semibold text-red-600 font-mono">{formatQuantity(stock.reserved)}</div>
-                                <div className="text-xs text-slate-600">Reserved</div>
+                                <div className="text-2xl font-semibold text-orange-600 font-mono">{formatQuantity(stock.reserved)}</div>
+                                <div className="text-xs text-slate-500">Reserved</div>
                             </div>
                             <div>
-                                <div className="text-2xl font-semibold text-red-600 font-mono">{formatQuantity(stock.available)}</div>
-                                <div className="text-xs text-slate-600">Available</div>
+                                <div className="text-2xl font-semibold text-green-600 font-mono">{formatQuantity(stock.available)}</div>
+                                <div className="text-xs text-slate-500">Available</div>
                             </div>
                         </div>
                     </Card>

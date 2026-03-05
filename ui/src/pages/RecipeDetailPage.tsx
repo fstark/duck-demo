@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react'
 import { Card } from '../components/Card'
 import { Table } from '../components/Table'
+import { Badge } from '../components/Badge'
 import { Recipe, RecipeIngredient, RecipeOperation } from '../types'
 import { formatQtyWithUom } from '../utils/quantity.tsx'
 import { api } from '../api'
 import { useNavigation } from '../contexts/NavigationContext'
+import { useTableSort } from '../utils/useTableSort'
 
 type SortDir = 'asc' | 'desc'
 type IngredientSortState = { key: keyof RecipeIngredient; dir: SortDir }
@@ -116,9 +118,9 @@ export function RecipeDetailPage({ recipeId }: RecipeDetailPageProps) {
     if (loading) {
         return (
             <section>
-                <div className="text-lg font-semibold text-slate-800 mb-4">Recipe Detail</div>
+                <div className="text-lg font-semibold text-slate-800 mb-4">Recipe Details</div>
                 <Card>
-                    <div className="text-sm text-gray-500">Loading recipe...</div>
+                    <div className="text-sm text-slate-500">Loading recipe...</div>
                 </Card>
             </section>
         )
@@ -127,7 +129,7 @@ export function RecipeDetailPage({ recipeId }: RecipeDetailPageProps) {
     if (error || !recipe) {
         return (
             <section>
-                <div className="text-lg font-semibold text-slate-800 mb-4">Recipe Detail</div>
+                <div className="text-lg font-semibold text-slate-800 mb-4">Recipe Details</div>
                 <Card>
                     <div className="text-sm text-red-600">{error || 'Recipe not found'}</div>
                     <button
@@ -174,143 +176,139 @@ export function RecipeDetailPage({ recipeId }: RecipeDetailPageProps) {
     const sortedOperations = sortOperations(operations, operationSort)
 
     return (
-        <>
-            <section>
-                <div className="text-lg font-semibold text-slate-800 mb-4">Recipe: {recipe.output_name || recipe.output_sku} · {recipe.id}</div>
-                <Card>
-                    <div className="flex items-center justify-between mb-4">
-                        <button
-                            className="text-brand-600 hover:underline text-sm"
-                            onClick={() => {
-                                if (referrer) {
-                                    clearListContext()
-                                    setHash(referrer.page, referrer.id)
-                                } else {
-                                    setHash('recipes')
-                                }
-                            }}
-                            type="button"
-                        >
-                            ← {referrer ? `Back to ${referrer.label}` : 'Back to Recipes'}
-                        </button>
-                        {listContext && (
-                            <div className="flex items-center gap-2">
-                                <button
-                                    className={`px-3 py-1 text-sm rounded ${hasPrevious
-                                        ? 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                                        : 'bg-slate-50 text-slate-300 cursor-not-allowed'
-                                        }`}
-                                    onClick={handlePrevious}
-                                    disabled={!hasPrevious}
-                                    type="button"
-                                >
-                                    ← Previous
-                                </button>
-                                <span className="text-xs text-slate-500">
-                                    {listContext.currentIndex + 1} of {listContext.items.length}
-                                </span>
-                                <button
-                                    className={`px-3 py-1 text-sm rounded ${hasNext
-                                        ? 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                                        : 'bg-slate-50 text-slate-300 cursor-not-allowed'
-                                        }`}
-                                    onClick={handleNext}
-                                    disabled={!hasNext}
-                                    type="button"
-                                >
-                                    Next →
-                                </button>
+        <section>
+            <div className="text-lg font-semibold text-slate-800 mb-4">Recipe Details</div>
+            <Card>
+                <div className="flex items-center justify-between mb-4">
+                    <button
+                        className="text-brand-600 hover:underline text-sm"
+                        onClick={() => {
+                            if (referrer) {
+                                clearListContext()
+                                setHash(referrer.page, referrer.id)
+                            } else {
+                                setHash('recipes')
+                            }
+                        }}
+                        type="button"
+                    >
+                        ← {referrer ? `Back to ${referrer.label}` : 'Back to Recipes'}
+                    </button>
+                    {listContext && (
+                        <div className="flex items-center gap-2">
+                            <button
+                                className={`px-3 py-1 text-sm rounded ${hasPrevious
+                                    ? 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                                    : 'bg-slate-50 text-slate-300 cursor-not-allowed'
+                                    }`}
+                                onClick={handlePrevious}
+                                disabled={!hasPrevious}
+                                type="button"
+                            >
+                                ← Previous
+                            </button>
+                            <span className="text-xs text-slate-500">
+                                {listContext.currentIndex + 1} of {listContext.items.length}
+                            </span>
+                            <button
+                                className={`px-3 py-1 text-sm rounded ${hasNext
+                                    ? 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                                    : 'bg-slate-50 text-slate-300 cursor-not-allowed'
+                                    }`}
+                                onClick={handleNext}
+                                disabled={!hasNext}
+                                type="button"
+                            >
+                                Next →
+                            </button>
+                        </div>
+                    )}
+                </div>
+                <div className="space-y-3 text-sm text-slate-800">
+                    <div className="font-semibold text-lg">Recipe {recipe.id}</div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                        <Card title="Output">
+                            <div className="space-y-2">
+                                <div>
+                                    <button
+                                        className="text-brand-600 hover:underline font-medium"
+                                        onClick={() => {
+                                            setReferrer({ page: 'recipes', id: recipeId, label: `Recipe ${recipe.id}` })
+                                            setHash('items', recipe.output_sku)
+                                        }}
+                                        type="button"
+                                    >
+                                        {recipe.output_sku}
+                                    </button>
+                                </div>
+                                <div className="text-slate-600">{recipe.output_name}</div>
+                                {recipe.output_type && <div><Badge>{recipe.output_type}</Badge></div>}
                             </div>
-                        )}
+                        </Card>
+
+                        <Card title="Production">
+                            <div className="space-y-2">
+                                <div><span className="text-slate-500">Batch size:</span> {formatQtyWithUom(recipe.output_qty, recipe.output_uom || 'ea')}</div>
+                                <div><span className="text-slate-500">Production time:</span> {recipe.production_time_hours} hours</div>
+                            </div>
+                        </Card>
                     </div>
-                    <dl className="grid grid-cols-1 gap-x-4 gap-y-4 sm:grid-cols-2">
-                        <div>
-                            <dt className="text-sm font-medium text-gray-500">Output Item</dt>
-                            <dd className="text-sm text-gray-900">
-                                <button
-                                    className="text-brand-600 hover:underline text-left"
-                                    onClick={() => {
-                                        setReferrer({ page: 'recipes', id: recipeId, label: `Recipe ${recipe.id}` })
-                                        setHash('items', recipe.output_sku)
-                                    }}
-                                    type="button"
-                                >
-                                    {recipe.output_sku}
-                                </button>
-                                {' - '}{recipe.output_name}
-                            </dd>
-                        </div>
-                        <div>
-                            <dt className="text-sm font-medium text-gray-500">Output Type</dt>
-                            <dd className="text-sm text-gray-900">{recipe.output_type || '—'}</dd>
-                        </div>
-                        <div>
-                            <dt className="text-sm font-medium text-gray-500">Batch Size</dt>
-                            <dd className="text-sm text-gray-900">{formatQtyWithUom(recipe.output_qty, recipe.output_uom || 'ea')}</dd>
-                        </div>
-                        <div>
-                            <dt className="text-sm font-medium text-gray-500">Production Time</dt>
-                            <dd className="text-sm text-gray-900">{recipe.production_time_hours} hours</dd>
-                        </div>
-                        {recipe.notes && (
-                            <div className="sm:col-span-2">
-                                <dt className="text-sm font-medium text-gray-500">Notes</dt>
-                                <dd className="text-sm text-gray-900 whitespace-pre-wrap">{recipe.notes}</dd>
-                            </div>
+
+                    {recipe.notes && (
+                        <Card title="Notes">
+                            <div className="text-slate-700 whitespace-pre-wrap">{recipe.notes}</div>
+                        </Card>
+                    )}
+
+                    <Card title={`Ingredients (${ingredients.length})`}>
+                        {ingredients.length === 0 ? (
+                            <div className="text-sm text-slate-500">No ingredients</div>
+                        ) : (
+                            <Table
+                                rows={sortedIngredients}
+                                columns={[
+                                    { key: 'sequence_order', label: '#', sortable: true },
+                                    { key: 'ingredient_sku', label: 'SKU', sortable: true },
+                                    { key: 'ingredient_name', label: 'Ingredient', sortable: true },
+                                    {
+                                        key: 'input_qty',
+                                        label: 'Qty per Batch',
+                                        sortable: true,
+                                        render: (row) => formatQtyWithUom(row.input_qty, row.input_uom)
+                                    },
+                                ]}
+                                sortKey={ingredientSort?.key}
+                                sortDir={ingredientSort?.dir}
+                                onSort={(key) => setIngredientSort((prev) => nextIngredientSort(prev, key as keyof RecipeIngredient))}
+                                onRowClick={(row) => {
+                                    setReferrer({ page: 'recipes', id: recipeId, label: `Recipe ${recipe.id}` })
+                                    setHash('items', row.ingredient_sku || '')
+                                }}
+                            />
                         )}
-                    </dl>
-                </Card>
-            </section>
+                    </Card>
 
-            <section>
-                <div className="text-lg font-semibold text-slate-800 mb-4">Ingredients · {ingredients.length} total</div>
-                <Card>
-                    {ingredients.length === 0 ? (
-                        <div className="text-sm text-gray-500">No ingredients</div>
-                    ) : (
-                        <Table
-                            rows={sortedIngredients}
-                            columns={[
-                                { key: 'sequence_order', label: '#', sortable: true },
-                                { key: 'ingredient_sku', label: 'SKU', sortable: true },
-                                { key: 'ingredient_name', label: 'Ingredient', sortable: true },
-                                {
-                                    key: 'input_qty',
-                                    label: 'Qty per Batch',
-                                    sortable: true,
-                                    render: (row) => formatQtyWithUom(row.input_qty, row.input_uom)
-                                },
-                            ]}
-                            sortKey={ingredientSort?.key}
-                            sortDir={ingredientSort?.dir}
-                            onSort={(key) => setIngredientSort((prev) => nextIngredientSort(prev, key as keyof RecipeIngredient))}
-                            onRowClick={(row) => setHash('items', row.ingredient_sku || '')}
-                        />
-                    )}
-                </Card>
-            </section>
-
-            <section>
-                <div className="text-lg font-semibold text-slate-800 mb-4">Operations · {operations.length} operations, {recipe.production_time_hours} hrs total</div>
-                <Card>
-                    {operations.length === 0 ? (
-                        <div className="text-sm text-gray-500">No operations</div>
-                    ) : (
-                        <Table
-                            rows={sortedOperations}
-                            columns={[
-                                { key: 'sequence_order', label: '#', sortable: true },
-                                { key: 'operation_name', label: 'Operation', sortable: true },
-                                { key: 'work_center', label: 'Work Center', sortable: true, render: (row) => row.work_center || '—' },
-                                { key: 'duration_hours', label: 'Duration (hrs)', sortable: true },
-                            ]}
-                            sortKey={operationSort?.key}
-                            sortDir={operationSort?.dir}
-                            onSort={(key) => setOperationSort((prev) => nextOperationSort(prev, key as keyof RecipeOperation))}
-                        />
-                    )}
-                </Card>
-            </section>
-        </>
+                    <Card title={`Operations (${operations.length})`}>
+                        {operations.length === 0 ? (
+                            <div className="text-sm text-slate-500">No operations</div>
+                        ) : (
+                            <Table
+                                rows={sortedOperations}
+                                columns={[
+                                    { key: 'sequence_order', label: '#', sortable: true },
+                                    { key: 'operation_name', label: 'Operation', sortable: true },
+                                    { key: 'work_center', label: 'Work Center', sortable: true, render: (row) => row.work_center || '—' },
+                                    { key: 'duration_hours', label: 'Duration (hrs)', sortable: true },
+                                ]}
+                                sortKey={operationSort?.key}
+                                sortDir={operationSort?.dir}
+                                onSort={(key) => setOperationSort((prev) => nextOperationSort(prev, key as keyof RecipeOperation))}
+                            />
+                        )}
+                    </Card>
+                </div>
+            </Card>
+        </section>
     )
 }

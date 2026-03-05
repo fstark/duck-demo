@@ -21,7 +21,7 @@ interface EmailDetailPageProps {
 export function EmailDetailPage({ emailId }: EmailDetailPageProps) {
     const [emailData, setEmailData] = useState<EmailDetail | null>(null)
     const [loading, setLoading] = useState(true)
-    const { listContext, setListContext, referrer, setReferrer } = useNavigation()
+    const { listContext, setListContext, referrer, setReferrer, clearListContext } = useNavigation()
     const [error, setError] = useState<string | null>(null)
     const [showRaw, setShowRaw] = useState(false)
 
@@ -59,7 +59,7 @@ export function EmailDetailPage({ emailId }: EmailDetailPageProps) {
                         className="mt-3 text-brand-600 hover:underline text-sm"
                         onClick={() => {
                             if (referrer) {
-                                setReferrer(null)
+                                clearListContext()
                                 setHash(referrer.page, referrer.id)
                             } else {
                                 setHash('emails')
@@ -67,7 +67,7 @@ export function EmailDetailPage({ emailId }: EmailDetailPageProps) {
                         }}
                         type="button"
                     >
-                        ← Back to {referrer?.label || 'Emails'}
+                        ← {referrer ? `Back to ${referrer.label}` : 'Back to Emails'}
                     </button>
                 </Card>
             </section>
@@ -103,36 +103,25 @@ export function EmailDetailPage({ emailId }: EmailDetailPageProps) {
         setHash('emails', nextEmail.id)
     }
 
+    const getStatusBadge = (status: string) => {
+        const variants: Record<string, 'success' | 'warning' | 'danger' | 'info'> = {
+            sent: 'success',
+            draft: 'info',
+            failed: 'danger',
+        }
+        return <Badge variant={variants[status] || 'info'}>{status}</Badge>
+    }
+
     return (
-        <section className="space-y-6">
-            <div className="flex items-center justify-between">
-                <div className="text-lg font-semibold text-slate-800">Email Details</div>
-                <div className="flex gap-2">
-                    {listContext && (
-                        <>
-                            <button
-                                className="px-3 py-1 text-sm bg-white border border-slate-300 rounded hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
-                                onClick={handlePrevious}
-                                disabled={!hasPrevious}
-                                type="button"
-                            >
-                                ← Previous
-                            </button>
-                            <button
-                                className="px-3 py-1 text-sm bg-white border border-slate-300 rounded hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
-                                onClick={handleNext}
-                                disabled={!hasNext}
-                                type="button"
-                            >
-                                Next →
-                            </button>
-                        </>
-                    )}
+        <section>
+            <div className="text-lg font-semibold text-slate-800 mb-4">Email Details</div>
+            <Card>
+                <div className="flex items-center justify-between mb-4">
                     <button
-                        className="px-3 py-1 text-sm bg-white border border-slate-300 rounded hover:bg-slate-50"
+                        className="text-brand-600 hover:underline text-sm"
                         onClick={() => {
                             if (referrer) {
-                                setReferrer(null)
+                                clearListContext()
                                 setHash(referrer.page, referrer.id)
                             } else {
                                 setHash('emails')
@@ -140,139 +129,133 @@ export function EmailDetailPage({ emailId }: EmailDetailPageProps) {
                         }}
                         type="button"
                     >
-                        ← Back to {referrer?.label || 'Emails'}
+                        ← {referrer ? `Back to ${referrer.label}` : 'Back to Emails'}
                     </button>
-                </div>
-            </div>
-
-            <Card title="Email Information">
-                <div className="space-y-3 text-sm">
-                    <div className="grid grid-cols-2 gap-4">
-                        <div>
-                            <span className="font-medium text-slate-700">ID:</span>
-                            <span className="ml-2 text-slate-600">{email.id}</span>
-                        </div>
-                        <div>
-                            <span className="font-medium text-slate-700">Status:</span>
-                            <span className="ml-2">
-                                <Badge variant={email.status === 'sent' ? 'success' : 'neutral'}>
-                                    {email.status}
-                                </Badge>
+                    {listContext && (
+                        <div className="flex items-center gap-2">
+                            <button
+                                className={`px-3 py-1 text-sm rounded ${hasPrevious
+                                    ? 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                                    : 'bg-slate-50 text-slate-300 cursor-not-allowed'
+                                    }`}
+                                onClick={handlePrevious}
+                                disabled={!hasPrevious}
+                                type="button"
+                            >
+                                ← Previous
+                            </button>
+                            <span className="text-xs text-slate-500">
+                                {listContext.currentIndex + 1} of {listContext.items.length}
                             </span>
-                        </div>
-                    </div>
-                    <div>
-                        <span className="font-medium text-slate-700">Subject:</span>
-                        <div className="mt-1 text-slate-800">{email.subject}</div>
-                    </div>
-                    <div>
-                        <span className="font-medium text-slate-700">Created:</span>
-                        <span className="ml-2 text-slate-600">{formatDate(email.created_at)}</span>
-                    </div>
-                    <div>
-                        <span className="font-medium text-slate-700">Modified:</span>
-                        <span className="ml-2 text-slate-600">{formatDate(email.modified_at)}</span>
-                    </div>
-                    {email.sent_at && (
-                        <div>
-                            <span className="font-medium text-slate-700">Sent:</span>
-                            <span className="ml-2 text-slate-600">{formatDate(email.sent_at)}</span>
+                            <button
+                                className={`px-3 py-1 text-sm rounded ${hasNext
+                                    ? 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                                    : 'bg-slate-50 text-slate-300 cursor-not-allowed'
+                                    }`}
+                                onClick={handleNext}
+                                disabled={!hasNext}
+                                type="button"
+                            >
+                                Next →
+                            </button>
                         </div>
                     )}
                 </div>
-            </Card>
-
-            <Card title="Recipient">
-                <div className="space-y-2 text-sm">
-                    <div>
-                        <span className="font-medium text-slate-700">Name:</span>
-                        <span className="ml-2 text-slate-600">{email.recipient_name || '—'}</span>
+                <div className="space-y-3 text-sm text-slate-800">
+                    <div className="flex items-center gap-3">
+                        <div className="font-semibold text-lg">Email {email.id}</div>
+                        {getStatusBadge(email.status)}
                     </div>
-                    <div>
-                        <span className="font-medium text-slate-700">Email:</span>
-                        <span className="ml-2 text-slate-600">{email.recipient_email}</span>
-                    </div>
-                </div>
-            </Card>
 
-            <Card title="Email Body">
-                <div className="mb-3">
-                    <button
-                        className="text-xs text-brand-600 hover:underline"
-                        onClick={() => setShowRaw(!showRaw)}
-                        type="button"
-                    >
-                        {showRaw ? 'Show Rendered' : 'Show Raw'}
-                    </button>
-                </div>
-                {showRaw ? (
-                    <pre className="text-sm text-slate-700 whitespace-pre-wrap font-mono">{email.body}</pre>
-                ) : (
-                    <div className="prose prose-slate prose-sm max-w-none">
-                        <ReactMarkdown>{email.body}</ReactMarkdown>
-                    </div>
-                )}
-            </Card>
+                    <div className="grid grid-cols-2 gap-3">
+                        <Card title="Email Information">
+                            <div className="space-y-2">
+                                <div><span className="text-slate-500">Subject:</span> <span className="font-medium">{email.subject}</span></div>
+                                <div><span className="text-slate-500">Created:</span> {formatDate(email.created_at)}</div>
+                                <div><span className="text-slate-500">Modified:</span> {formatDate(email.modified_at)}</div>
+                                {email.sent_at && (
+                                    <div><span className="text-slate-500">Sent:</span> {formatDate(email.sent_at)}</div>
+                                )}
+                            </div>
+                        </Card>
 
-            {customer && (
-                <Card title="Customer">
-                    <div className="space-y-2 text-sm">
-                        <div>
-                            <span className="font-medium text-slate-700">Name:</span>
+                        <Card title="Recipient">
+                            <div className="space-y-2">
+                                <div><span className="text-slate-500">Name:</span> {email.recipient_name || '—'}</div>
+                                <div><span className="text-slate-500">Email:</span> {email.recipient_email}</div>
+                            </div>
+                        </Card>
+                    </div>
+
+                    <Card title="Email Body">
+                        <div className="mb-3">
                             <button
-                                className="ml-2 text-brand-600 hover:underline"
-                                onClick={() => {
-                                    setReferrer({ page: 'emails', id: email.id, label: `Email ${email.id}` })
-                                    setHash('customers', email.customer_id)
-                                }}
+                                className="text-xs text-brand-600 hover:underline"
+                                onClick={() => setShowRaw(!showRaw)}
                                 type="button"
                             >
-                                {customer.name}
+                                {showRaw ? 'Show Rendered' : 'Show Raw'}
                             </button>
                         </div>
-                        {customer.company && (
-                            <div>
-                                <span className="font-medium text-slate-700">Company:</span>
-                                <span className="ml-2 text-slate-600">{customer.company}</span>
+                        {showRaw ? (
+                            <pre className="text-sm text-slate-700 whitespace-pre-wrap font-mono">{email.body}</pre>
+                        ) : (
+                            <div className="prose prose-slate prose-sm max-w-none">
+                                <ReactMarkdown>{email.body}</ReactMarkdown>
                             </div>
                         )}
-                        {customer.email && (
-                            <div>
-                                <span className="font-medium text-slate-700">Email:</span>
-                                <span className="ml-2 text-slate-600">{customer.email}</span>
-                            </div>
-                        )}
-                    </div>
-                </Card>
-            )}
+                    </Card>
 
-            {salesOrder && (
-                <Card title="Sales Order">
-                    <div className="space-y-2 text-sm">
-                        <div>
-                            <span className="font-medium text-slate-700">Order ID:</span>
-                            <button
-                                className="ml-2 text-brand-600 hover:underline"
-                                onClick={() => {
-                                    setReferrer({ page: 'emails', id: email.id, label: `Email ${email.id}` })
-                                    setHash('orders', email.sales_order_id!)
-                                }}
-                                type="button"
-                            >
-                                {email.sales_order_id}
-                            </button>
-                        </div>
-                        {salesOrder.status && (
-                            <div>
-                                <span className="font-medium text-slate-700">Status:</span>
-                                <span className="ml-2">
-                                    <Badge variant="neutral">{salesOrder.status}</Badge>
-                                </span>
+                    {customer && (
+                        <Card title="Customer">
+                            <div className="space-y-2">
+                                <div>
+                                    <button
+                                        className="text-brand-600 hover:underline font-medium"
+                                        onClick={() => {
+                                            setReferrer({ page: 'emails', id: email.id, label: `Email ${email.id}` })
+                                            setHash('customers', email.customer_id)
+                                        }}
+                                        type="button"
+                                    >
+                                        {customer.name}
+                                    </button>
+                                </div>
+                                {customer.company && (
+                                    <div className="text-slate-600">{customer.company}</div>
+                                )}
+                                {customer.email && (
+                                    <div className="text-slate-600 text-xs">{customer.email}</div>
+                                )}
                             </div>
-                        )}
-                    </div>
-                </Card>
-            )}
+                        </Card>
+                    )}
+
+                    {salesOrder && (
+                        <Card title="Sales Order">
+                            <div className="space-y-2">
+                                <div>
+                                    <button
+                                        className="text-brand-600 hover:underline font-medium"
+                                        onClick={() => {
+                                            setReferrer({ page: 'emails', id: email.id, label: `Email ${email.id}` })
+                                            setHash('orders', email.sales_order_id!)
+                                        }}
+                                        type="button"
+                                    >
+                                        {email.sales_order_id}
+                                    </button>
+                                </div>
+                                {salesOrder.status && (
+                                    <div>
+                                        <Badge variant="neutral">{salesOrder.status}</Badge>
+                                    </div>
+                                )}
+                            </div>
+                        </Card>
+                    )}
+                </div>
+            </Card>
         </section>
     )
 }
