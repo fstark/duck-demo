@@ -16,6 +16,7 @@ def get_statistics(
         item_type: Optional[str],
         warehouse: Optional[str],
         city: Optional[str],
+        item_ids: Optional[List[str]],
         limit: int,
         return_chart: Optional[str] = None,
         chart_title: Optional[str] = None,
@@ -28,7 +29,7 @@ def get_statistics(
         entity_config = {
             "customers": {"table": "customers", "join": None, "field_mapping": {}, "date_field_table": None, "valid_fields": ["id"], "valid_groups": ["city", "company"], "date_fields": ["created_at"]},
             "sales_orders": {"table": "sales_orders", "join": None, "field_mapping": {}, "date_field_table": None, "valid_fields": ["id"], "valid_groups": ["status", "customer_id"], "date_fields": ["created_at", "requested_delivery_date"]},
-            "sales_order_lines": {"table": "sales_order_lines", "join": "LEFT JOIN sales_orders ON sales_order_lines.sales_order_id = sales_orders.id", "field_mapping": {}, "date_field_table": "sales_orders", "valid_fields": ["qty"], "valid_groups": ["sales_order_id", "item_id"], "date_fields": ["created_at"]},
+            "sales_order_lines": {"table": "sales_order_lines", "join": "LEFT JOIN sales_orders ON sales_order_lines.sales_order_id = sales_orders.id", "field_mapping": {}, "date_field_table": "sales_orders", "valid_fields": ["qty", "line_total"], "valid_groups": ["sales_order_id", "item_id"], "date_fields": ["created_at"]},
             "items": {"table": "items", "join": None, "field_mapping": {}, "date_field_table": None, "valid_fields": ["unit_price"], "valid_groups": ["type"], "date_fields": []},
             "stock": {"table": "stock", "join": None, "field_mapping": {}, "date_field_table": None, "valid_fields": ["on_hand"], "valid_groups": ["warehouse", "location", "item_id"], "date_fields": []},
             "production_orders": {"table": "production_orders", "join": "LEFT JOIN recipes ON production_orders.recipe_id = recipes.id", "field_mapping": {"qty": "recipes.output_qty"}, "date_field_table": None, "valid_fields": ["id", "qty"], "valid_groups": ["status", "item_id"], "date_fields": ["started_at", "completed_at", "eta_finish", "eta_ship"]},
@@ -89,6 +90,10 @@ def get_statistics(
         if city:
             filters.append(f"{table}.city = ?")
             params.append(city)
+        if item_ids:
+            placeholders = ",".join(["?" for _ in item_ids])
+            filters.append(f"{table}.item_id IN ({placeholders})")
+            params.extend(item_ids)
 
         # Date range filtering
         if date_from or date_to:

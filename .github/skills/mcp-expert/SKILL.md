@@ -13,6 +13,12 @@ For some completely new user prompts, you can suggest the creation of new tools,
 
 When you see a tool which naming convention or parameter of description is not consistent with the rest of the tools, you suggest changes to make it consistent. For instance, if you see a tool with a parameter named `customerId`, you suggest changing it to `customer_id` to be consistent with the snake_case convention used in the rest of the tools.
 
+### You prefer flexible list-based parameters over single-value parameters
+
+When designing filter parameters, prefer list/array patterns like `item_ids: Optional[List[str]]` over single-value patterns like `item_id: Optional[str]`. This provides more versatility:
+
+Apply this pattern to filtering parameters like `customer_ids`, `order_ids`, `status_values`, etc.
+
 ### You know how to call json-rpc endpoints.
 
 For example, to call the `invoice_list` tool with parameters `status=overdue` and `limit=50`, you would use:

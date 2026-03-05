@@ -20,6 +20,7 @@ def register(mcp):
         item_type: Optional[str] = None,
         warehouse: Optional[str] = None,
         city: Optional[str] = None,
+        item_ids: Optional[List[str]] = None,
         date_from: Optional[str] = None,
         date_to: Optional[str] = None,
         limit: int = 100,
@@ -39,6 +40,7 @@ def register(mcp):
             item_type: Filter by item type (for items)
             warehouse: Filter by warehouse (for stock)
             city: Filter by city (for customers)
+            item_ids: Filter by specific item IDs (for sales_order_lines, shipment_lines, production_orders, purchase_orders, stock)
             date_from: Filter records from this date (inclusive, YYYY-MM-DD). Uses the entity's primary date field (e.g., created_at for sales_orders/sales_order_lines, completed_at for production_orders)
             date_to: Filter records up to this date (inclusive, YYYY-MM-DD). Uses the same date field as date_from
             limit: Maximum results for grouped queries (default: 100)
@@ -48,7 +50,7 @@ def register(mcp):
         Entity Types and Valid Fields:
             - customers: fields=[id], groups=[city, company], dates=[created_at]
             - sales_orders: fields=[id], groups=[status, customer_id], dates=[created_at, requested_delivery_date]
-            - sales_order_lines: fields=[qty], groups=[sales_order_id, item_id], dates=[created_at] 📦 Use for order quantities (dates from parent sales_orders)
+            - sales_order_lines: fields=[qty, line_total], groups=[sales_order_id, item_id], dates=[created_at] 📦 Use for order quantities & revenue (dates from parent sales_orders)
             - items: fields=[unit_price], groups=[type]
             - stock: fields=[on_hand], groups=[warehouse, location, item_id]
             - production_orders: fields=[id, qty], groups=[status, item_id], dates=[started_at, completed_at, eta_finish, eta_ship] 🏭 qty via join with recipes
@@ -84,5 +86,8 @@ def register(mcp):
 
             Most popular duck in October 2025:
                 entity="sales_order_lines", metric="sum", field="qty", group_by="item_id", date_from="2025-10-01", date_to="2025-10-31", limit=1
+
+            Revenue per month for pirate ducks:
+                entity="sales_order_lines", metric="sum", field="line_total", item_ids=["ITEM-PIRATE-15"], group_by="month:created_at"
         """
-        return stats_service.get_statistics(entity, metric, group_by, field, status, item_type, warehouse, city, limit, return_chart, chart_title, date_from, date_to)
+        return stats_service.get_statistics(entity, metric, group_by, field, status, item_type, warehouse, city, item_ids, limit, return_chart, chart_title, date_from, date_to)
