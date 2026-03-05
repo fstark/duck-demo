@@ -1,0 +1,7 @@
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+markers = [
+    "rest: REST API contract tests",
+    "mcp: MCP tool contract tests",
+]

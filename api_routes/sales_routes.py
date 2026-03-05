@@ -74,7 +74,7 @@ def register(mcp):
         result = pricing_service.calculate_quote_options(
             sku=sku,
             qty=qty_int,
-            need_by=qp.get("need_by"),
+            delivery_date=qp.get("delivery_date"),
             allowed_subs=allowed_subs,
         )
         return _json(result)

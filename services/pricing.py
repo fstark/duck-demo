@@ -122,7 +122,7 @@ def calculate_quote_options(sku: str, qty: int, delivery_date: Optional[str], al
     if not item:
         raise ValueError("Unknown item")
 
-    need_by_dt = parse_date(delivery_date)
+    delivery_dt = parse_date(delivery_date)
     availability = inventory_service.get_stock_summary(item["id"])
     available = max(0, availability["available_total"])
     transit_days = config.TRANSIT_DAYS_DEFAULT
