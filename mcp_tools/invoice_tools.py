@@ -75,19 +75,19 @@ def register(mcp):
 
     @mcp.tool(name="invoice_list", meta={"tags": ["sales"]})
     @log_tool("invoice_list")
-    def invoice_list(customer_id: Optional[str] = None, status: Optional[str] = None, limit: int = 50) -> Dict[str, Any]:
+    def invoice_list(customer_ids: Optional[List[str]] = None, status: Optional[str] = None, limit: int = 50) -> Dict[str, Any]:
         """
         List invoices with optional filters.
 
         Parameters:
-            customer_id: Optional customer ID to filter by
+            customer_ids: Optional list of customer IDs to filter by (e.g., ['CUST-0001', 'CUST-0002'])
             status: Optional status filter (draft, issued, paid, overdue)
             limit: Maximum results (default: 50)
 
         Returns:
             Dictionary with invoices array
         """
-        return invoice_service.list_invoices(customer_id=customer_id, status=status, limit=limit)
+        return invoice_service.list_invoices(customer_ids=customer_ids, status=status, limit=limit)
 
     # MUTATING TOOL
     @mcp.tool(name="invoice_issue", meta={

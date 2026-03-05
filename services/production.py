@@ -105,11 +105,33 @@ def get_order_status(production_order_id: str) -> Dict[str, Any]:
         return result
 
 
-def find_orders_by_date_range(start_date: str, end_date: str, limit: int) -> List[Dict[str, Any]]:
-    """Retrieve production orders by date range."""
+def find_orders_by_date_range(
+    start_date: str, 
+    end_date: str, 
+    limit: int,
+    item_ids: Optional[List[str]] = None,
+    statuses: Optional[List[str]] = None
+) -> List[Dict[str, Any]]:
+    """Retrieve production orders by date range with optional filters."""
     with db_conn() as conn:
-        query = "SELECT po.*, i.name as item_name, i.sku as item_sku, i.type as item_type FROM production_orders po LEFT JOIN items i ON po.item_id = i.id WHERE po.eta_finish >= ? AND po.eta_finish <= ? ORDER BY po.eta_finish LIMIT ?"
-        rows = conn.execute(query, (start_date, end_date, limit)).fetchall()
+        filters = ["po.eta_finish >= ?", "po.eta_finish <= ?"]
+        params: List[Any] = [start_date, end_date]
+        
+        if item_ids:
+            placeholders = ','.join('?' * len(item_ids))
+            filters.append(f"po.item_id IN ({placeholders})")
+            params.extend(item_ids)
+        
+        if statuses:
+            placeholders = ','.join('?' * len(statuses))
+            filters.append(f"po.status IN ({placeholders})")
+            params.extend(statuses)
+        
+        where_clause = " AND ".join(filters)
+        query = f"SELECT po.*, i.name as item_name, i.sku as item_sku, i.type as item_type FROM production_orders po LEFT JOIN items i ON po.item_id = i.id WHERE {where_clause} ORDER BY po.eta_finish LIMIT ?"
+        params.append(limit)
+        
+        rows = conn.execute(query, params).fetchall()
         return [dict(row) for row in rows]
 
 

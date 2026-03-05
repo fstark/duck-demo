@@ -39,19 +39,19 @@ def register(mcp):
 
     @mcp.tool(name="sales_search_orders", meta={"tags": ["sales"]})
     @log_tool("sales_search_orders")
-    def search_sales_orders(customer_id: Optional[str] = None, limit: int = 5, sort: str = "most_recent") -> Dict[str, Any]:
+    def search_sales_orders(customer_ids: Optional[List[str]] = None, limit: int = 5, sort: str = "most_recent") -> Dict[str, Any]:
         """
-        Search sales orders, optionally filtered by customer. Returns full order details including pricing and fulfillment state.
+        Search sales orders, optionally filtered by customers. Returns full order details including pricing and fulfillment state.
 
         Parameters:
-            customer_id: Optional customer ID to filter by (if omitted, searches all orders)
+            customer_ids: Optional list of customer IDs to filter by (e.g., ['CUST-0001', 'CUST-0002']). If omitted, searches all orders.
             limit: Maximum results (default: 5)
             sort: Sort order - 'most_recent' or by ID
 
         Returns:
             Dictionary with sales_orders array including customer info, lines, total, currency, and fulfillment_state
         """
-        return sales_service.search_orders(customer_id, limit, sort)
+        return sales_service.search_orders(customer_ids, limit, sort)
 
     @mcp.tool(name="sales_get_order", meta={"tags": ["sales"]})
     @log_tool("sales_get_order")

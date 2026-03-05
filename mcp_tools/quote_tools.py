@@ -93,7 +93,7 @@ def register(mcp):
     @mcp.tool(name="quote_list", meta={"tags": ["sales"]})
     @log_tool("quote_list")
     def quote_list(
-        customer_id: Optional[str] = None,
+        customer_ids: Optional[List[str]] = None,
         status: Optional[str] = None,
         limit: int = 50,
         show_superseded: bool = False
@@ -102,7 +102,7 @@ def register(mcp):
         List quotes with optional filters. By default, hides superseded quotes.
 
         Parameters:
-            customer_id: Optional customer ID filter
+            customer_ids: Optional list of customer IDs to filter by (e.g., ['CUST-0001', 'CUST-0002'])
             status: Optional status filter (draft, sent, accepted, rejected, expired, superseded)
             limit: Maximum results (default: 50)
             show_superseded: Whether to show superseded quotes (default: false)
@@ -110,7 +110,7 @@ def register(mcp):
         Returns:
             Dictionary with quotes array
         """
-        return quote_service.list_quotes(customer_id, status, limit, show_superseded)
+        return quote_service.list_quotes(customer_ids, status, limit, show_superseded)
 
     # MUTATING TOOL
     @mcp.tool(name="quote_send", meta={

@@ -31,7 +31,13 @@ def register(mcp):
 
     @mcp.tool(name="production_search_orders", meta={"tags": ["production"]})
     @log_tool("production_search_orders")
-    def find_production_orders_by_date_range(start_date: str, end_date: str, limit: int = 100) -> List[Dict[str, Any]]:
+    def find_production_orders_by_date_range(
+        start_date: str, 
+        end_date: str, 
+        limit: int = 100,
+        item_ids: Optional[List[str]] = None,
+        statuses: Optional[List[str]] = None
+    ) -> List[Dict[str, Any]]:
         """
         Retrieve production orders scheduled to finish within a date range.
         Useful for analyzing production scheduling, capacity utilization, and identifying trends.
@@ -40,11 +46,13 @@ def register(mcp):
             start_date: Beginning of date range in YYYY-MM-DD format
             end_date: End of date range in YYYY-MM-DD format
             limit: Maximum number of records to return (default: 100)
+            item_ids: Optional list of item IDs to filter by (e.g., ['ITEM-ELVIS-20', 'ITEM-PIRATE-15'])
+            statuses: Optional list of statuses to filter by (e.g., ['ready', 'in_progress', 'completed'])
 
         Returns:
             List of production orders with item details, status, and eta_finish dates
         """
-        return production_service.find_orders_by_date_range(start_date, end_date, limit)
+        return production_service.find_orders_by_date_range(start_date, end_date, limit, item_ids, statuses)
 
     # MUTATING TOOL
     @mcp.tool(name="production_create_order", meta={

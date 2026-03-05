@@ -16,7 +16,7 @@ def register(mcp):
         category: Optional[str] = None,
         action: Optional[str] = None,
         entity_type: Optional[str] = None,
-        entity_id: Optional[str] = None,
+        entity_ids: Optional[List[str]] = None,
         since: Optional[str] = None,
         until: Optional[str] = None,
     ) -> Dict[str, Any]:
@@ -30,7 +30,7 @@ def register(mcp):
             category: Filter by category: sales, production, logistics, purchasing, billing.
             action: Filter by action, e.g. 'sales_order.created', 'production_order.completed'.
             entity_type: Filter by entity type, e.g. 'sales_order', 'shipment'.
-            entity_id: Filter by specific entity ID, e.g. 'SO-1042'.
+            entity_ids: Filter by specific entity IDs, e.g. ['SO-1042', 'SO-1043'].
             since: ISO datetime lower bound (inclusive).
             until: ISO datetime upper bound (inclusive).
 
@@ -44,7 +44,7 @@ def register(mcp):
             category=category,
             action=action,
             entity_type=entity_type,
-            entity_id=entity_id,
+            entity_ids=entity_ids,
             since=since,
             until=until,
         )

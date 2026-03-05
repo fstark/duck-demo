@@ -82,12 +82,13 @@ def create_order(
         return {"sales_order_id": so_id, "status": "draft", "lines": line_results, "total": p["total"], "currency": p["currency"], "ui_url": ui_href("orders", so_id)}
 
 
-def search_orders(customer_id: Optional[str], limit: int, sort: str) -> Dict[str, Any]:
+def search_orders(customer_ids: Optional[List[str]], limit: int, sort: str) -> Dict[str, Any]:
     """Return recent sales orders."""
     order_clause = "ORDER BY created_at DESC" if sort == "most_recent" else "ORDER BY id"
     with db_conn() as conn:
-        if customer_id:
-            cur = conn.execute(f"SELECT * FROM sales_orders WHERE customer_id = ? {order_clause} LIMIT ?", (customer_id, limit))
+        if customer_ids:
+            placeholders = ','.join('?' * len(customer_ids))
+            cur = conn.execute(f"SELECT * FROM sales_orders WHERE customer_id IN ({placeholders}) {order_clause} LIMIT ?", (*customer_ids, limit))
         else:
             cur = conn.execute(f"SELECT * FROM sales_orders {order_clause} LIMIT ?", (limit,))
         rows = cur.fetchall()

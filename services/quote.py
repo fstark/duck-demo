@@ -200,7 +200,7 @@ def get_quote(quote_id: str) -> Optional[Dict[str, Any]]:
 
 
 def list_quotes(
-    customer_id: Optional[str] = None,
+    customer_ids: Optional[List[str]] = None,
     status: Optional[str] = None,
     limit: int = 50,
     show_superseded: bool = False
@@ -209,9 +209,10 @@ def list_quotes(
     filters: List[str] = []
     params: List[Any] = []
 
-    if customer_id:
-        filters.append("q.customer_id = ?")
-        params.append(customer_id)
+    if customer_ids:
+        placeholders = ','.join('?' * len(customer_ids))
+        filters.append(f"q.customer_id IN ({placeholders})")
+        params.extend(customer_ids)
     if status:
         filters.append("q.status = ?")
         params.append(status)

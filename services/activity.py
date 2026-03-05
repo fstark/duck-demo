@@ -99,7 +99,7 @@ def get_log(
     category: Optional[str] = None,
     action: Optional[str] = None,
     entity_type: Optional[str] = None,
-    entity_id: Optional[str] = None,
+    entity_ids: Optional[List[str]] = None,
     since: Optional[str] = None,
     until: Optional[str] = None,
 ) -> Dict[str, Any]:
@@ -120,9 +120,10 @@ def get_log(
     if entity_type:
         conditions.append("entity_type = ?")
         params.append(entity_type)
-    if entity_id:
-        conditions.append("entity_id = ?")
-        params.append(entity_id)
+    if entity_ids:
+        placeholders = ','.join('?' * len(entity_ids))
+        conditions.append(f"entity_id IN ({placeholders})")
+        params.extend(entity_ids)
     if since:
         conditions.append("timestamp >= ?")
         params.append(since)

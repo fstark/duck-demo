@@ -33,8 +33,8 @@ def register(mcp):
     @mcp.tool(name="messaging_list_emails", meta={"tags": ["sales"]})
     @log_tool("messaging_list_emails")
     def messaging_list_emails(
-        customer_id: Optional[str] = None,
-        sales_order_id: Optional[str] = None,
+        customer_ids: Optional[List[str]] = None,
+        sales_order_ids: Optional[List[str]] = None,
         status: Optional[str] = None,
         limit: int = 20
     ) -> Dict[str, Any]:
@@ -42,10 +42,16 @@ def register(mcp):
         List emails with optional filters.
         Results sorted by modified_at DESC (most recently modified first).
 
+        Parameters:
+            customer_ids: Optional list of customer IDs to filter by (e.g., ['CUST-0001', 'CUST-0002'])
+            sales_order_ids: Optional list of sales order IDs to filter by (e.g., ['SO-1000', 'SO-1001'])
+            status: Optional status filter (draft, sent)
+            limit: Maximum results (default: 20)
+
         Note: To view a specific email by its ID (e.g., EMAIL-0006), use messaging_get_email instead.
         This tool is for listing/searching multiple emails with filters.
         """
-        return messaging_service.list_emails(customer_id, sales_order_id, status, limit)
+        return messaging_service.list_emails(customer_ids, sales_order_ids, status, limit)
 
     @mcp.tool(name="messaging_get_email", meta={"tags": ["sales"]})
     @log_tool("messaging_get_email")

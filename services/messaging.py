@@ -34,16 +34,18 @@ def create_email(customer_id: str, subject: str, body: str, sales_order_id: Opti
         email["ui_url"] = ui_href("emails", email_id)
         return {"email_id": email_id, "email": email, "message": f"Email draft '{subject}' created with ID {email_id} at {sim_time}"}
 
-def list_emails(customer_id: Optional[str] = None, sales_order_id: Optional[str] = None, status: Optional[str] = None, limit: int = 20) -> Dict[str, Any]:
+def list_emails(customer_ids: Optional[List[str]] = None, sales_order_ids: Optional[List[str]] = None, status: Optional[str] = None, limit: int = 20) -> Dict[str, Any]:
     """List emails with filters."""
     filters = []
     params: List[Any] = []
-    if customer_id:
-        filters.append("customer_id = ?")
-        params.append(customer_id)
-    if sales_order_id:
-        filters.append("sales_order_id = ?")
-        params.append(sales_order_id)
+    if customer_ids:
+        placeholders = ','.join('?' * len(customer_ids))
+        filters.append(f"customer_id IN ({placeholders})")
+        params.extend(customer_ids)
+    if sales_order_ids:
+        placeholders = ','.join('?' * len(sales_order_ids))
+        filters.append(f"sales_order_id IN ({placeholders})")
+        params.extend(sales_order_ids)
     if status:
         filters.append("status = ?")
         params.append(status)
