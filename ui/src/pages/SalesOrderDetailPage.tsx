@@ -8,7 +8,7 @@ import { SupplyChainFlow } from '../components/SupplyChainFlow'
 import { api } from '../api'
 import { useNavigation } from '../contexts/NavigationContext'
 import { formatCurrency } from '../utils/currency'
-import { Quantity } from '../utils/quantity.tsx'
+import { Quantity } from '../utils/quantity'
 import { formatDate } from '../utils/date'
 import { useTableSort } from '../utils/useTableSort'
 

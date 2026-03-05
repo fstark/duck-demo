@@ -23,7 +23,7 @@ export default function ItemInspectViewer() {
         scene: THREE.Scene;
         camera: THREE.PerspectiveCamera;
         renderer: THREE.WebGLRenderer;
-        mesh: THREE.Mesh | null;
+        mesh: THREE.Object3D | null;
         rotationY: number;
         rotationX: number;
         zoom: number;

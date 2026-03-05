@@ -4,7 +4,7 @@ import { Badge } from '../components/Badge'
 import { Stock } from '../types'
 import { api } from '../api'
 import { useNavigation } from '../contexts/NavigationContext'
-import { formatQuantity } from '../utils/quantity.tsx'
+import { formatQuantity } from '../utils/quantity'
 
 function setHash(page: string, id?: string) {
     const path = id ? `#/${page}/${encodeURIComponent(id)}` : `#/${page}`

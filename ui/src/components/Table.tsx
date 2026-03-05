@@ -10,9 +10,10 @@ export function Table<T extends { [key: string]: any }>({
 }: {
   rows: T[]
   columns: Column<T>[]
-  sortKey?: keyof T
+  sortKey?: any
   sortDir?: 'asc' | 'desc'
-  onSort?: (key: keyof T) => void
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  onSort?: (key: any) => void
   onRowClick?: (row: T, index: number) => void
 }) {
   return (
@@ -25,7 +26,7 @@ export function Table<T extends { [key: string]: any }>({
                 {col.sortable && onSort ? (
                   <button
                     className="flex items-center gap-1 hover:text-slate-700"
-                    onClick={() => onSort(col.key)}
+                    onClick={() => onSort(String(col.key))}
                     type="button"
                   >
                     <span>{col.label}</span>

@@ -6,7 +6,7 @@ import { TimelineGantt } from '../components/TimelineGantt'
 import { ProductionOrder, ProductionOrderTimeline } from '../types'
 import { api } from '../api'
 import { useNavigation } from '../contexts/NavigationContext'
-import { Quantity } from '../utils/quantity.tsx'
+import { Quantity } from '../utils/quantity'
 import { formatDate } from '../utils/date'
 import { useTableSort } from '../utils/useTableSort'
 

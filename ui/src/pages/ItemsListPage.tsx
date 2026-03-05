@@ -6,7 +6,7 @@ import { Item } from '../types'
 import { api } from '../api'
 import { useNavigation } from '../contexts/NavigationContext'
 import { formatCurrency } from '../utils/currency'
-import { Quantity } from '../utils/quantity.tsx'
+import { Quantity } from '../utils/quantity'
 
 type SortDir = 'asc' | 'desc'
 type SortState = { key: keyof Item; dir: SortDir }

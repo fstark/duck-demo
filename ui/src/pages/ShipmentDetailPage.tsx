@@ -239,7 +239,7 @@ export function ShipmentDetailPage({ shipmentId }: ShipmentDetailPageProps) {
                                     ),
                                 },
                                 { key: 'item_name', label: 'Item', sortable: true },
-                                { key: 'qty', label: 'Qty', sortable: true, render: (row) => formatQtyWithUom(row.qty, row.uom) },
+                                { key: 'qty', label: 'Qty', sortable: true, render: (row: any) => formatQtyWithUom(row.qty, row.uom) },
                             ]}
                         />
                     </Card>

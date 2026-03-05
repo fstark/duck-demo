@@ -42,3 +42,7 @@ For Details page:
 - Use color for badges in details and lists.
 
 You can refer to the docs/UI.md document for patterns.
+
+## TypeScript hygiene
+
+The UI must compile with **zero** `tsc --noEmit` errors at all times. After any `.tsx`/`.ts` change, run `npx tsc --noEmit` from the `ui/` directory and fix anything that comes up before considering the task done.

@@ -7,7 +7,7 @@ import { Badge } from './components/Badge'
 import { api } from './api'
 import { Customer, Item, SalesOrder, SalesOrderDetail, StockSummary, Shipment, ProductionOrder, Email, Invoice, Quote } from './types'
 import { NavigationProvider, useNavigation } from './contexts/NavigationContext'
-import { Quantity } from './utils/quantity.tsx'
+import { Quantity } from './utils/quantity'
 import { formatCurrency } from './utils/currency'
 import { CustomersListPage } from './pages/CustomersListPage'
 import { CustomerDetailPage } from './pages/CustomerDetailPage'
@@ -147,7 +147,7 @@ function AppContent() {
     api.shipments().then((res) => setShipmentsCount(res.shipments?.length || 0)).catch(handleApiError)
     api.productionOrders().then((res) => {
       setProductionCount(res.production_orders?.length || 0)
-      const totalQty = res.production_orders?.reduce((sum, order) => sum + (order.qty_planned || 0), 0) || 0
+      const totalQty = res.production_orders?.reduce((sum, order) => sum + (order.qty_produced || 0), 0) || 0
       setTotalProductionQty(totalQty)
     }).catch(handleApiError)
     api.recipes().then((res) => setRecipesCount(res.recipes?.length || 0)).catch(handleApiError)

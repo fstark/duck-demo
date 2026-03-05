@@ -5,7 +5,7 @@ import { Badge } from '../components/Badge'
 import { Stock } from '../types'
 import { api } from '../api'
 import { useNavigation } from '../contexts/NavigationContext'
-import { Quantity } from '../utils/quantity.tsx'
+import { Quantity } from '../utils/quantity'
 
 type SortDir = 'asc' | 'desc'
 type SortState = { key: keyof Stock; dir: SortDir }

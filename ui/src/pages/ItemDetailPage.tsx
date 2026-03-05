@@ -6,7 +6,7 @@ import { Item, StockSummary } from '../types'
 import { api } from '../api'
 import { useNavigation } from '../contexts/NavigationContext'
 import { formatCurrency } from '../utils/currency'
-import { formatQuantity, Quantity, formatQtyWithUom } from '../utils/quantity.tsx'
+import { formatQuantity, Quantity, formatQtyWithUom } from '../utils/quantity'
 import { formatDate } from '../utils/date'
 import { useTableSort } from '../utils/useTableSort'
 
@@ -299,7 +299,7 @@ export function ItemDetailPage({ sku }: ItemDetailPageProps) {
                             columns={[
                                 { key: 'id', label: 'Order ID', sortable: true },
                                 { key: 'recipe_id', label: 'Recipe', sortable: true },
-                                { key: 'output_qty', label: 'Qty', sortable: true, render: (row) => <Quantity value={row.output_qty} uom="ea" /> },
+                                { key: 'qty_produced', label: 'Qty', sortable: true, render: (row) => <Quantity value={row.qty_produced} uom="ea" /> },
                                 { key: 'status', label: 'Status', sortable: true, render: (row) => <Badge>{row.status}</Badge> },
                                 { key: 'started_at', label: 'Started', sortable: true, render: (row) => formatDate(row.started_at) },
                                 { key: 'eta_finish', label: 'ETA Finish', sortable: true, render: (row) => formatDate(row.eta_finish) },
