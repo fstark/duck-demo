@@ -40,7 +40,8 @@ def register(mcp):
         Returns:
             Confirmation metadata for the quote creation action.
         """
-        customer = customer_service.get_customer(customer_id)
+        result = customer_service.get_customer_details(customer_id, include_orders=False)
+        customer = result["customer"]
 
         arguments = {
             "customer_id": customer_id,
