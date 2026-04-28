@@ -1,33 +1,29 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, type ReactNode } from 'react';
 import { useApp } from '@modelcontextprotocol/ext-apps/react';
-
-interface FieldMetadata {
-    name: string;
-    label: string;
-    type: string;
-    value: any;
-    required?: boolean;
-    help_text?: string;
-    group?: string;
-    display_order?: number;
-    options?: string[];
-}
-
-interface ConfirmationMetadata {
-    original_tool: string;
-    title: string;
-    description: string;
-    category: string;
-    fields: FieldMetadata[];
-    arguments: Record<string, any>;
-}
+import {
+    type ConfirmationField,
+    type ConfirmationMetadata,
+    getResultLines,
+    runGenericConfirmAction,
+} from './shared/confirmation';
+import {
+    ActionRow,
+    AppCard,
+    AppShell,
+    PrimaryButton,
+    SecondaryButton,
+    StatusScreen,
+    uiColors,
+} from './shared/ui';
 
 export default function GenericConfirmDialog() {
-    const [status, setStatus] = useState<'connecting' | 'ready' | 'confirmed' | 'cancelled'>('connecting');
+    const [status, setStatus] = useState<'connecting' | 'ready' | 'confirming' | 'confirmed' | 'cancelled'>('connecting');
     const [confirmationData, setConfirmationData] = useState<ConfirmationMetadata | null>(null);
+    const [executionResult, setExecutionResult] = useState<Record<string, unknown> | null>(null);
+    const [actionError, setActionError] = useState<string | null>(null);
 
     const { app, isConnected, error } = useApp({
-        appInfo: { name: 'GenericConfirmDialog', version: '1.0.0' },
+        appInfo: { name: 'GenericConfirmDialog', version: '1.0.1' },
         capabilities: {},
         onAppCreated: (appInstance) => {
             // Listen for tool result (the metadata returned by gateway tools)
@@ -67,20 +63,22 @@ export default function GenericConfirmDialog() {
         if (!confirmationData || !app) return;
 
         try {
-            setStatus('confirmed');
+            setActionError(null);
+            setStatus('confirming');
 
             // Call the generic dispatcher with the original tool name and arguments
-            const response = await app.callServerTool({
-                name: 'generic_confirm_action',
-                arguments: {
-                    original_tool: confirmationData.original_tool,
-                    arguments: confirmationData.arguments,
-                } as unknown as Record<string, unknown>,
+            const result = await runGenericConfirmAction(app, {
+                original_tool: confirmationData.original_tool,
+                arguments: confirmationData.arguments,
             });
 
-            console.log('Action confirmed and completed:', response);
+            setExecutionResult(result);
+
+            console.log('Action confirmed and completed:', result);
+            setStatus('confirmed');
         } catch (err) {
             console.error('Failed to execute action:', err);
+            setActionError((err as Error)?.message || 'Failed to execute action.');
             setStatus('ready');
         }
     }, [app, confirmationData]);
@@ -92,50 +90,79 @@ export default function GenericConfirmDialog() {
 
     if (error) {
         return (
-            <div style={{ padding: '20px', fontFamily: 'system-ui, sans-serif' }}>
-                <h2 style={{ color: '#dc2626', marginTop: 0 }}>Error</h2>
-                <p>{error.message}</p>
-            </div>
+            <AppShell>
+                <StatusScreen title="Error" titleColor="#dc2626" message={error.message} />
+            </AppShell>
         );
     }
 
     if (!isConnected || status === 'connecting') {
         return (
-            <div style={{ padding: '20px', fontFamily: 'system-ui, sans-serif' }}>
-                <p>Connecting...</p>
-            </div>
+            <AppShell>
+                <StatusScreen title="Connecting..." message="Waiting for MCP app connection." />
+            </AppShell>
+        );
+    }
+
+    if (status === 'confirming') {
+        return (
+            <AppShell>
+                <StatusScreen title="Submitting..." message="Executing confirmed action." />
+            </AppShell>
         );
     }
 
     if (status === 'confirmed') {
+        const resultLines = getResultLines(executionResult);
+
         return (
-            <div style={{ padding: '20px', fontFamily: 'system-ui, sans-serif' }}>
-                <h2 style={{ color: '#16a34a', marginTop: 0 }}>✓ Confirmed</h2>
-                <p>Action has been completed successfully.</p>
-            </div>
+            <AppShell>
+                <StatusScreen title="Confirmed" titleColor="#16a34a" message="Action has been completed successfully." />
+
+                <AppCard marginBottom={0}>
+                    <h3 style={{
+                        fontSize: 13,
+                        fontWeight: 600,
+                        color: uiColors.muted,
+                        marginTop: 0,
+                        marginBottom: resultLines.length > 0 ? '12px' : 0,
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.05em'
+                    }}>
+                        Result
+                    </h3>
+                    {resultLines.length > 0 ? resultLines.map(([label, value]) => (
+                        <div key={label} style={{ marginBottom: '10px' }}>
+                            <div style={{ fontSize: 12, color: uiColors.muted, marginBottom: 2 }}>{label}</div>
+                            <div style={{ fontSize: 14, color: uiColors.text, fontWeight: 500 }}>{value}</div>
+                        </div>
+                    )) : (
+                        <p style={{ margin: 0, color: uiColors.muted, fontSize: 14 }}>No result details were returned by the tool.</p>
+                    )}
+                </AppCard>
+            </AppShell>
         );
     }
 
     if (status === 'cancelled') {
         return (
-            <div style={{ padding: '20px', fontFamily: 'system-ui, sans-serif' }}>
-                <h2 style={{ color: '#6b7280', marginTop: 0 }}>Cancelled</h2>
-                <p>Action was cancelled.</p>
-            </div>
+            <AppShell>
+                <StatusScreen title="Cancelled" titleColor="#6b7280" message="Action was cancelled." />
+            </AppShell>
         );
     }
 
     if (!confirmationData) {
         return (
-            <div style={{ padding: '20px', fontFamily: 'system-ui, sans-serif' }}>
-                <p>Waiting for confirmation data...</p>
-            </div>
+            <AppShell>
+                <StatusScreen title="Waiting..." message="Waiting for confirmation data." />
+            </AppShell>
         );
     }
 
     // Group fields by their group property
-    const groupedFields: Record<string, FieldMetadata[]> = {};
-    const ungroupedFields: FieldMetadata[] = [];
+    const groupedFields: Record<string, ConfirmationField[]> = {};
+    const ungroupedFields: ConfirmationField[] = [];
 
     for (const field of confirmationData.fields) {
         if (field.group) {
@@ -155,12 +182,7 @@ export default function GenericConfirmDialog() {
     ungroupedFields.sort((a, b) => (a.display_order || 0) - (b.display_order || 0));
 
     return (
-        <div style={{
-            padding: '24px',
-            fontFamily: 'system-ui, -apple-system, sans-serif',
-            maxWidth: '600px',
-            margin: '0 auto'
-        }}>
+        <AppShell>
             <h2 style={{ marginTop: 0, marginBottom: '8px', fontSize: '20px', fontWeight: '600' }}>
                 {confirmationData.title}
             </h2>
@@ -170,19 +192,13 @@ export default function GenericConfirmDialog() {
                     marginTop: 0,
                     marginBottom: '20px',
                     fontSize: '14px',
-                    color: '#6b7280'
+                    color: uiColors.muted,
                 }}>
                     {confirmationData.description}
                 </p>
             )}
 
-            <div style={{
-                backgroundColor: '#f9fafb',
-                border: '1px solid #e5e7eb',
-                borderRadius: '8px',
-                padding: '16px',
-                marginBottom: '24px'
-            }}>
+            <AppCard marginBottom={24}>
                 {/* Render ungrouped fields first */}
                 {ungroupedFields.length > 0 && ungroupedFields.map(field => (
                     <FieldDisplay key={field.name} field={field} />
@@ -194,7 +210,7 @@ export default function GenericConfirmDialog() {
                         <h3 style={{
                             fontSize: '13px',
                             fontWeight: '600',
-                            color: '#374151',
+                            color: uiColors.muted,
                             marginTop: 0,
                             marginBottom: '12px',
                             textTransform: 'uppercase',
@@ -207,56 +223,25 @@ export default function GenericConfirmDialog() {
                         ))}
                     </div>
                 ))}
-            </div>
+            </AppCard>
 
-            <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
-                <button
-                    onClick={handleCancel}
-                    style={{
-                        padding: '8px 16px',
-                        fontSize: '14px',
-                        fontWeight: '500',
-                        border: '1px solid #d1d5db',
-                        borderRadius: '6px',
-                        backgroundColor: 'white',
-                        color: '#374151',
-                        cursor: 'pointer',
-                        transition: 'background-color 0.2s'
-                    }}
-                    onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#f9fafb'}
-                    onMouseOut={(e) => e.currentTarget.style.backgroundColor = 'white'}
-                >
-                    Cancel
-                </button>
-                <button
-                    onClick={handleConfirm}
-                    style={{
-                        padding: '8px 16px',
-                        fontSize: '14px',
-                        fontWeight: '500',
-                        border: 'none',
-                        borderRadius: '6px',
-                        backgroundColor: getCategoryColor(confirmationData.category),
-                        color: 'white',
-                        cursor: 'pointer',
-                        transition: 'background-color 0.2s'
-                    }}
-                    onMouseOver={(e) => {
-                        const color = getCategoryColor(confirmationData.category);
-                        e.currentTarget.style.backgroundColor = darkenColor(color);
-                    }}
-                    onMouseOut={(e) => {
-                        e.currentTarget.style.backgroundColor = getCategoryColor(confirmationData.category);
-                    }}
-                >
+            <ActionRow marginTop={0}>
+                <SecondaryButton onClick={handleCancel}>Cancel</SecondaryButton>
+                <PrimaryConfirmButton category={confirmationData.category} onClick={handleConfirm}>
                     Confirm
-                </button>
-            </div>
-        </div>
+                </PrimaryConfirmButton>
+            </ActionRow>
+
+            {actionError && (
+                <p style={{ marginTop: '12px', color: '#b91c1c', fontSize: '14px' }}>
+                    {actionError}
+                </p>
+            )}
+        </AppShell>
     );
 }
 
-function FieldDisplay({ field }: { field: FieldMetadata }) {
+function FieldDisplay({ field }: { field: ConfirmationField }) {
     // Don't display fields with null/undefined values
     if (field.value === null || field.value === undefined || field.value === '') {
         return null;
@@ -279,7 +264,7 @@ function FieldDisplay({ field }: { field: FieldMetadata }) {
         <div style={{ marginBottom: '12px' }}>
             <div style={{
                 fontSize: '12px',
-                color: '#6b7280',
+                color: 'var(--vscode-descriptionForeground, #6b7280)',
                 marginBottom: '4px',
                 display: 'flex',
                 alignItems: 'center',
@@ -294,14 +279,15 @@ function FieldDisplay({ field }: { field: FieldMetadata }) {
                 fontSize: '14px',
                 fontWeight: field.required ? '500' : '400',
                 whiteSpace: field.type === 'textarea' || field.type === 'object' ? 'pre-wrap' : 'normal',
-                fontFamily: field.type === 'object' ? 'monospace' : 'inherit'
+                fontFamily: field.type === 'object' ? 'monospace' : 'inherit',
+                color: 'var(--vscode-foreground, #111827)',
             }}>
                 {displayValue}
             </div>
             {field.help_text && (
                 <div style={{
                     fontSize: '11px',
-                    color: '#9ca3af',
+                    color: 'var(--vscode-descriptionForeground, #9ca3af)',
                     marginTop: '2px'
                 }}>
                     {field.help_text}
@@ -333,4 +319,33 @@ function darkenColor(color: string): string {
         '#059669': '#047857'
     };
     return colorMap[color] || color;
+}
+
+function PrimaryConfirmButton({
+    category,
+    onClick,
+    children,
+}: {
+    category: string;
+    onClick: () => void;
+    children: ReactNode;
+}) {
+    const [isHover, setIsHover] = useState(false);
+    const baseColor = getCategoryColor(category);
+    const backgroundColor = isHover ? darkenColor(baseColor) : baseColor;
+
+    return (
+        <PrimaryButton
+            onClick={onClick}
+            backgroundColor={backgroundColor}
+        >
+            <span
+                onMouseEnter={() => setIsHover(true)}
+                onMouseLeave={() => setIsHover(false)}
+                style={{ display: 'inline-block', width: '100%' }}
+            >
+                {children}
+            </span>
+        </PrimaryButton>
+    );
 }

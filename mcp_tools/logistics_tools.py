@@ -103,6 +103,31 @@ def _normalize_shipment_arguments(
     }
 
 
+def _evaluate_shipment_flow(ship_to: Dict[str, Any], packages: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """Return normalized shipment flow status for destination/tariff checks."""
+    ship_to_country = ship_to.get("country", "").upper()
+    if not logistics_service.is_supported_destination(ship_to_country):
+        return {
+            "status": "unsupported_destination",
+            "ship_to_country": ship_to_country,
+            "tariff_required": False,
+            "missing_tariff": False,
+        }
+
+    tariff_required = logistics_service.is_tariff_required(ship_to_country)
+    missing_tariff = False
+    if tariff_required:
+        all_contents = [content for pkg in packages for content in pkg.get("contents", [])]
+        missing_tariff = any(not content.get("tariff_code") for content in all_contents)
+
+    return {
+        "status": "ok",
+        "ship_to_country": ship_to_country,
+        "tariff_required": tariff_required,
+        "missing_tariff": missing_tariff,
+    }
+
+
 def register(mcp):
     """Register logistics tools."""
 
@@ -141,21 +166,18 @@ def register(mcp):
             reference=reference,
         )
 
-        ship_to_country = ship_to.get("country", "").upper()
-        if not logistics_service.is_supported_destination(ship_to_country):
+        flow = _evaluate_shipment_flow(ship_to, packages)
+        ship_to_country = flow["ship_to_country"]
+        if flow["status"] == "unsupported_destination":
             return _error_result(f"Destination country '{ship_to_country}' is not supported for shipping.")
 
-        tariff_required = logistics_service.is_tariff_required(ship_to_country)
-        if tariff_required:
-            all_contents = [content for pkg in packages for content in pkg.get("contents", [])]
-            missing_tariff = any(not content.get("tariff_code") for content in all_contents)
-            if missing_tariff:
-                return _guidance_result(
-                    "Tariff code required for this destination. "
-                    "Call logistics_pick_tariff_for_shipment with the same shipment arguments to open the tariff picker UI.",
-                    next_tool="logistics_pick_tariff_for_shipment",
-                    next_arguments=arguments,
-                )
+        if flow["tariff_required"] and flow["missing_tariff"]:
+            return _guidance_result(
+                "Tariff code required for this destination. "
+                "Call logistics_pick_tariff_for_shipment with the same shipment arguments to open the tariff picker UI.",
+                next_tool="logistics_pick_tariff_for_shipment",
+                next_arguments=arguments,
+            )
 
         return CallToolResult(
             content=[
@@ -167,7 +189,7 @@ def register(mcp):
             structuredContent={
                 "status": "ready_to_create",
                 "destination_country": ship_to_country,
-                "tariff_required": tariff_required,
+                "tariff_required": flow["tariff_required"],
                 "next_tool": "logistics_create_shipment",
                 "next_arguments": arguments,
             },
@@ -213,11 +235,12 @@ def register(mcp):
             reference=reference,
         )
 
-        ship_to_country = ship_to.get("country", "").upper()
-        if not logistics_service.is_supported_destination(ship_to_country):
+        flow = _evaluate_shipment_flow(ship_to, packages)
+        ship_to_country = flow["ship_to_country"]
+        if flow["status"] == "unsupported_destination":
             return _error_result(f"Destination country '{ship_to_country}' is not supported for shipping.")
 
-        if not logistics_service.is_tariff_required(ship_to_country):
+        if not flow["tariff_required"]:
             return CallToolResult(
                 content=[
                     TextContent(
@@ -279,20 +302,18 @@ def register(mcp):
             reference=reference,
         )
 
-        ship_to_country = ship_to.get("country", "").upper()
-        if not logistics_service.is_supported_destination(ship_to_country):
+        flow = _evaluate_shipment_flow(ship_to, packages)
+        ship_to_country = flow["ship_to_country"]
+        if flow["status"] == "unsupported_destination":
             return _error_result(f"Destination country '{ship_to_country}' is not supported for shipping.")
 
-        if logistics_service.is_tariff_required(ship_to_country):
-            all_contents = [content for pkg in packages for content in pkg.get("contents", [])]
-            missing_tariff = any(not content.get("tariff_code") for content in all_contents)
-            if missing_tariff:
-                return _guidance_result(
-                    "Tariff code required for this destination. "
-                    "Call logistics_prepare_shipment with the same shipment arguments to validate and route the next step.",
-                    next_tool="logistics_prepare_shipment",
-                    next_arguments=arguments,
-                )
+        if flow["tariff_required"] and flow["missing_tariff"]:
+            return _guidance_result(
+                "Tariff code required for this destination. "
+                "Call logistics_prepare_shipment with the same shipment arguments to validate and route the next step.",
+                next_tool="logistics_prepare_shipment",
+                next_arguments=arguments,
+            )
 
         total_items = sum(len(pkg.get("contents", [])) for pkg in packages)
         ship_to_formatted = f"{ship_to.get('line1', '')}, {ship_to.get('city', '')}, {ship_to.get('country', '')}"
