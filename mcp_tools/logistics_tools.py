@@ -19,6 +19,20 @@ def _error_result(message: str) -> CallToolResult:
     )
 
 
+def _guidance_result(message: str, next_tool: str, next_arguments: Dict[str, Any]) -> CallToolResult:
+    """Return a non-error guidance payload for recoverable workflow branches."""
+    return CallToolResult(
+        content=[TextContent(type="text", text=message)],
+        structuredContent={
+            "status": "needs_additional_step",
+            "message": message,
+            "next_tool": next_tool,
+            "next_arguments": next_arguments,
+        },
+        isError=False,
+    )
+
+
 def _build_tariff_picker_response(ship_to_country: str, packages: List[Dict[str, Any]], arguments: Dict[str, Any]) -> CallToolResult:
     """Build a tariff-picker MCP App payload with LLM suggestions."""
     item_rows: List[Dict[str, Any]] = []
@@ -203,9 +217,11 @@ def register(mcp):
             all_contents = [content for pkg in packages for content in pkg.get("contents", [])]
             missing_tariff = any(not content.get("tariff_code") for content in all_contents)
             if missing_tariff:
-                return _error_result(
+                return _guidance_result(
                     "Tariff code required for this destination. "
-                    "Call logistics_pick_tariff_for_shipment with the same shipment arguments to open the tariff picker UI."
+                    "Call logistics_pick_tariff_for_shipment with the same shipment arguments to open the tariff picker UI.",
+                    next_tool="logistics_pick_tariff_for_shipment",
+                    next_arguments=arguments,
                 )
 
         total_items = sum(len(pkg.get("contents", [])) for pkg in packages)

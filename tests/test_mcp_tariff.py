@@ -99,7 +99,7 @@ def test_tariff_suggest_uppercases_countries(_mock, mcp_app):
 
 @patch("services.tariff.chat_completion", return_value=_FakeResponse(_MOCK_LLM_JSON))
 def test_create_shipment_non_eu_missing_tariff_returns_redirect_error(_mock, mcp_app):
-    """Non-EU destination without tariff codes asks caller to use dedicated picker tool."""
+    """Non-EU destination without tariff codes returns soft guidance to picker tool."""
     result = _call(
         mcp_app,
         "logistics_create_shipment",
@@ -111,8 +111,10 @@ def test_create_shipment_non_eu_missing_tariff_returns_redirect_error(_mock, mcp
     )
 
     payload = _structured(result)
-    assert "error" in payload
-    assert "logistics_pick_tariff_for_shipment" in payload["error"]
+    assert payload["status"] == "needs_additional_step"
+    assert payload["next_tool"] == "logistics_pick_tariff_for_shipment"
+    assert payload["next_arguments"]["ship_to"]["country"] == "US"
+    assert "Tariff code required" in payload["message"]
 
 
 @patch("services.tariff.chat_completion", return_value=_FakeResponse(_MOCK_LLM_JSON))
