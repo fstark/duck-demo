@@ -236,14 +236,45 @@ SHIPMENTS = [
         "dispatched_at": None,
         "delivered_at": None,
     },
+    {
+        "id": "SHIP-T002",
+        "ship_from_warehouse": config.WAREHOUSE_DEFAULT,
+        "ship_to_line1": "123 Main St",
+        "ship_to_line2": None,
+        "ship_to_postal_code": "10001",
+        "ship_to_city": "New York",
+        "ship_to_country": "US",
+        "planned_departure": "2025-08-18",
+        "planned_arrival": "2025-08-25",
+        "status": "planned",
+        "tracking_ref": None,
+        "dispatched_at": None,
+        "delivered_at": None,
+    },
 ]
 
 SHIPMENT_LINES = [
-    {"id": "SHL-T001", "shipment_id": "SHIP-T001", "item_id": "ITEM-CLASSIC-10", "qty": 12},
+    {
+        "id": "SHL-T001",
+        "shipment_id": "SHIP-T001",
+        "item_id": "ITEM-CLASSIC-10",
+        "qty": 12,
+        "tariff_code": None,
+        "tariff_description": None,
+    },
+    {
+        "id": "SHL-T002",
+        "shipment_id": "SHIP-T002",
+        "item_id": "ITEM-CLASSIC-10",
+        "qty": 6,
+        "tariff_code": "9503.00",
+        "tariff_description": "Toys; other toys",
+    },
 ]
 
 SALES_ORDER_SHIPMENTS = [
     {"sales_order_id": "SO-T001", "shipment_id": "SHIP-T001"},
+    {"sales_order_id": "SO-T001", "shipment_id": "SHIP-T002"},
 ]
 
 # ── Production orders ──────────────────────────────────────────────────────

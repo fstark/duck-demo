@@ -172,6 +172,8 @@ export type Shipment = {
     item_name: string
     uom?: string
     qty: number
+    tariff_code?: string | null
+    tariff_description?: string | null
   }>
 }
 

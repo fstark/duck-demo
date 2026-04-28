@@ -3,6 +3,7 @@
 from types import SimpleNamespace
 from typing import Any, Dict, List, Optional
 
+import config
 from db import dict_rows, generate_id
 from utils import ship_to_columns, ui_href
 from services._base import db_conn
@@ -40,7 +41,18 @@ def create_shipment(ship_from: Dict[str, Any], ship_to: Dict[str, Any], planned_
                 if not item:
                     raise ValueError(f"Unknown SKU {content['sku']}")
                 line_id = f"{shipment_id}-{line_counter:02d}"
-                conn.execute("INSERT INTO shipment_lines (id, shipment_id, item_id, qty) VALUES (?, ?, ?, ?)", (line_id, shipment_id, item["id"], int(content["qty"])))
+                conn.execute(
+                    "INSERT INTO shipment_lines (id, shipment_id, item_id, qty, tariff_code, tariff_description) "
+                    "VALUES (?, ?, ?, ?, ?, ?)",
+                    (
+                        line_id,
+                        shipment_id,
+                        item["id"],
+                        int(content["qty"]),
+                        content.get("tariff_code"),
+                        content.get("tariff_description"),
+                    ),
+                )
                 line_counter += 1
         if reference and reference.get("type") == "sales_order" and reference.get("id"):
             conn.execute("INSERT OR IGNORE INTO sales_order_shipments (sales_order_id, shipment_id) VALUES (?, ?)", (reference["id"], shipment_id))
@@ -59,13 +71,23 @@ def get_shipment_status(shipment_id: str) -> Dict[str, Any]:
         orders = dict_rows(conn.execute(orders_query, (shipment_id,)).fetchall())
         data["sales_orders"] = orders
         lines = dict_rows(conn.execute(
-            "SELECT sl.id, sl.item_id, i.sku as item_sku, i.name as item_name, i.uom, sl.qty "
+            "SELECT sl.*, i.sku as item_sku, i.name as item_name, i.uom "
             "FROM shipment_lines sl JOIN items i ON sl.item_id = i.id "
             "WHERE sl.shipment_id = ? ORDER BY sl.id",
             (shipment_id,),
         ).fetchall())
         data["lines"] = lines
         return data
+
+
+def is_tariff_required(ship_to_country: str) -> bool:
+    """Return True when destination requires tariff codes."""
+    return ship_to_country.upper() in config.TARIFF_REQUIRED_DESTINATIONS
+
+
+def is_supported_destination(ship_to_country: str) -> bool:
+    """Return True when destination is part of supported shipping countries."""
+    return ship_to_country.upper() in config.SUPPORTED_SHIP_COUNTRIES
 
 def dispatch_shipment(shipment_id: str) -> Dict[str, Any]:
     """Dispatch a planned shipment: transition to in_transit and deduct stock."""
@@ -165,5 +187,7 @@ logistics_service = SimpleNamespace(
     get_supply_chain_trace_for_shipment=get_supply_chain_trace_for_shipment,
     dispatch_shipment=dispatch_shipment,
     deliver_shipment=deliver_shipment,
+    is_tariff_required=is_tariff_required,
+    is_supported_destination=is_supported_destination,
 )
 LogisticsService = logistics_service

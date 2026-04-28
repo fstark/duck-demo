@@ -133,7 +133,9 @@ CREATE TABLE IF NOT EXISTS shipment_lines (
     id TEXT PRIMARY KEY,
     shipment_id TEXT NOT NULL,
     item_id TEXT NOT NULL,
-    qty INTEGER NOT NULL
+    qty INTEGER NOT NULL,
+    tariff_code TEXT,
+    tariff_description TEXT
 );
 
 CREATE TABLE IF NOT EXISTS sales_order_shipments (

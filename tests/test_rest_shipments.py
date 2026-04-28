@@ -30,3 +30,25 @@ def test_shipment_supply_chain(rest_client):
     assert resp.status_code == 200
     data = resp.json()
     assert isinstance(data, dict)
+
+
+def test_get_shipment_with_tariff(rest_client):
+    """International shipment lines include tariff fields."""
+    resp = rest_client.get("/api/shipments/SHIP-T002")
+    assert resp.status_code == 200
+    data = resp.json()
+    lines = data["lines"]
+    assert len(lines) >= 1
+    assert lines[0]["tariff_code"] == "9503.00"
+    assert lines[0]["tariff_description"] == "Toys; other toys"
+
+
+def test_get_shipment_without_tariff(rest_client):
+    """Domestic shipment lines include null tariff fields."""
+    resp = rest_client.get("/api/shipments/SHIP-T001")
+    assert resp.status_code == 200
+    data = resp.json()
+    lines = data["lines"]
+    assert len(lines) >= 1
+    assert lines[0].get("tariff_code") is None
+    assert lines[0].get("tariff_description") is None

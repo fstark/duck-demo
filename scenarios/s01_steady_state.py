@@ -15,6 +15,7 @@ import logging
 import random
 from typing import Any, Dict, List
 
+import config
 from scenarios.helpers import (
     advance_and_settle,
     create_quote_only,
@@ -31,6 +32,7 @@ from scenarios.helpers import (
 )
 from services import (
     fulfillment_service,
+    logistics_service,
     mrp_service,
     quote_service,
 )
@@ -327,6 +329,44 @@ def run(ctx: Dict[str, Any]) -> Dict[str, Any]:
                        body=body, sales_order_id=row["id"])
         except Exception as e:
             logger.warning("Email failed: %s", e)
+
+    # ------------------------------------------------------------------
+    # Add one international shipment with tariff lines for UI visibility
+    # ------------------------------------------------------------------
+    with db_conn() as conn:
+        so_row = conn.execute(
+            "SELECT id FROM sales_orders ORDER BY created_at ASC LIMIT 1"
+        ).fetchone()
+
+    if so_row:
+        try:
+            logistics_service.create_shipment(
+                ship_from={"warehouse": config.WAREHOUSE_DEFAULT},
+                ship_to={
+                    "line1": "123 Main St",
+                    "line2": None,
+                    "postal_code": "10001",
+                    "city": "New York",
+                    "country": "US",
+                },
+                planned_departure=sim_date(),
+                planned_arrival=future_date(7),
+                packages=[
+                    {
+                        "contents": [
+                            {
+                                "sku": "CLASSIC-DUCK-10CM",
+                                "qty": 6,
+                                "tariff_code": "9503.00",
+                                "tariff_description": "Toys; other toys",
+                            }
+                        ]
+                    }
+                ],
+                reference={"type": "sales_order", "id": so_row["id"]},
+            )
+        except Exception as e:
+            logger.warning("International tariff shipment seed failed: %s", e)
 
     # ------------------------------------------------------------------
     # Final settle (2 days for in-flight deliveries)

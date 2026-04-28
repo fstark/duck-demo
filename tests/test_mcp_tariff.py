@@ -44,6 +44,12 @@ class _FakeResponse:
         self.choices = [_FakeChoice(content)]
 
 
+def _structured(result):
+    if hasattr(result, "structuredContent"):
+        return result.structuredContent
+    return result
+
+
 # ── Tests ──────────────────────────────────────────────────────────────────
 
 @patch("services.tariff.chat_completion", return_value=_FakeResponse(_MOCK_LLM_JSON))
@@ -89,3 +95,103 @@ def test_tariff_suggest_uppercases_countries(_mock, mcp_app):
     )
     assert result["country_of_origin"] == "FR"
     assert result["country_of_destination"] == "US"
+
+
+@patch("services.tariff.chat_completion", return_value=_FakeResponse(_MOCK_LLM_JSON))
+def test_create_shipment_non_eu_missing_tariff_returns_redirect_error(_mock, mcp_app):
+    """Non-EU destination without tariff codes asks caller to use dedicated picker tool."""
+    result = _call(
+        mcp_app,
+        "logistics_create_shipment",
+        ship_from={"warehouse": "WH-LYON"},
+        ship_to={"line1": "123 Main St", "city": "New York", "postal_code": "10001", "country": "US"},
+        planned_departure="2025-09-01",
+        planned_arrival="2025-09-08",
+        packages=[{"contents": [{"sku": "CLASSIC-DUCK-10CM", "qty": 12}]}],
+    )
+
+    payload = _structured(result)
+    assert "error" in payload
+    assert "logistics_pick_tariff_for_shipment" in payload["error"]
+
+
+@patch("services.tariff.chat_completion", return_value=_FakeResponse(_MOCK_LLM_JSON))
+def test_pick_tariff_for_shipment_non_eu_missing_tariff_returns_picker(_mock, mcp_app):
+    """Dedicated tariff picker tool returns suggestions and original shipment arguments."""
+    result = _call(
+        mcp_app,
+        "logistics_pick_tariff_for_shipment",
+        ship_from={"warehouse": "WH-LYON"},
+        ship_to={"line1": "123 Main St", "city": "New York", "postal_code": "10001", "country": "US"},
+        planned_departure="2025-09-01",
+        planned_arrival="2025-09-08",
+        packages=[{"contents": [{"sku": "CLASSIC-DUCK-10CM", "qty": 12}]}],
+    )
+
+    payload = _structured(result)
+    assert payload["destination_country"] == "US"
+    assert payload["original_tool"] == "logistics_create_shipment"
+    assert len(payload["items"]) >= 1
+    assert len(payload["items"][0]["suggestions"]) >= 1
+
+
+def test_create_shipment_non_eu_with_tariff_proceeds(mcp_app):
+    """Non-EU destination with tariff codes proceeds to confirmation."""
+    result = _call(
+        mcp_app,
+        "logistics_create_shipment",
+        ship_from={"warehouse": "WH-LYON"},
+        ship_to={"line1": "123 Main St", "city": "New York", "postal_code": "10001", "country": "US"},
+        planned_departure="2025-09-01",
+        planned_arrival="2025-09-08",
+        packages=[
+            {
+                "contents": [
+                    {
+                        "sku": "CLASSIC-DUCK-10CM",
+                        "qty": 12,
+                        "tariff_code": "9503.00",
+                        "tariff_description": "Toys",
+                    }
+                ]
+            }
+        ],
+    )
+
+    payload = _structured(result)
+    assert payload["original_tool"] == "logistics_create_shipment"
+    assert payload["arguments"]["ship_to"]["country"] == "US"
+
+
+def test_create_shipment_eu_no_tariff_needed(mcp_app):
+    """Intra-EU destination proceeds without tariff codes."""
+    result = _call(
+        mcp_app,
+        "logistics_create_shipment",
+        ship_from={"warehouse": "WH-LYON"},
+        ship_to={"line1": "10 Unter den Linden", "city": "Berlin", "postal_code": "10117", "country": "DE"},
+        planned_departure="2025-09-01",
+        planned_arrival="2025-09-03",
+        packages=[{"contents": [{"sku": "CLASSIC-DUCK-10CM", "qty": 12}]}],
+    )
+
+    payload = _structured(result)
+    assert payload["original_tool"] == "logistics_create_shipment"
+    assert payload["arguments"]["ship_to"]["country"] == "DE"
+
+
+def test_create_shipment_unsupported_country(mcp_app):
+    """Unsupported destination country returns standardized error payload."""
+    result = _call(
+        mcp_app,
+        "logistics_create_shipment",
+        ship_from={"warehouse": "WH-LYON"},
+        ship_to={"line1": "1 Street", "city": "Somewhere", "postal_code": "00000", "country": "XX"},
+        planned_departure="2025-09-01",
+        planned_arrival="2025-09-03",
+        packages=[{"contents": [{"sku": "CLASSIC-DUCK-10CM", "qty": 12}]}],
+    )
+
+    payload = _structured(result)
+    assert "error" in payload
+    assert "not supported" in payload["error"]

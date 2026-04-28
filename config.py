@@ -30,6 +30,16 @@ LOC_FINISHED_GOODS = "FG"
 LOC_PRODUCTION_OUT = "PROD-OUT"
 LOC_RAW_MATERIAL_RECV = "RM/RECV-01"
 
+# Tariff and shipping destination constants
+WAREHOUSE_COUNTRY = "FR"
+TARIFF_REQUIRED_DESTINATIONS = {"CH", "GB", "US", "CA", "JP", "AU", "NO"}
+EU_COUNTRIES = {
+    "AT", "BE", "BG", "HR", "CY", "CZ", "DK", "EE", "FI", "FR",
+    "DE", "GR", "HU", "IE", "IT", "LV", "LT", "LU", "MT", "NL",
+    "PL", "PT", "RO", "SK", "SI", "ES", "SE",
+}
+SUPPORTED_SHIP_COUNTRIES = EU_COUNTRIES | TARIFF_REQUIRED_DESTINATIONS
+
 # Logging configuration
 LOG_FILE = os.getenv("LOG_FILE", "duck-demo.log")
 

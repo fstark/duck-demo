@@ -79,6 +79,17 @@ def get_item_inspect_ui() -> str:
         logger.warning(f"MCP App UI not found at {ui_path}. Run 'cd ui && npm run build:mcp-app' to build it.")
         return "<html><body><p>MCP App UI not built yet. Please run: cd ui && npm run build:mcp-app</p></body></html>"
 
+
+@mcp.resource("ui://tariff-picker/selector", mime_type="text/html;profile=mcp-app")
+def get_tariff_picker_ui() -> str:
+    """Serves the tariff picker MCP App UI."""
+    ui_path = os.path.join(os.path.dirname(__file__), "mcp_apps_ui", "tariff-picker.html")
+    if os.path.exists(ui_path):
+        with open(ui_path, "r", encoding="utf-8") as f:
+            return f.read()
+    logger.warning(f"MCP App UI not found at {ui_path}. Run 'cd ui && npm run build:mcp-app' to build it.")
+    return "<html><body><p>MCP App UI not built yet. Please run: cd ui && npm run build:mcp-app</p></body></html>"
+
 logger.info("Duck Demo MCP Server ready (53 tools)")
 
 

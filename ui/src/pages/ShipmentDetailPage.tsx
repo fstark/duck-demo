@@ -54,6 +54,7 @@ export function ShipmentDetailPage({ shipmentId }: ShipmentDetailPageProps) {
     // Call hooks before conditional returns
     const linesSort = useTableSort(shipment?.lines || [])
     const salesOrdersSort = useTableSort(shipment?.sales_orders || [])
+    const hasTariff = (shipment?.lines || []).some((line: any) => Boolean(line.tariff_code))
 
     const hasPrevious = listContext && listContext.currentIndex > 0
     const hasNext = listContext && listContext.currentIndex < listContext.items.length - 1
@@ -240,6 +241,10 @@ export function ShipmentDetailPage({ shipmentId }: ShipmentDetailPageProps) {
                                 },
                                 { key: 'item_name', label: 'Item', sortable: true },
                                 { key: 'qty', label: 'Qty', sortable: true, render: (row: any) => formatQtyWithUom(row.qty, row.uom) },
+                                ...(hasTariff ? [
+                                    { key: 'tariff_code', label: 'Tariff Code', sortable: true },
+                                    { key: 'tariff_description', label: 'Tariff Description', sortable: true },
+                                ] : []),
                             ]}
                         />
                     </Card>
