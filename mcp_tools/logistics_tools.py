@@ -106,6 +106,74 @@ def _normalize_shipment_arguments(
 def register(mcp):
     """Register logistics tools."""
 
+    @mcp.tool(name="logistics_prepare_shipment", meta={"tags": ["sales"]}, structured_output=False)
+    @log_tool("logistics_prepare_shipment")
+    def prepare_shipment(
+        ship_from: Dict[str, Any],
+        ship_to: Dict[str, Any],
+        planned_departure: str,
+        planned_arrival: str,
+        packages: List[Dict[str, Any]],
+        reference: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """
+        Validate and prepare shipment arguments before creating the shipment.
+
+        Note: This is the recommended first step for shipment workflows.
+        - If tariff codes are missing for tariff-required destinations, this tool guides the
+          caller to logistics_pick_tariff_for_shipment.
+        - If data is valid, this tool returns ready_to_create guidance for logistics_create_shipment.
+
+        Parameters:
+            ship_from: Dict with warehouse info {warehouse: str} (required)
+            ship_to: Dict with address {line1, postal_code, city, country} (required)
+            planned_departure: Departure date in ISO format (required)
+            planned_arrival: Arrival date in ISO format (required)
+            packages: List of dicts with contents: [{contents: [{sku, qty}]}] (required)
+            reference: Optional sales order reference {type: 'sales_order', id: 'SO-1000'}
+        """
+        arguments = _normalize_shipment_arguments(
+            ship_from=ship_from,
+            ship_to=ship_to,
+            planned_departure=planned_departure,
+            planned_arrival=planned_arrival,
+            packages=packages,
+            reference=reference,
+        )
+
+        ship_to_country = ship_to.get("country", "").upper()
+        if not logistics_service.is_supported_destination(ship_to_country):
+            return _error_result(f"Destination country '{ship_to_country}' is not supported for shipping.")
+
+        tariff_required = logistics_service.is_tariff_required(ship_to_country)
+        if tariff_required:
+            all_contents = [content for pkg in packages for content in pkg.get("contents", [])]
+            missing_tariff = any(not content.get("tariff_code") for content in all_contents)
+            if missing_tariff:
+                return _guidance_result(
+                    "Tariff code required for this destination. "
+                    "Call logistics_pick_tariff_for_shipment with the same shipment arguments to open the tariff picker UI.",
+                    next_tool="logistics_pick_tariff_for_shipment",
+                    next_arguments=arguments,
+                )
+
+        return CallToolResult(
+            content=[
+                TextContent(
+                    type="text",
+                    text="Shipment data is ready. Call logistics_create_shipment to continue.",
+                )
+            ],
+            structuredContent={
+                "status": "ready_to_create",
+                "destination_country": ship_to_country,
+                "tariff_required": tariff_required,
+                "next_tool": "logistics_create_shipment",
+                "next_arguments": arguments,
+            },
+            isError=False,
+        )
+
     @mcp.tool(name="logistics_pick_tariff_for_shipment", meta={
         "tags": ["sales"],
         "ui": {
@@ -189,6 +257,8 @@ def register(mcp):
         Create a planned shipment with package contents and delivery schedule.
         Shows confirmation dialog before creating the shipment.
 
+        Note: This is the final mutating step. Call logistics_prepare_shipment first.
+
         Parameters:
             ship_from: Dict with warehouse info {warehouse: str} (required)
             ship_to: Dict with address {line1, postal_code, city, country} (required)
@@ -219,8 +289,8 @@ def register(mcp):
             if missing_tariff:
                 return _guidance_result(
                     "Tariff code required for this destination. "
-                    "Call logistics_pick_tariff_for_shipment with the same shipment arguments to open the tariff picker UI.",
-                    next_tool="logistics_pick_tariff_for_shipment",
+                    "Call logistics_prepare_shipment with the same shipment arguments to validate and route the next step.",
+                    next_tool="logistics_prepare_shipment",
                     next_arguments=arguments,
                 )
 
