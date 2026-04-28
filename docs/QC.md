@@ -23,7 +23,8 @@ Decision outcomes:
 - pass: release held quantity for normal fulfillment
 - partial_scrap: scrap part of held quantity and release the rest
 - full_scrap: scrap all held quantity
-- manual_review: keep on hold until explicit decision
+
+> **MVP scope**: `manual_review` is explicitly excluded from the current implementation (see `docs/QC_DESIGN.md` MVP Decision Set). The state machine does not include this outcome.
 
 If scrap causes shortage against committed demand, replacement production orders are created with batch-size rules.
 

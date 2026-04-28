@@ -29,7 +29,7 @@ This section defines the persistent model required for QC-hold, image inspection
 
 Add:
 - inspection_required INTEGER NOT NULL DEFAULT 0
-- inspection_status TEXT
+- inspection_status TEXT NOT NULL DEFAULT 'none'
 
 Valid inspection_status values:
 - none
@@ -52,9 +52,9 @@ No mandatory structural change required, but movement_type values must be extend
 Note:
 - There is intentionally no qc_hold_in movement. For inspection_required orders, output is kept in QC hold records, not in stock, until release/scrap disposition.
 
-Optional (recommended) additional columns for stronger tracing:
-- qc_hold_batch_line_id TEXT
-- qc_inspection_id TEXT
+Required additional columns for tracing:
+- qc_hold_batch_line_id TEXT  — references the hold line that triggered the movement (NULL for non-QC movements)
+- qc_inspection_id TEXT       — references the inspection run (NULL for non-QC movements)
 
 Movement glossary:
 - qc_hold_release: quantity approved by QC and inserted into normal available stock.
@@ -294,6 +294,7 @@ Rule D:
 - Split pending qty into released + scrapped according to UI input.
 - Record qc_scrap movement and qc_hold_release movement.
 - Insert only released quantity into stock.
+- Mark line `partially_released`, batch `partially_released` if any pending qty remains after this action or all lines are now partially released.
 - Create replacement immediately for net shortage.
 
 #### full_scrap
@@ -312,14 +313,16 @@ Formula:
 - qty_short = max(0, scrapped_qty - available_substitute_qty)
 - qty_replacement = ceil(qty_short / output_qty) * output_qty
 
+**MVP simplification**: `available_substitute_qty = 0`. The formula therefore simplifies to `qty_short = scrapped_qty`. Existing FG stock is not deducted; the planner absorbs it on the next cycle.
+
 Behavior:
 - Create replacement MO immediately when qty_short > 0.
 - Link MO ID in qc_replacements.
 
 ### 2.5 Failure and Retry Semantics
 
-- Inspection submission must be idempotent per (hold_batch_id, image_hash set, prompt_version).
-- Disposition apply action must be idempotent via disposition request token.
+- Inspection submission is idempotent via a partial unique index on `qc_inspections(qc_hold_batch_id) WHERE status != 'failed'`. If a `completed` inspection exists for the batch, return it. If a `failed` inspection exists, DELETE it and re-run.
+- Disposition is idempotent via a `UNIQUE(qc_inspection_id)` constraint on `qc_dispositions`. If a disposition already exists for the inspection, return it without re-applying.
 - All disposition operations are transactional:
   - hold line update
   - stock movement writes

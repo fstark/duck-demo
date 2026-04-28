@@ -139,11 +139,11 @@ Implementation tasks:
 - Implement service logic to:
   - Attach image URLs to hold batches/lines.
   - Run inspection model call through MyForterro API chat completions with strict JSON schema.
-  - Use model `gpt-5.4` and send two images in one request (reference + inspected batch image).
+  - Use `config.QC_INFERENCE_MODEL` (never a literal model name string) and send two images in one request (reference BLOB as base64 data URI + inspected batch image URL).
   - Route all inference calls through `services/myforterro.py` (no direct provider calls from QC domain service).
   - Persist `qc_inspections` and `qc_inspection_findings`.
 - Normalize findings into canonical types/severity.
-- Implement idempotent inspection submission behavior.
+- Implement idempotent inspection submission: enforce via partial unique index `ON qc_inspections(qc_hold_batch_id) WHERE status != 'failed'`. Return existing completed inspection; delete and retry on failed.
 
 Associated tests:
 
@@ -174,7 +174,7 @@ Implementation tasks:
   - stock insertion for released qty only
   - production order inspection status
   - disposition audit row
-- Implement idempotent disposition application via request token.
+- Implement idempotent disposition application via `UNIQUE(qc_inspection_id)` constraint on `qc_dispositions`. Return existing disposition if already applied; never re-apply.
 
 Associated tests:
 
@@ -193,7 +193,7 @@ Associated tests:
 Implementation tasks:
 
 - Implement shortage calculation:
-  - `qty_short = max(0, scrapped_qty - available_substitute_qty)`
+  - `qty_short = scrapped_qty` (MVP: `available_substitute_qty = 0`; planner absorbs existing FG stock)
   - `qty_replacement = ceil(qty_short / output_qty) * output_qty`
 - Auto-create replacement production order when `qty_short > 0`.
 - Persist link in `qc_replacements`.
@@ -295,7 +295,7 @@ Implementation tasks:
 - Add one partial scrap E2E test with replacement creation.
 - Add one full scrap E2E test.
 - Add observability logs for key events (inspection run, disposition apply, replacement create).
-- Add inference adapter assertions so QC E2E verifies MyForterro chat completion is invoked with model `gpt-5.4` and two images.
+- Add inference adapter assertions so QC E2E verifies MyForterro chat completion is invoked with `config.QC_INFERENCE_MODEL` and two images.
 
 Associated tests:
 

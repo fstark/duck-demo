@@ -101,8 +101,20 @@ Goal: Encode allowed states/actions centrally and use them consistently.
 
 Implementation checklist:
 
-- [ ] Add QC state/action constants (single source of truth). Recommended new module:
-  - [ ] `services/qc.py` (or `services/qc_domain.py`)
+- [ ] Add QC state/action constants (single source of truth). Use module:
+  - [ ] `services/qc.py`
+- [ ] **Service class structure**: follow the existing pattern — define `class QcService` with all QC methods as instance methods, and create a module-level singleton `qc_service = QcService()`. This is what gets imported everywhere.
+- [ ] **ID generation prefixes**: use `generate_id(conn, PREFIX, table)` with these prefixes so IDs are human-readable and debuggable:
+  | Table | Prefix | Example |
+  |---|---|---|
+  | `qc_hold_batches` | `QCB` | `QCB-0001` |
+  | `qc_hold_batch_lines` | `QCBL` | `QCBL-0001` |
+  | `qc_hold_images` | `QCIMG` | `QCIMG-0001` |
+  | `qc_inspections` | `QCI` | `QCI-0001` |
+  | `qc_inspection_findings` | `QCIF` | `QCIF-0001` |
+  | `qc_dispositions` | `QCD` | `QCD-0001` |
+  | `qc_replacements` | `QCRPL` | `QCRPL-0001` |
+- [ ] Register `qc_service` singleton in `services/__init__.py` following the existing pattern (add `from services.qc import qc_service, QcService` and include both in `__all__`).
 - [ ] Define allowed values:
   - [ ] `inspection_status`: `none`, `pending_inspection`, `inspected`, `partially_released`, `released`
   - [ ] hold batch `status`: `pending_images`, `ready_for_inspection`, `inspected`, `released`, `partially_released`, `closed`
@@ -133,7 +145,9 @@ Goal: Create persistent model described in `docs/QC_DESIGN.md`.
 Implementation checklist:
 
 - [ ] Update `schema.sql`:
-  - [ ] extend `production_orders` with `inspection_required` and `inspection_status`
+  - [ ] extend `production_orders` with:
+    - `inspection_required INTEGER NOT NULL DEFAULT 0`
+    - `inspection_status TEXT NOT NULL DEFAULT 'none'` (not NULL; `'none'` is the default for all rows)
   - [ ] create `qc_hold_batches`
   - [ ] create `qc_hold_batch_lines`
   - [ ] create `qc_hold_images`
@@ -142,16 +156,23 @@ Implementation checklist:
   - [ ] create `qc_dispositions`
   - [ ] create `qc_replacements`
   - [ ] add indexes listed in design
+- [ ] Make `stock_movements.stock_id` nullable in `schema.sql`: change `stock_id TEXT NOT NULL` to `stock_id TEXT`. QC scrap movements have no associated `stock` row (scrap is disposed, not a stock location). All existing non-QC code always supplies a `stock_id`, so this change is backward-compatible.
 - [ ] Extend stock movement allowed conventions in code paths to include:
   - [ ] `qc_hold_release`
   - [ ] `qc_scrap`
   - [ ] `qc_replacement_in`
+- [ ] Add nullable tracing columns to `stock_movements`:
+  - `qc_hold_batch_line_id TEXT` — references the hold line that triggered the movement
+  - `qc_inspection_id TEXT` — references the inspection (for release/scrap movements)
+  - Non-QC movements leave both columns NULL
 - [ ] Add constants in `config.py` (no magic strings):
-  - [ ] scrap location constant (for example `LOC_SCRAP`)
+  - [ ] `LOC_SCRAP = "SCRAP"` — scrap location used for `qc_scrap` movements
+  - [ ] `QC_INFERENCE_MODEL = "gpt-5.4"` — model name for chat completion calls; `run_inspection` must reference `config.QC_INFERENCE_MODEL`, never a literal string
   - [ ] optional QC hold location constants if needed by implementation
 - [ ] Keep database evolution reset-only for MVP:
   - [ ] no migration/backfill framework work in this phase
   - [ ] defaults are enforced by `schema.sql` on reset/init
+- [ ] Note on `qc_replacements.sales_order_id NOT NULL`: guard at service level — if `qc_hold_batches.sales_order_id IS NULL`, skip replacement creation entirely. Do not relax the schema constraint.
 
 Tests to add:
 
@@ -177,12 +198,24 @@ Implementation checklist:
 - [ ] Modify `services/production.py` in `complete_order(...)`:
   - [ ] branch on `production_orders.inspection_required`
   - [ ] if `inspection_required=1`:
-    - [ ] create `qc_hold_batches` row
-    - [ ] create `qc_hold_batch_lines` row with `qty_on_hold=qty_pending=qty_produced`
-    - [ ] set `inspection_status='pending_inspection'`
+    - [ ] create `qc_hold_batches` row with:
+      - `sales_order_id = order["sales_order_id"]`
+      - `item_id = order["item_id"]`
+      - `status = 'pending_images'` (initial status)
+      - `created_at = sim_time`
+    - [ ] create `qc_hold_batch_lines` row with:
+      - `qc_hold_batch_id = batch_id`
+      - `item_id = order["item_id"]`
+      - `qty_on_hold = qty_produced`
+      - `qty_pending = qty_produced`
+      - `qty_released = 0`, `qty_scrapped = 0`
+      - `line_status = 'pending_inspection'` (initial status)
+      - `created_at = sim_time`
+    - [ ] set `inspection_status='pending_inspection'` on the production order
     - [ ] do not create `stock` row
     - [ ] do not write `production_in` movement for that qty
   - [ ] else preserve existing stock insertion path
+- [ ] `complete_order` signature is **unchanged** — `warehouse` and `location` are still accepted as parameters. They are simply unused in the QC branch. Callers (including the scenario) must still pass them (use `config.WAREHOUSE_DEFAULT` and `config.LOC_FINISHED_GOODS`).
 - [ ] Keep operation finalization and wait closure unchanged.
 
 Tests to add:
@@ -207,9 +240,10 @@ Goal: Pending QC qty cannot be allocated or shipped.
 Implementation checklist:
 
 - [ ] Update `services/inventory.py` availability summary logic:
-  - [ ] subtract active QC hold pending quantities from available-to-allocate
+  - [ ] **Note**: because Step A3 never inserts QC-held quantities into the `stock` table, `get_stock_summary` already naturally excludes them from `on_hand`. No changes are needed to account for QC hold in the on_hand calculation.
+  - [ ] The only required change is to `_compute_reserved`: add a sub-query that also sums `qc_hold_batch_lines.qty_pending` for the item (where `line_status = 'pending_inspection'`), so that `available_total` and the UI stock display both correctly reflect pending-QC quantities as unavailable to allocate.
 - [ ] Update `services/fulfillment.py` shipping checks:
-  - [ ] ensure raw `on_hand` checks do not accidentally include QC-held quantities
+  - [ ] **No changes required.** `ship_ready_orders` queries the `stock` table directly. QC-held quantities are never inserted into `stock` (Step A3), so they are already excluded from shipping eligibility automatically.
 - [ ] If required, add helper query in QC domain service to compute held qty by item.
 
 Tests to add:
@@ -234,21 +268,51 @@ Implementation checklist:
 - [ ] Add QC service methods (new `services/qc.py` recommended):
   - [ ] `list_pending_batches(...)`
   - [ ] `get_batch(...)`
-  - [ ] `attach_images(...)`
-  - [ ] `run_inspection(...)`
+  - [ ] `attach_images(*, batch_id: str, image_urls: list[str], uploaded_by: str | None = None) -> dict`
+    - Inserts one `qc_hold_images` row per URL.
+    - After inserting, update `qc_hold_batches.status` to `'ready_for_inspection'` (from `'pending_images'`).
+    - Returns the updated batch dict.
+  - [ ] `run_inspection(*, batch_id: str) -> dict`
 - [ ] `run_inspection(...)` responsibilities:
   - [ ] validate batch/production linkage
-  - [ ] resolve reference image from the product being built (image associated with `production_orders.item_id`)
-  - [ ] fail explicitly if required reference image is missing
-  - [ ] invoke MyForterro inference through `services/myforterro.py`
-  - [ ] call OpenAI-compatible chat completions endpoint on MyForterro API
-  - [ ] set `model='gpt-5.4'`
-  - [ ] send two images in the same completion request (reference image + inspected image)
-  - [ ] include tenant-scoped auth headers via MyForterro client wiring
-  - [ ] strict JSON parsing and normalization
+  - [ ] fail explicitly (`raise ValueError`) if batch has no images in `qc_hold_images`
+  - [ ] resolve reference image: fetch `items.image` BLOB via `production_orders.item_id`; fail explicitly (`raise ValueError`) if the BLOB is NULL
+  - [ ] base64-encode the BLOB and format as `"data:image/jpeg;base64,<encoded>"` for the chat message payload
+  - [ ] invoke MyForterro inference through `services/myforterro.py` using `myforterro.chat_completion(...)`
+  - [ ] use `model=config.QC_INFERENCE_MODEL` (never a literal string)
+  - [ ] send exactly two images in a single chat completion request: first the reference image (as data URI), then the operator-submitted image URL from `qc_hold_images` (as a regular URL); both as `{"type": "image_url", "image_url": {"url": "..."}}` message parts
+  - [ ] tenant-scoped auth headers are handled automatically by `myforterro.get_inference_client()`; do not add them manually
+  - [ ] **Two-phase inspection INSERT**: because `qc_inspections.decision` is NOT NULL, INSERT the row first with `status='pending'` and `decision=''`, then call the inference API, then UPDATE with `status='completed'`, `decision=<result>`, and all other fields. On API failure, UPDATE with `status='failed'`. This keeps the schema constraint while supporting rollback semantics.
+  - [ ] Set `qc_inspections.model_name = config.QC_INFERENCE_MODEL`
+  - [ ] Set `qc_inspections.prompt_version = "v1"` (plain constant — no config entry needed)
+  - [ ] parse the model's response content as JSON; raise explicitly on parse failure or if the response does not match the required schema (see Inference Response Schema below)
+  - [ ] normalize findings into `qc_inspection_findings` rows
   - [ ] persist `qc_inspections` + `qc_inspection_findings`
-  - [ ] set batch status to `inspected`
-- [ ] Add idempotency keying strategy for repeated inspection submission.
+  - [ ] set batch status to `'inspected'`
+- [ ] Idempotency: enforce via a **partial unique index** added in `schema.sql`:
+  ```sql
+  CREATE UNIQUE INDEX idx_qc_inspection_batch_unique
+      ON qc_inspections(qc_hold_batch_id) WHERE status != 'failed';
+  ```
+  Service logic: if a `completed` inspection exists for the batch, return it without re-running. If a `failed` inspection exists, DELETE it and re-run.
+- [ ] **Inference Response Schema** — `run_inspection` must parse the model's JSON response into this structure and raise `ValueError` if `decision` is missing or not in the allowed set, or if `findings` is not a list:
+  ```json
+  {
+    "decision": "pass | partial_scrap | full_scrap",
+    "confidence_overall": 0.95,
+    "decision_reason": "string",
+    "findings": [
+      {
+        "type": "wrong_product | paint_defect | shape_defect | assembly_defect | packaging_defect | missing_part",
+        "severity": "critical | major | minor",
+        "confidence": 0.9,
+        "description": "string",
+        "image_ref": "string or null",
+        "location_hint": "string or null"
+      }
+    ]
+  }
+  ```
 
 Tests to add:
 
@@ -256,7 +320,7 @@ Tests to add:
   - [ ] valid model result persists inspection + findings
   - [ ] invalid model schema fails explicitly
   - [ ] idempotent duplicate call does not duplicate rows
-  - [ ] verifies outbound inference payload uses `model='gpt-5.4'`
+  - [ ] verifies outbound inference payload uses `model=config.QC_INFERENCE_MODEL`
   - [ ] verifies outbound call includes exactly two image inputs in a single chat completion request
 
 Validation command:
@@ -271,15 +335,16 @@ Goal: Apply pass/partial/full disposition with strict quantity integrity.
 
 Implementation checklist:
 
-- [ ] Add `apply_disposition(...)` in QC service:
-  - [ ] `pass_release`: move pending to released, insert stock, write `qc_hold_release`
-  - [ ] `partial_scrap`: split pending to released+scrapped, write `qc_hold_release` + `qc_scrap`
-  - [ ] `full_scrap`: move all pending to scrapped, write `qc_scrap`
+- [ ] Add `apply_disposition(*, qc_inspection_id: str, action: str, approved_by: str | None = None, reason: str | None = None, qty_scrapped: int = 0) -> dict` in QC service:
+  - [ ] `pass_release`: move `qty_pending` → `qty_released`; INSERT a `stock` row at `(config.WAREHOUSE_DEFAULT, config.LOC_FINISHED_GOODS)` and write a `qc_hold_release` movement referencing that `stock_id`; set `stock_movements.qc_hold_batch_line_id` and `qc_inspection_id` on the movement row
+  - [ ] `partial_scrap`: `qty_scrapped` (from parameter) moves to `qty_scrapped`; remainder (`qty_pending - qty_scrapped`) moves to `qty_released`; write `qc_hold_release` movement (with stock row at `LOC_FINISHED_GOODS`) for released qty; write `qc_scrap` movement (with `stock_id=NULL`, `reference_type='qc_disposition'`) for scrap qty
+  - [ ] `full_scrap`: move all `qty_pending` → `qty_scrapped`; write `qc_scrap` movement with `stock_id=NULL`
+  - [ ] **Scrap movements do not create a stock row** — scrap is disposed inventory. Set `stock_id=NULL` (the schema is nullable after Step A2). Set `reference_type='qc_disposition'` and `reference_id=disposition_id`.
 - [ ] Persist `qc_dispositions` audit record for every action.
 - [ ] Update line and batch statuses based on post-action quantities.
 - [ ] Update `production_orders.inspection_status` accordingly.
 - [ ] Ensure all writes run in one transaction and rollback on any failure.
-- [ ] Add disposition idempotency token support.
+- [ ] Idempotency: `qc_dispositions` has a `UNIQUE(qc_inspection_id)` constraint (enforced in `schema.sql`). If a disposition already exists for this inspection, return it without re-applying. After any disposition, `qty_pending` is always zero — there is no second disposition on the same inspection.
 
 Tests to add:
 
@@ -302,11 +367,18 @@ Goal: Create replacement production when scrap creates shortage.
 Implementation checklist:
 
 - [ ] Implement shortage formula in QC service:
-  - [ ] `qty_short = max(0, scrapped_qty - available_substitute_qty)`
-  - [ ] `qty_replacement = ceil(qty_short / output_qty) * output_qty`
-- [ ] Create replacement MO via production service path (or direct service call), linked to originating SO.
+  - [ ] For MVP, `available_substitute_qty = 0` — always create a replacement when any qty is scrapped. Existing FG stock is deliberately not factored in; the scheduler will absorb it on the next planning cycle.
+  - [ ] `qty_short = scrapped_qty` (formula simplifies directly)
+  - [ ] `qty_replacement = ceil(qty_short / output_qty) * output_qty` (round up to batch size using `math.ceil`)
+- [ ] Guard: if `qc_hold_batches.sales_order_id IS NULL`, skip replacement creation entirely.
+- [ ] **Transaction boundary**: `production_service.create_order` internally calls `conn.commit()` via its own `db_conn()` block. Since `db_conn()` reuses the thread-local connection, calling it inside the disposition transaction would commit that inner work early and break atomicity. Use a two-phase approach:
+  1. Inside the `with db_conn()` transaction: apply all disposition writes + INSERT the `qc_replacements` row with `replacement_production_order_id = ''` as a placeholder.
+  2. `conn.commit()` to close the disposition atomic unit.
+  3. Outside the transaction: call `production_service.create_order(recipe_id=..., sales_order_id=..., notes=f"QC replacement for {batch_id}")`.
+  4. UPDATE `qc_replacements SET replacement_production_order_id = <new_mo_id> WHERE id = <repl_id>` in a separate small `db_conn()` block.
+- [ ] Create replacement MO by calling `production_service.create_order(recipe_id=..., sales_order_id=..., notes=f"QC replacement for {batch_id}")` (see above for sequencing).
 - [ ] Persist trace in `qc_replacements`.
-- [ ] Optionally write `qc_replacement_in` movement only when replacement output later enters stock.
+- [ ] `qc_replacement_in` movement is written by the replacement MO's own completion path (Step A3), not by the QC disposition service.
 
 Tests to add:
 
@@ -330,19 +402,39 @@ Goal: Full QC flow available via MCP tools with existing confirmation UX pattern
 
 Implementation checklist:
 
-- [ ] Create `mcp_tools/qc_tools.py` with:
-  - [ ] `qc_list_pending_batches`
-  - [ ] `qc_get_batch`
-  - [ ] `qc_get_inspection`
-  - [ ] `qc_attach_images`
-  - [ ] `qc_run_inspection`
-  - [ ] `qc_apply_disposition`
+- [ ] Create `mcp_tools/qc_tools.py` with these tools and their argument signatures:
+  - [ ] `qc_list_pending_batches` — no required args; optional `status: str = 'pending_images'` filter
+  - [ ] `qc_get_batch(batch_id: str)` — returns batch + lines + images + inspection summary
+  - [ ] `qc_get_inspection(inspection_id: str)` — returns inspection + findings
+  - [ ] `qc_attach_images(batch_id: str, image_urls: list[str], uploaded_by: str | None = None)` — mutating; returns updated batch
+  - [ ] `qc_run_inspection(batch_id: str)` — mutating; returns inspection record
+  - [ ] `qc_apply_disposition(qc_inspection_id: str, action: str, qty_scrapped: int = 0, approved_by: str | None = None, reason: str | None = None)` — mutating; returns `create_confirmation_response(...)`; `field_configs` should include: `qc_inspection_id` (text, readonly), `action` (options: `pass_release`/`partial_scrap`/`full_scrap`), `qty_scrapped` (number, required for `partial_scrap`), `approved_by` (text), `reason` (textarea). This tool is called by the **chat agent**, never by the UI.
+- [ ] All mutating tools (`qc_attach_images`, `qc_run_inspection`, `qc_apply_disposition`) need `structured_output=False` (following the pattern in `mcp_tools/production_tools.py` for confirmation tools).
 - [ ] Set MCP tool tags to `quality` for all QC tools.
 - [ ] Register in `mcp_tools/__init__.py`.
-- [ ] Add activity mapping in `mcp_tools/_common.py` for mutating QC tools.
+- [ ] Add activity mapping in `mcp_tools/_common.py` for mutating QC tools:
+  - [ ] Add to `TOOL_ACTION_MAP`:
+    ```python
+    "qc_attach_images":     ("quality", "qc.images_attached"),
+    "qc_run_inspection":    ("quality", "qc.inspection_run"),
+    "qc_apply_disposition": ("quality", "qc.disposition_applied"),
+    ```
+  - [ ] Add to `_ENTITY_ID_KEYS`: `"qc_hold_batch_id"`, `"qc_inspection_id"`, `"qc_disposition_id"`
+  - [ ] Add to `_KEY_TO_TYPE`: `"qc_hold_batch_id": "qc_hold_batch"`, `"qc_inspection_id": "qc_inspection"`, `"qc_disposition_id": "qc_disposition"`
 - [ ] For `qc_apply_disposition`, use the existing generic confirm flow:
   - [ ] tool returns `create_confirmation_response(...)`
-  - [ ] add dispatcher branch in `mcp_tools/confirm_tools.py`
+  - [ ] add dispatcher branch in `mcp_tools/confirm_tools.py`:
+    ```python
+    elif original_tool == "qc_apply_disposition":
+        return qc_service.apply_disposition(
+            qc_inspection_id=arguments["qc_inspection_id"],
+            action=arguments["action"],
+            approved_by=arguments.get("approved_by"),
+            reason=arguments.get("reason"),
+            qty_scrapped=int(arguments.get("qty_scrapped") or 0),
+        )
+    ```
+  - [ ] add `from services import qc_service` at the top of `confirm_tools.py` alongside the other service imports
 
 Tests to add:
 
@@ -390,19 +482,59 @@ Goal: Expose QC state in UI while keeping mutation through MCP app dialogs.
 Implementation checklist:
 
 - [ ] Extend API client in `ui/src/api.ts`:
-  - [ ] add QC read API methods
-- [ ] Add types in `ui/src/types.ts` for QC batch/detail/inspection/replacement entities.
+  - [ ] add QC read API methods:
+    ```typescript
+    qcBatches: (status?: string) =>
+      fetchJson<{ batches: QcHoldBatch[] }>(`/qc/batches${status ? `?status=${encodeURIComponent(status)}` : ''}`),
+    qcBatch: (id: string) => fetchJson<QcHoldBatchDetail>(`/qc/batches/${encodeURIComponent(id)}`),
+    qcInspection: (id: string) => fetchJson<QcInspection>(`/qc/inspections/${encodeURIComponent(id)}`),
+    ```
+- [ ] Add types in `ui/src/types.ts` for QC entities:
+  ```typescript
+  export type QcHoldBatch = {
+    id: string; production_order_id: string; sales_order_id?: string
+    item_id: string; status: string; created_at: string; released_at?: string
+    replacement_triggered: number; item_sku?: string; item_name?: string
+    qty_pending?: number; qty_released?: number; qty_scrapped?: number
+  }
+  export type QcHoldBatchDetail = QcHoldBatch & {
+    lines: QcHoldBatchLine[]; images: QcHoldImage[]
+    inspection?: QcInspection; replacements?: QcReplacement[]
+  }
+  export type QcHoldBatchLine = {
+    id: string; item_id: string; qty_on_hold: number; qty_pending: number
+    qty_released: number; qty_scrapped: number; line_status: string; created_at: string
+  }
+  export type QcHoldImage = { id: string; image_url: string; created_at: string; uploaded_by?: string }
+  export type QcInspection = {
+    id: string; qc_hold_batch_id: string; model_name: string; status: string
+    decision: string; confidence_overall?: number; decision_reason?: string
+    created_at: string; completed_at?: string; findings: QcInspectionFinding[]
+  }
+  export type QcInspectionFinding = {
+    id: string; finding_type: string; severity: string; confidence?: number
+    description?: string; image_ref?: string; location_hint?: string
+  }
+  export type QcReplacement = {
+    id: string; sales_order_id: string; item_id: string; qty_short: number
+    qty_replacement: number; replacement_production_order_id: string; created_at: string
+  }
+  ```
 - [ ] Add pages:
   - [ ] `ui/src/pages/QcQueuePage.tsx`
   - [ ] `ui/src/pages/QcBatchDetailPage.tsx`
-- [ ] Wire navigation and view states in `ui/src/App.tsx`.
+- [ ] Wire navigation and view states in `ui/src/App.tsx`:
+  - [ ] Add `'qc-queue'` to the `ViewPage` type union.
+  - [ ] Add `'qc-queue'` to the `allowed` array in `parseHash()`.
+  - [ ] Add a new nav group `{ label: 'Quality', items: [{ page: 'qc-queue', label: 'QC Queue' }] }` to the `navGroups` array (add after the Supply Chain group).
+  - [ ] Add import lines: `import { QcQueuePage } from './pages/QcQueuePage'` and `import { QcBatchDetailPage } from './pages/QcBatchDetailPage'`.
+  - [ ] Add render branches: `{view.page === 'qc-queue' && !view.id && <QcQueuePage onSelect={(id) => setHash('qc-queue', id)} />}` and `{view.page === 'qc-queue' && view.id && <QcBatchDetailPage batchId={view.id} />}`.
 - [ ] If adding tables, use sorting pattern from `docs/CODING.md` (`useTableSort`).
-- [ ] For disposition action buttons, call MCP tool flow and generic confirmation UI; do not call direct write REST.
+- [ ] **The UI is strictly read-only.** No buttons, forms, or handlers that trigger any state change. Disposition and all other QC mutations are initiated exclusively through the chat/MCP interface. The UI shows the current state of QC batches, inspections, and dispositions — it never causes them.
 
 Tests to add:
 
-- [ ] UI component tests for rendering queue/detail data.
-- [ ] Integration/UI tests for click-flow that invokes MCP tool action (no direct mutation fetch).
+- [ ] UI component tests for rendering queue/detail data (read-only shape checks).
 
 Validation command:
 
@@ -442,10 +574,14 @@ Goal: End of s01 has exactly three pending inspections for target SKUs.
 Implementation checklist:
 
 - [ ] Add deterministic injection logic in `scenarios/s01_steady_state.py`:
-  - [ ] create or reserve `MO-9000`, `MO-9001`, `MO-9002`
-  - [ ] map to ELVIS/MARILYN/ZOMBIE target SKUs
-  - [ ] set `inspection_required=1`
-  - [ ] ensure they complete into QC hold
+  - [ ] INSERT the three production orders directly with hardcoded IDs (do **not** call `generate_id`; the `9000` range is reserved and scenario execution never reaches it):
+    - `MO-9000` → ELVIS-DUCK-20CM recipe + the SO created for it
+    - `MO-9001` → MARILYN-DUCK-20CM recipe + the SO created for it
+    - `MO-9002` → ZOMBIE-DUCK-15CM recipe + the SO created for it
+  - [ ] For the three dedicated sales orders, use the most frequent customer already present in the generated dataset (or the first customer returned by `SELECT id FROM customers LIMIT 1` — any valid customer is sufficient; the SO is only needed as a non-NULL FK anchor).
+  - [ ] Set `inspection_required=1` on all three at INSERT time
+  - [ ] Advance simulation to complete all three MOs by calling `production_service.complete_order(production_order_id=..., qty_produced=<recipe output_qty>, warehouse=config.WAREHOUSE_DEFAULT, location=config.LOC_FINISHED_GOODS)` — Step A3 will route them to QC hold automatically (the warehouse/location args are accepted but ignored in the QC branch)
+  - [ ] Do **not** run fulfillment or dispatch on these three MOs after completion
 - [ ] Ensure the main loop continues naturally for realism.
 - [ ] Add hard end-of-scenario assertions:
   - [ ] exactly 3 pending inspections
@@ -555,4 +691,10 @@ All boxes below must be true:
 - Do not use defensive fake data; fail explicitly when state is invalid.
 - Keep quantity columns and computations as integers.
 - Keep UI write actions routed through MCP tools, not UI-only mutation routes.
-- QC image comparison must go through MyForterro AI inference API using chat completions on model `gpt-5.4` with two images per request.
+- QC image comparison must go through MyForterro AI inference API using chat completions on `config.QC_INFERENCE_MODEL` with two images per request.
+- **Test isolation**: QC mutation tests (A3, B1, B2, B3, B4, D2) must use a **per-function-scoped DB fixture**. Add a `qc_db` fixture in `tests/conftest.py` (or a local `conftest.py` in a `tests/qc/` subfolder) that calls `db.init_db()` on a fresh `tmp_path` file and seeds only the minimal rows needed for that test. Do not rely on the session-scoped shared DB for any test that writes QC state. Read-only contract tests (C1 MCP shape tests, C2 REST tests) may use the session-scoped `mcp_app` / `rest_client` fixtures after adding QC seed rows to `tests/seed_test_data.py`.
+- **Seed data additions for QC tests**: add to `tests/seed_test_data.py`:
+  - One finished-good item with a non-NULL `image` BLOB (a 1-pixel JPEG bytes literal is sufficient — no external file needed).
+  - A corresponding recipe with `output_qty` set.
+  - One production order with `inspection_required=1`, `status='completed'`, linked to a sales order — used as the fixture MO for completion/inspection/disposition tests.
+- **`vite.config.ts` is not changed for Step C4.** Only `package.json` needs a new `build:mcp-app:qc-disposition` script (`MCP_APP_ENTRY=qc-disposition.html vite build --mode mcp-app`) and inclusion in the `build:mcp-app` chain. The existing `MCP_APP_ENTRY` env-var mechanism in `vite.config.ts` already handles routing to any HTML entry point.
