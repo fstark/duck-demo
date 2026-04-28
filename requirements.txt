@@ -1,4 +1,6 @@
 mcp
+openai
+requests
 Pillow
 matplotlib
 squarify

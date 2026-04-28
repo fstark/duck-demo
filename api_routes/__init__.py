@@ -16,6 +16,7 @@ from api_routes import (
     invoice_routes,
     activity_routes,
     dashboard_routes,
+    tariff_routes,
 )
 
 _MODULES = [
@@ -34,6 +35,7 @@ _MODULES = [
     invoice_routes,
     activity_routes,
     dashboard_routes,
+    tariff_routes,
 ]
 
 
