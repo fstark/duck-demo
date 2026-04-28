@@ -80,3 +80,15 @@ result = invoice_service.list_invoices(status='overdue', limit=50)
 print(json.dumps(result, indent=2, default=str))
 "
 ```
+
+
+
+
+###m Some info about MCP UI
+
+
+Getting MCP App UI Running in VS Code Chat
+The core challenge was making the _meta field appear in MCP tool responses so VS Code knows to render the React UI. Two things are needed: (1) the @mcp.tool() decorator must include meta={"ui": {"resourceUri": "ui://mcpapp/...", "visibility": ["model", "app"]}} and output_schema=None, and (2) the tool function must return a FastMCP ToolResult (from fastmcp.tools.tool) — not the mcp SDK's CallToolResult (from mcp.types). This is because FastMCP's convert_result() doesn't recognize CallToolResult as its own ToolResult type, so it serializes it as a raw value and silently drops _meta. The FastMCP ToolResult carries content, structured_content (snake_case), and meta fields, and its to_mcp_result() method properly constructs a CallToolResult with _meta populated in the wire format. The structuredContent (camelCase) in the wire output is what the React HTML app receives as its data payload.
+
+On the server side, each UI type needs a resource registered like @mcp.resource("ui://mcpapp/form", mime_type="text/html;profile=mcp-app") that serves the corresponding HTML file from the mcp_apps_ui directory. The mime_type="text/html;profile=mcp-app" is important — it signals to VS Code that this is an MCP App UI resource. After making changes to the server code, a full VS Code window reload (Developer: Reload Window) is required for the MCP server to restart and pick up the new tool metadata. Also worth noting: duck-demo uses structured_output=False on its @mcp.tool() decorator, but that parameter crashes FastMCP 3.1.0 — using output_schema=None achieves the same effect in FastMCP.
+
