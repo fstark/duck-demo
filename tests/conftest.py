@@ -101,3 +101,73 @@ def rest_client(_mcp_instance):
 def mcp_app(_mcp_instance):
     """The FastMCP instance — use to look up and call tool functions directly."""
     return _mcp_instance
+
+
+# ---------------------------------------------------------------------------
+# Per-function-scoped QC DB fixture (for mutation tests that write QC state)
+# ---------------------------------------------------------------------------
+
+@pytest.fixture()
+def qc_db(tmp_path, monkeypatch):
+    """Create a fresh temporary DB with schema + minimal QC seed data per test.
+
+    Uses function scope so QC mutation tests are fully isolated from each other
+    and from the session-scoped shared DB.
+    """
+    from tests.seed_test_data import (
+        CUSTOMERS, SUPPLIERS, ITEMS, STOCK, STOCK_MOVEMENTS,
+        RECIPES, RECIPE_INGREDIENTS, RECIPE_OPERATIONS, WORK_CENTERS,
+        QUOTES, QUOTE_LINES, SALES_ORDERS, SALES_ORDER_LINES,
+        PRODUCTION_ORDERS,
+        QC_RECIPES, QC_RECIPE_INGREDIENTS,
+        QC_SALES_ORDERS, QC_SALES_ORDER_LINES,
+        QC_PRODUCTION_ORDERS, QC_HOLD_BATCHES, QC_HOLD_BATCH_LINES,
+        SIM_TIME,
+    )
+
+    db_file = tmp_path / "qc_test.db"
+    monkeypatch.setattr(db, "DB_PATH", db_file)
+
+    db.init_db()
+
+    conn = db.get_connection()
+    ordered_data = [
+        ("simulation_state", [{"id": 1, "sim_time": SIM_TIME}]),
+        ("suppliers", SUPPLIERS),
+        ("customers", CUSTOMERS),
+        ("items", ITEMS),
+        ("stock", STOCK),
+        ("stock_movements", STOCK_MOVEMENTS),
+        ("recipes", RECIPES),
+        ("recipe_ingredients", RECIPE_INGREDIENTS),
+        ("recipe_operations", RECIPE_OPERATIONS),
+        ("work_centers", WORK_CENTERS),
+        ("quotes", QUOTES),
+        ("quote_lines", QUOTE_LINES),
+        ("sales_orders", SALES_ORDERS),
+        ("sales_order_lines", SALES_ORDER_LINES),
+        ("production_orders", PRODUCTION_ORDERS),
+        ("recipes", QC_RECIPES),
+        ("recipe_ingredients", QC_RECIPE_INGREDIENTS),
+        ("sales_orders", QC_SALES_ORDERS),
+        ("sales_order_lines", QC_SALES_ORDER_LINES),
+        ("production_orders", QC_PRODUCTION_ORDERS),
+        ("qc_hold_batches", QC_HOLD_BATCHES),
+        ("qc_hold_batch_lines", QC_HOLD_BATCH_LINES),
+    ]
+    for table_name, rows in ordered_data:
+        if not rows:
+            continue
+        cols = list(rows[0].keys())
+        placeholders = ", ".join("?" for _ in cols)
+        col_names = ", ".join(cols)
+        for row in rows:
+            values = [row[c] for c in cols]
+            conn.execute(
+                f"INSERT INTO {table_name} ({col_names}) VALUES ({placeholders})",
+                values,
+            )
+    conn.commit()
+    conn.close()
+
+    yield db_file

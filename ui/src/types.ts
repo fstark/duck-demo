@@ -579,3 +579,81 @@ export type ProductionOrderTimeline = {
   invoices: TimelineInvoice[]
 }
 
+// ---------------------------------------------------------------------------
+// Quality Control (QC)
+// ---------------------------------------------------------------------------
+
+export type QcHoldBatch = {
+  id: string
+  production_order_id: string
+  sales_order_id?: string
+  item_id: string
+  status: string
+  created_at: string
+  released_at?: string
+  replacement_triggered: number
+  item_sku?: string
+  item_name?: string
+  qty_pending?: number
+  qty_released?: number
+  qty_scrapped?: number
+}
+
+export type QcHoldBatchDetail = QcHoldBatch & {
+  lines: QcHoldBatchLine[]
+  images: QcHoldImage[]
+  inspection?: QcInspection
+  replacements?: QcReplacement[]
+}
+
+export type QcHoldBatchLine = {
+  id: string
+  item_id: string
+  qty_on_hold: number
+  qty_pending: number
+  qty_released: number
+  qty_scrapped: number
+  line_status: string
+  created_at: string
+}
+
+export type QcHoldImage = {
+  id: string
+  image_url: string
+  created_at: string
+  uploaded_by?: string
+}
+
+export type QcInspection = {
+  id: string
+  qc_hold_batch_id: string
+  model_name: string
+  status: string
+  decision: string
+  confidence_overall?: number
+  decision_reason?: string
+  created_at: string
+  completed_at?: string
+  findings: QcInspectionFinding[]
+}
+
+export type QcInspectionFinding = {
+  id: string
+  finding_type: string
+  severity: string
+  confidence?: number
+  description?: string
+  image_ref?: string
+  location_hint?: string
+}
+
+export type QcReplacement = {
+  id: string
+  sales_order_id: string
+  item_id: string
+  qty_short: number
+  qty_replacement: number
+  replacement_production_order_id: string
+  created_at: string
+}
+

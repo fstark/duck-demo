@@ -4,6 +4,8 @@ Provides a small, deterministic dataset: 2 customers, 2 items (1 finished good,
 1 raw material), 1 supplier, 1 recipe, stock for both items, 1 quote (accepted),
 1 sales order (confirmed), 1 production order, 1 shipment, 1 invoice (issued),
 1 email, 1 purchase order, and 1 payment.
+Also includes QC seed data: 1 finished-good item with an image BLOB,
+a recipe, and a completed production order with inspection_required=1.
 
 All IDs are prefixed with "T-" to make them obviously test data.
 """
@@ -72,6 +74,7 @@ ITEMS = [
         "uom": "g",
         "reorder_qty": 1500000,
         "default_supplier_id": "SUP-001",
+        "image": None,
     },
     {
         "id": "ITEM-YELLOW-DYE",
@@ -83,6 +86,7 @@ ITEMS = [
         "uom": "ml",
         "reorder_qty": 800,
         "default_supplier_id": None,
+        "image": None,
     },
     {
         "id": "ITEM-BOX-SMALL",
@@ -94,6 +98,7 @@ ITEMS = [
         "uom": "ea",
         "reorder_qty": 1000,
         "default_supplier_id": None,
+        "image": None,
     },
     {
         "id": "ITEM-CLASSIC-10",
@@ -105,6 +110,50 @@ ITEMS = [
         "uom": "ea",
         "reorder_qty": 0,
         "default_supplier_id": None,
+        "image": None,
+    },
+    # QC test item — has a 1-pixel JPEG image BLOB for inspection tests
+    {
+        "id": "ITEM-QC-DUCK",
+        "sku": "QC-DUCK-TEST",
+        "name": "QC Test Duck",
+        "type": "finished_good",
+        "unit_price": 12.0,
+        "cost_price": None,
+        "uom": "ea",
+        "reorder_qty": 0,
+        "default_supplier_id": None,
+        # Minimal 1x1 JPEG (valid JPEG bytes for testing reference image resolution)
+        "image": bytes([
+            0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 0x4A, 0x46, 0x49, 0x46, 0x00, 0x01,
+            0x01, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0x00, 0xFF, 0xDB, 0x00, 0x43,
+            0x00, 0x08, 0x06, 0x06, 0x07, 0x06, 0x05, 0x08, 0x07, 0x07, 0x07, 0x09,
+            0x09, 0x08, 0x0A, 0x0C, 0x14, 0x0D, 0x0C, 0x0B, 0x0B, 0x0C, 0x19, 0x12,
+            0x13, 0x0F, 0x14, 0x1D, 0x1A, 0x1F, 0x1E, 0x1D, 0x1A, 0x1C, 0x1C, 0x20,
+            0x24, 0x2E, 0x27, 0x20, 0x22, 0x2C, 0x23, 0x1C, 0x1C, 0x28, 0x37, 0x29,
+            0x2C, 0x30, 0x31, 0x34, 0x34, 0x34, 0x1F, 0x27, 0x39, 0x3D, 0x38, 0x32,
+            0x3C, 0x2E, 0x33, 0x34, 0x32, 0xFF, 0xC0, 0x00, 0x0B, 0x08, 0x00, 0x01,
+            0x00, 0x01, 0x01, 0x01, 0x11, 0x00, 0xFF, 0xC4, 0x00, 0x1F, 0x00, 0x00,
+            0x01, 0x05, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
+            0x09, 0x0A, 0x0B, 0xFF, 0xC4, 0x00, 0xB5, 0x10, 0x00, 0x02, 0x01, 0x03,
+            0x03, 0x02, 0x04, 0x03, 0x05, 0x05, 0x04, 0x04, 0x00, 0x00, 0x01, 0x7D,
+            0x01, 0x02, 0x03, 0x00, 0x04, 0x11, 0x05, 0x12, 0x21, 0x31, 0x41, 0x06,
+            0x13, 0x51, 0x61, 0x07, 0x22, 0x71, 0x14, 0x32, 0x81, 0x91, 0xA1, 0x08,
+            0x23, 0x42, 0xB1, 0xC1, 0x15, 0x52, 0xD1, 0xF0, 0x24, 0x33, 0x62, 0x72,
+            0x82, 0x09, 0x0A, 0x16, 0x17, 0x18, 0x19, 0x1A, 0x25, 0x26, 0x27, 0x28,
+            0x29, 0x2A, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39, 0x3A, 0x43, 0x44, 0x45,
+            0x46, 0x47, 0x48, 0x49, 0x4A, 0x53, 0x54, 0x55, 0x56, 0x57, 0x58, 0x59,
+            0x5A, 0x63, 0x64, 0x65, 0x66, 0x67, 0x68, 0x69, 0x6A, 0x73, 0x74, 0x75,
+            0x76, 0x77, 0x78, 0x79, 0x7A, 0x83, 0x84, 0x85, 0x86, 0x87, 0x88, 0x89,
+            0x8A, 0x92, 0x93, 0x94, 0x95, 0x96, 0x97, 0x98, 0x99, 0x9A, 0xA2, 0xA3,
+            0xA4, 0xA5, 0xA6, 0xA7, 0xA8, 0xA9, 0xAA, 0xB2, 0xB3, 0xB4, 0xB5, 0xB6,
+            0xB7, 0xB8, 0xB9, 0xBA, 0xC2, 0xC3, 0xC4, 0xC5, 0xC6, 0xC7, 0xC8, 0xC9,
+            0xCA, 0xD2, 0xD3, 0xD4, 0xD5, 0xD6, 0xD7, 0xD8, 0xD9, 0xDA, 0xE1, 0xE2,
+            0xE3, 0xE4, 0xE5, 0xE6, 0xE7, 0xE8, 0xE9, 0xEA, 0xF1, 0xF2, 0xF3, 0xF4,
+            0xF5, 0xF6, 0xF7, 0xF8, 0xF9, 0xFA, 0xFF, 0xDA, 0x00, 0x08, 0x01, 0x01,
+            0x00, 0x00, 0x3F, 0x00, 0xFB, 0xD6, 0xFF, 0xD9,
+        ]),
     },
 ]
 
@@ -302,6 +351,115 @@ PRODUCTION_OPERATIONS = [
     {"id": "POP-T004", "production_order_id": "MO-T001", "recipe_operation_id": "OP-T004", "sequence_order": 4, "operation_name": "Pack into boxes", "duration_hours": 0.25, "work_center": "PACKAGING", "status": "pending"},
 ]
 
+# ── QC seed data ───────────────────────────────────────────────────────────
+# Recipe for the QC test item
+QC_RECIPES = [
+    {
+        "id": "RCP-QC-DUCK",
+        "output_item_id": "ITEM-QC-DUCK",
+        "output_qty": 12,
+        "output_uom": "ea",
+        "production_time_hours": 2.0,
+        "notes": "QC test duck recipe",
+    },
+]
+
+QC_RECIPE_INGREDIENTS = [
+    {"id": "ING-QC001", "recipe_id": "RCP-QC-DUCK", "sequence_order": 1, "input_item_id": "ITEM-PVC", "input_qty": 600, "input_uom": "g"},
+]
+
+# A completed production order with inspection_required=1 (fixture for QC tests)
+QC_SALES_ORDERS = [
+    {
+        "id": "SO-QC001",
+        "quote_id": "QUO-T001",
+        "customer_id": "CUST-0101",
+        "requested_delivery_date": "2025-08-20",
+        "ship_to_line1": "1 Rue du Test",
+        "ship_to_line2": None,
+        "ship_to_postal_code": "75001",
+        "ship_to_city": "Paris",
+        "ship_to_country": "FR",
+        "note": "QC test SO",
+        "subtotal": 144.0,
+        "discount": 0.0,
+        "shipping": 20.0,
+        "tax": 0.0,
+        "total": 164.0,
+        "currency": "EUR",
+        "status": "confirmed",
+        "created_at": SIM_TIME,
+    },
+]
+
+QC_SALES_ORDER_LINES = [
+    {"id": "SOL-QC001", "sales_order_id": "SO-QC001", "item_id": "ITEM-QC-DUCK", "qty": 12, "unit_price": 12.0, "line_total": 144.0},
+]
+
+QC_PRODUCTION_ORDERS = [
+    {
+        "id": "MO-QC001",
+        "sales_order_id": "SO-QC001",
+        "recipe_id": "RCP-QC-DUCK",
+        "item_id": "ITEM-QC-DUCK",
+        "status": "completed",
+        "parent_production_order_id": None,
+        "current_operation": None,
+        "qty_produced": 12,
+        "started_at": SIM_TIME,
+        "completed_at": SIM_TIME,
+        "eta_finish": "2025-08-01",
+        "eta_ship": "2025-08-02",
+        "inspection_required": 1,
+        "inspection_status": "pending_inspection",
+    },
+    # A second MO that is still completable (used in completion tests)
+    {
+        "id": "MO-QC002",
+        "sales_order_id": "SO-QC001",
+        "recipe_id": "RCP-QC-DUCK",
+        "item_id": "ITEM-QC-DUCK",
+        "status": "planned",
+        "parent_production_order_id": None,
+        "current_operation": None,
+        "qty_produced": None,
+        "started_at": None,
+        "completed_at": None,
+        "eta_finish": "2025-08-05",
+        "eta_ship": "2025-08-06",
+        "inspection_required": 1,
+        "inspection_status": "none",
+    },
+]
+
+QC_HOLD_BATCHES = [
+    {
+        "id": "QCB-T001",
+        "production_order_id": "MO-QC001",
+        "sales_order_id": "SO-QC001",
+        "item_id": "ITEM-QC-DUCK",
+        "status": "pending_images",
+        "created_at": SIM_TIME,
+        "released_at": None,
+        "replacement_triggered": 0,
+    },
+]
+
+QC_HOLD_BATCH_LINES = [
+    {
+        "id": "QCBL-T001",
+        "qc_hold_batch_id": "QCB-T001",
+        "item_id": "ITEM-QC-DUCK",
+        "qty_on_hold": 12,
+        "qty_pending": 12,
+        "qty_released": 0,
+        "qty_scrapped": 0,
+        "line_status": "pending_inspection",
+        "created_at": SIM_TIME,
+        "closed_at": None,
+    },
+]
+
 # ── Purchase orders ────────────────────────────────────────────────────────
 PURCHASE_ORDERS = [
     {
@@ -414,4 +572,12 @@ TABLE_DATA = [
     ("payments", PAYMENTS),
     ("emails", EMAILS),
     ("activity_log", ACTIVITY_LOG),
+    # QC seed data
+    ("recipes", QC_RECIPES),
+    ("recipe_ingredients", QC_RECIPE_INGREDIENTS),
+    ("sales_orders", QC_SALES_ORDERS),
+    ("sales_order_lines", QC_SALES_ORDER_LINES),
+    ("production_orders", QC_PRODUCTION_ORDERS),
+    ("qc_hold_batches", QC_HOLD_BATCHES),
+    ("qc_hold_batch_lines", QC_HOLD_BATCH_LINES),
 ]

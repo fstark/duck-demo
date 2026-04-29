@@ -13,6 +13,7 @@ from services import (
     messaging_service,
     quote_service,
     invoice_service,
+    qc_service,
 )
 
 
@@ -179,6 +180,16 @@ def register(mcp):
                 payment_method=arguments.get("payment_method", "bank_transfer"),
                 reference=arguments.get("reference"),
                 notes=arguments.get("notes")
+            )
+
+        # QC Tools
+        elif original_tool == "qc_apply_disposition":
+            return qc_service.apply_disposition(
+                qc_inspection_id=arguments["qc_inspection_id"],
+                action=arguments["action"],
+                approved_by=arguments.get("approved_by"),
+                reason=arguments.get("reason"),
+                qty_scrapped=int(arguments.get("qty_scrapped") or 0),
             )
 
         else:

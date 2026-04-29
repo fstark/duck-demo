@@ -13,6 +13,7 @@ Period: 2025-08-01 → 2025-09-30  (sim clock already at 08-01 from base_setup)
 
 import logging
 import random
+from datetime import datetime, timedelta
 from typing import Any, Dict, List
 
 import config
@@ -35,8 +36,11 @@ from services import (
     logistics_service,
     mrp_service,
     quote_service,
+    production_service,
+    simulation_service,
 )
 from services._base import db_conn
+from db import generate_id
 
 logger = logging.getLogger(__name__)
 
@@ -384,7 +388,174 @@ def run(ctx: Dict[str, Any]) -> Dict[str, Any]:
         logger.info("  %-22s %d", k, v)
     logger.info("  Sim time:          %s", current_time())
 
+    # ------------------------------------------------------------------
+    # QC Fixture: inject three inspection-required MOs at deterministic IDs
+    # ------------------------------------------------------------------
+    _inject_qc_demo_fixtures(ctx)
+
     return {
         "s01_so_ids": all_so_ids,
         "core_skus": CORE_SKUS,
     }
+
+
+# ---------------------------------------------------------------------------
+# QC Fixture helpers
+# ---------------------------------------------------------------------------
+
+# Target SKUs and their fixed MO IDs (9000 range is reserved for demo fixtures)
+_QC_FIXTURES = [
+    ("MO-9000", "ELVIS-DUCK-20CM"),
+    ("MO-9001", "MARILYN-DUCK-20CM"),
+    ("MO-9002", "ZOMBIE-DUCK-15CM"),
+]
+
+
+def _inject_qc_demo_fixtures(ctx: Dict[str, Any]) -> None:
+    """Inject three inspection-required production orders and complete them into QC hold.
+
+    Uses fixed IDs in the 9000 range (reserved — never reached by normal generation).
+    Ensures scenario ends with exactly 3 pending-inspection batches for target SKUs.
+    """
+    logger.info("=== QC Demo Fixture: injecting 3 inspection-required MOs ===")
+
+    customer_ids: List[str] = ctx["customer_ids"]
+    sim_time = current_time()
+
+    with db_conn() as conn:
+        # Guard: ensure fixed IDs don't already exist
+        for mo_id, _ in _QC_FIXTURES:
+            existing = conn.execute(
+                "SELECT id FROM production_orders WHERE id = ?", (mo_id,)
+            ).fetchone()
+            assert existing is None, (
+                f"QC fixture MO ID {mo_id} already exists in production_orders. "
+                "The 9000 range must be reserved for fixture use only."
+            )
+
+        # Pick first available customer as anchor
+        customer_id = conn.execute("SELECT id FROM customers LIMIT 1").fetchone()["id"]
+
+        # Collect item and recipe lookups
+        fixture_data = []
+        for mo_id, sku in _QC_FIXTURES:
+            item_row = conn.execute(
+                "SELECT id FROM items WHERE sku = ?", (sku,)
+            ).fetchone()
+            assert item_row is not None, f"QC fixture: item with SKU {sku} not found"
+            item_id = item_row["id"]
+
+            recipe_row = conn.execute(
+                "SELECT id, output_qty FROM recipes WHERE output_item_id = ?", (item_id,)
+            ).fetchone()
+            assert recipe_row is not None, f"QC fixture: no recipe found for item {sku}"
+
+            fixture_data.append({
+                "mo_id": mo_id,
+                "sku": sku,
+                "item_id": item_id,
+                "recipe_id": recipe_row["id"],
+                "output_qty": recipe_row["output_qty"],
+            })
+
+    # Create sales orders and production orders for each fixture
+    so_ids = []
+    for fd in fixture_data:
+        # Create a minimal sales order as FK anchor
+        with db_conn() as conn:
+            from db import generate_id as gen_id
+            so_id = gen_id(conn, "SO", "sales_orders")
+            # Find a quote to reference (use the first available quote or reuse an existing SO's quote)
+            quote_row = conn.execute(
+                "SELECT id FROM quotes WHERE status = 'accepted' LIMIT 1"
+            ).fetchone()
+            assert quote_row is not None, "QC fixture: no accepted quote found for SO anchor"
+            conn.execute(
+                "INSERT INTO sales_orders (id, quote_id, customer_id, subtotal, discount, shipping, tax, total, currency, status, created_at) "
+                "VALUES (?, ?, ?, 0, 0, 0, 0, 0, 'EUR', 'confirmed', ?)",
+                (so_id, quote_row["id"], customer_id, sim_time),
+            )
+            # Also add a sales_order_line so the SO is well-formed
+            sol_id = gen_id(conn, "SOL", "sales_order_lines")
+            conn.execute(
+                "INSERT INTO sales_order_lines (id, sales_order_id, item_id, qty, unit_price, line_total) "
+                "VALUES (?, ?, ?, ?, 0, 0)",
+                (sol_id, so_id, fd["item_id"], fd["output_qty"]),
+            )
+            # Insert the production order with a fixed ID and inspection_required=1
+            conn.execute(
+                "INSERT INTO production_orders "
+                "(id, sales_order_id, recipe_id, item_id, status, inspection_required, inspection_status, "
+                "eta_finish, eta_ship) "
+                "VALUES (?, ?, ?, ?, 'ready', 1, 'none', ?, ?)",
+                (
+                    fd["mo_id"], so_id, fd["recipe_id"], fd["item_id"],
+                    sim_time[:10], sim_time[:10],
+                ),
+            )
+            conn.commit()
+            so_ids.append(so_id)
+            logger.info("  Created fixture MO %s for %s (SO=%s)", fd["mo_id"], fd["sku"], so_id)
+
+    # Start and complete each MO — Step A3 routes them to QC hold automatically
+    for fd in fixture_data:
+        try:
+            production_service.start_order(fd["mo_id"])
+        except Exception as exc:
+            logger.warning("Fixture MO %s start failed: %s", fd["mo_id"], exc)
+
+        result = production_service.complete_order(
+            production_order_id=fd["mo_id"],
+            qty_produced=fd["output_qty"],
+            warehouse=config.WAREHOUSE_DEFAULT,
+            location=config.LOC_FINISHED_GOODS,
+        )
+        assert result.get("qc_hold"), (
+            f"Fixture MO {fd['mo_id']} did not route to QC hold. "
+            "Check inspection_required flag and complete_order QC branch."
+        )
+        logger.info(
+            "  Completed fixture MO %s → QC hold batch %s",
+            fd["mo_id"], result.get("qc_hold_batch_id"),
+        )
+
+    # End-of-scenario hard assertions
+    with db_conn() as conn:
+        pending = conn.execute(
+            "SELECT COUNT(*) FROM production_orders "
+            "WHERE inspection_required=1 AND inspection_status='pending_inspection' AND status='completed'"
+        ).fetchone()[0]
+        assert pending == 3, (
+            f"QC fixture assertion failed: expected 3 pending inspections, got {pending}"
+        )
+
+        target_skus = {sku for _, sku in _QC_FIXTURES}
+        rows = conn.execute(
+            """
+            SELECT DISTINCT i.sku
+            FROM production_orders po
+            JOIN items i ON po.item_id = i.id
+            WHERE po.inspection_required=1 AND po.inspection_status='pending_inspection'
+              AND po.status='completed'
+            """
+        ).fetchall()
+        actual_skus = {r["sku"] for r in rows}
+        assert actual_skus == target_skus, (
+            f"QC fixture assertion failed: expected SKUs {target_skus}, got {actual_skus}"
+        )
+
+        # Ensure none of the QC hold batches have been consumed by shipment lines
+        batch_ids = [r["id"] for r in conn.execute(
+            "SELECT b.id FROM qc_hold_batches b "
+            "JOIN production_orders po ON b.production_order_id = po.id "
+            "WHERE po.id IN ('MO-9000', 'MO-9001', 'MO-9002')"
+        ).fetchall()]
+        assert len(batch_ids) == 3, (
+            f"QC fixture assertion failed: expected 3 hold batches, got {len(batch_ids)}"
+        )
+
+    logger.info(
+        "=== QC Demo Fixture: complete — 3 pending inspections for %s ===",
+        sorted(target_skus),
+    )
+

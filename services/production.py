@@ -263,8 +263,15 @@ def start_order(production_order_id: str) -> Dict[str, Any]:
 
 
 def complete_order(production_order_id: str, qty_produced: int, warehouse: str, location: str) -> Dict[str, Any]:
-    """Complete a production order and add finished goods to stock."""
+    """Complete a production order.
+
+    For inspection-required orders, output is placed into QC hold (no stock insertion).
+    For normal orders, finished goods are added to stock as before.
+
+    ``warehouse`` and ``location`` are accepted but unused in the QC branch.
+    """
     from services.simulation import simulation_service
+    from services.qc import qc_service
 
     with db_conn() as conn:
         order = conn.execute("SELECT * FROM production_orders WHERE id = ?", (production_order_id,)).fetchone()
@@ -278,17 +285,42 @@ def complete_order(production_order_id: str, qty_produced: int, warehouse: str, 
         # Close any remaining open waits
         _close_open_waits(conn, production_order_id, sim_time)
         conn.execute("UPDATE production_orders SET status = 'completed', completed_at = ?, qty_produced = ?, current_operation = NULL WHERE id = ?", (sim_time, qty_produced, production_order_id))
-        stock_id = generate_id(conn, "STK", "stock")
-        conn.execute("INSERT INTO stock (id, item_id, warehouse, location, on_hand) VALUES (?, ?, ?, ?, ?)", (stock_id, order["item_id"], warehouse, location, qty_produced))
-        # Log stock movement for production output
-        movement_id = generate_id(conn, "MOV", "stock_movements")
-        conn.execute(
-            "INSERT INTO stock_movements (id, timestamp, item_id, movement_type, qty, stock_id, reference_type, reference_id) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-            (movement_id, sim_time, order["item_id"], "production_in", qty_produced, stock_id, "production_order", production_order_id),
-        )
-        conn.commit()
-        return {"production_order_id": production_order_id, "status": "completed", "qty_produced": qty_produced, "stock_id": stock_id, "warehouse": warehouse, "location": location, "message": f"Production order {production_order_id} completed, {qty_produced} units added to stock"}
+
+        if order["inspection_required"]:
+            # QC branch: hold the output, do not insert into stock
+            hold_result = qc_service.create_hold_batch(
+                conn=conn,
+                production_order_id=production_order_id,
+                sales_order_id=order["sales_order_id"],
+                item_id=order["item_id"],
+                qty_produced=qty_produced,
+                sim_time=sim_time,
+            )
+            conn.commit()
+            return {
+                "production_order_id": production_order_id,
+                "status": "completed",
+                "qty_produced": qty_produced,
+                "qc_hold": True,
+                "qc_hold_batch_id": hold_result["qc_hold_batch_id"],
+                "message": (
+                    f"Production order {production_order_id} completed. "
+                    f"{qty_produced} units placed in QC hold (batch {hold_result['qc_hold_batch_id']})."
+                ),
+            }
+        else:
+            # Normal branch: add finished goods to stock
+            stock_id = generate_id(conn, "STK", "stock")
+            conn.execute("INSERT INTO stock (id, item_id, warehouse, location, on_hand) VALUES (?, ?, ?, ?, ?)", (stock_id, order["item_id"], warehouse, location, qty_produced))
+            # Log stock movement for production output
+            movement_id = generate_id(conn, "MOV", "stock_movements")
+            conn.execute(
+                "INSERT INTO stock_movements (id, timestamp, item_id, movement_type, qty, stock_id, reference_type, reference_id) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (movement_id, sim_time, order["item_id"], "production_in", qty_produced, stock_id, "production_order", production_order_id),
+            )
+            conn.commit()
+            return {"production_order_id": production_order_id, "status": "completed", "qty_produced": qty_produced, "stock_id": stock_id, "warehouse": warehouse, "location": location, "message": f"Production order {production_order_id} completed, {qty_produced} units added to stock"}
 
 
 def update_readiness() -> Dict[str, Any]:

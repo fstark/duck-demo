@@ -38,11 +38,13 @@ import { WorkCenterDetailPage } from './pages/WorkCenterDetailPage'
 import { ActivityLogPage } from './pages/ActivityLogPage'
 import { DashboardPage } from './pages/DashboardPage'
 import { DashboardData } from './types'
+import { QcQueuePage } from './pages/QcQueuePage'
+import { QcBatchDetailPage } from './pages/QcBatchDetailPage'
 
 type SortDir = 'asc' | 'desc'
 type SortState<T> = { key: keyof T; dir: SortDir }
 
-type ViewPage = 'home' | 'customers' | 'items' | 'stock' | 'orders' | 'shipments' | 'production' | 'suppliers' | 'recipes' | 'purchase-orders' | 'emails' | 'invoices' | 'quotes' | 'work-centers' | 'dashboard' | 'activity'
+type ViewPage = 'home' | 'customers' | 'items' | 'stock' | 'orders' | 'shipments' | 'production' | 'suppliers' | 'recipes' | 'purchase-orders' | 'emails' | 'invoices' | 'quotes' | 'work-centers' | 'dashboard' | 'activity' | 'qc-queue'
 type ViewState = { page: ViewPage; id?: string }
 
 function SectionHeading({ id, title }: { id: string; title: string }) {
@@ -59,7 +61,7 @@ function parseHash(): ViewState {
   const parts = hash.split('/').filter(Boolean)
   const page = (parts[0] as ViewPage) || 'home'
   const id = parts[1] ? decodeURIComponent(parts.slice(1).join('/')) : undefined
-  const allowed: ViewPage[] = ['home', 'customers', 'items', 'stock', 'orders', 'shipments', 'production', 'suppliers', 'recipes', 'purchase-orders', 'emails', 'invoices', 'quotes', 'work-centers', 'dashboard', 'activity']
+  const allowed: ViewPage[] = ['home', 'customers', 'items', 'stock', 'orders', 'shipments', 'production', 'suppliers', 'recipes', 'purchase-orders', 'emails', 'invoices', 'quotes', 'work-centers', 'dashboard', 'activity', 'qc-queue']
   return { page: allowed.includes(page) ? page : 'home', id }
 }
 
@@ -203,6 +205,12 @@ function AppContent() {
         { page: 'work-centers' as ViewPage, label: 'Work Centers' },
         { page: 'suppliers' as ViewPage, label: 'Suppliers' },
         { page: 'purchase-orders' as ViewPage, label: 'Purchases' },
+      ],
+    },
+    {
+      label: 'Quality',
+      items: [
+        { page: 'qc-queue' as ViewPage, label: 'QC Queue' },
       ],
     },
     {
@@ -461,6 +469,9 @@ function AppContent() {
 
         {view.page === 'dashboard' && <DashboardPage />}
         {view.page === 'activity' && <ActivityLogPage />}
+
+        {view.page === 'qc-queue' && !view.id && <QcQueuePage onSelect={(id) => setHash('qc-queue', id)} />}
+        {view.page === 'qc-queue' && view.id && <QcBatchDetailPage batchId={view.id} />}
 
       </div>
     </Layout>

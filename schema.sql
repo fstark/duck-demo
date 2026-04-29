@@ -158,7 +158,9 @@ CREATE TABLE IF NOT EXISTS production_orders (
     started_at TEXT,
     completed_at TEXT,
     eta_finish TEXT,
-    eta_ship TEXT
+    eta_ship TEXT,
+    inspection_required INTEGER NOT NULL DEFAULT 0,
+    inspection_status TEXT NOT NULL DEFAULT 'none'
 );
 
 -- Production operations track execution of each step in a production order
@@ -340,20 +342,123 @@ CREATE INDEX IF NOT EXISTS idx_payments_inv ON payments(invoice_id);
 CREATE INDEX IF NOT EXISTS idx_emails_cust ON emails(customer_id);
 
 -- Stock movements: full audit trail for every stock change
+-- stock_id is nullable for QC scrap movements (scrapped qty has no stock row)
 CREATE TABLE IF NOT EXISTS stock_movements (
     id TEXT PRIMARY KEY,
     timestamp TEXT NOT NULL,
     item_id TEXT NOT NULL,
     movement_type TEXT NOT NULL,
     qty INTEGER NOT NULL,
-    stock_id TEXT NOT NULL,
+    stock_id TEXT,
     reference_type TEXT,
     reference_id TEXT,
-    notes TEXT
+    notes TEXT,
+    qc_hold_batch_line_id TEXT,
+    qc_inspection_id TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_stock_mov_item ON stock_movements(item_id, timestamp);
 CREATE INDEX IF NOT EXISTS idx_stock_mov_stock ON stock_movements(stock_id);
 CREATE INDEX IF NOT EXISTS idx_stock_mov_ref ON stock_movements(reference_type, reference_id);
+
+-- QC Hold: one container per flagged production order completion
+CREATE TABLE IF NOT EXISTS qc_hold_batches (
+    id TEXT PRIMARY KEY,
+    production_order_id TEXT NOT NULL,
+    sales_order_id TEXT,
+    item_id TEXT NOT NULL,
+    status TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    released_at TEXT,
+    replacement_triggered INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_po_qc_required ON production_orders(inspection_required, status);
+CREATE INDEX IF NOT EXISTS idx_qc_hold_batch_status ON qc_hold_batches(status, created_at);
+CREATE INDEX IF NOT EXISTS idx_qc_hold_batch_po ON qc_hold_batches(production_order_id);
+
+-- QC Hold lines: quantity accounting at batch-line granularity
+CREATE TABLE IF NOT EXISTS qc_hold_batch_lines (
+    id TEXT PRIMARY KEY,
+    qc_hold_batch_id TEXT NOT NULL,
+    item_id TEXT NOT NULL,
+    qty_on_hold INTEGER NOT NULL,
+    qty_pending INTEGER NOT NULL,
+    qty_released INTEGER NOT NULL DEFAULT 0,
+    qty_scrapped INTEGER NOT NULL DEFAULT 0,
+    line_status TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    closed_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_qc_hold_line_batch ON qc_hold_batch_lines(qc_hold_batch_id);
+CREATE INDEX IF NOT EXISTS idx_qc_hold_line_status ON qc_hold_batch_lines(line_status);
+
+-- QC Hold images: evidence image URLs attached by operator
+CREATE TABLE IF NOT EXISTS qc_hold_images (
+    id TEXT PRIMARY KEY,
+    qc_hold_batch_id TEXT NOT NULL,
+    qc_hold_batch_line_id TEXT,
+    image_url TEXT NOT NULL,
+    image_hash TEXT,
+    created_at TEXT NOT NULL,
+    uploaded_by TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_qc_images_batch ON qc_hold_images(qc_hold_batch_id);
+
+-- QC Inspections: model-run result header and final decision
+CREATE TABLE IF NOT EXISTS qc_inspections (
+    id TEXT PRIMARY KEY,
+    qc_hold_batch_id TEXT NOT NULL,
+    production_order_id TEXT NOT NULL,
+    model_name TEXT NOT NULL,
+    status TEXT NOT NULL,
+    decision TEXT NOT NULL,
+    confidence_overall REAL,
+    decision_reason TEXT,
+    prompt_version TEXT,
+    created_at TEXT NOT NULL,
+    completed_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_qc_inspection_batch ON qc_inspections(qc_hold_batch_id, created_at);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_qc_inspection_batch_unique
+    ON qc_inspections(qc_hold_batch_id) WHERE status != 'failed';
+
+-- QC Inspection findings: structured defects from model output
+CREATE TABLE IF NOT EXISTS qc_inspection_findings (
+    id TEXT PRIMARY KEY,
+    qc_inspection_id TEXT NOT NULL,
+    finding_type TEXT NOT NULL,
+    severity TEXT NOT NULL,
+    confidence REAL,
+    description TEXT,
+    image_ref TEXT,
+    location_hint TEXT,
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_qc_findings_inspection ON qc_inspection_findings(qc_inspection_id);
+
+-- QC Dispositions: human-approved final action after inspection
+CREATE TABLE IF NOT EXISTS qc_dispositions (
+    id TEXT PRIMARY KEY,
+    qc_inspection_id TEXT NOT NULL UNIQUE,
+    qc_hold_batch_id TEXT NOT NULL,
+    action TEXT NOT NULL,
+    approved_by TEXT,
+    reason TEXT,
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_qc_dispositions_batch ON qc_dispositions(qc_hold_batch_id);
+
+-- QC Replacements: traces scrap-driven shortage to replacement production orders
+CREATE TABLE IF NOT EXISTS qc_replacements (
+    id TEXT PRIMARY KEY,
+    qc_disposition_id TEXT NOT NULL,
+    sales_order_id TEXT NOT NULL,
+    item_id TEXT NOT NULL,
+    qty_short INTEGER NOT NULL,
+    qty_replacement INTEGER NOT NULL,
+    replacement_production_order_id TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_qc_replacements_so ON qc_replacements(sales_order_id);
 
 -- Activity log: persistent event stream for factory observability
 CREATE TABLE IF NOT EXISTS activity_log (

@@ -48,6 +48,12 @@ LOG_FILE = os.getenv("LOG_FILE", "duck-demo.log")
 # Examples: http://localhost:5173, https://yourdomain.com, https://abc123.ngrok.io
 API_BASE = os.getenv("API_BASE", "http://127.0.0.1:5173")
 
+# QC constants
+LOC_SCRAP = "SCRAP"
+QC_INFERENCE_MODEL = "claude-4.6-opus"
+# Set QC_INFERENCE_MOCK=true to skip the real API call and return a canned result
+QC_INFERENCE_MOCK = os.getenv("QC_INFERENCE_MOCK", "false").lower() == "true"
+
 # Work center capacity (max concurrent operations per center)
 WORK_CENTER_CAPACITY = {
     "MOLDING": 3,

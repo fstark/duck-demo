@@ -8,7 +8,7 @@ from db import dict_rows, generate_id
 
 
 def _compute_reserved(conn, item_id: str) -> int:
-    """Compute total reserved qty for an item from open orders."""
+    """Compute total reserved qty for an item from open orders and pending QC hold."""
     row = conn.execute("""
         SELECT COALESCE(SUM(qty), 0) as reserved FROM (
             SELECT sol.item_id, sol.qty
@@ -22,8 +22,13 @@ def _compute_reserved(conn, item_id: str) -> int:
             JOIN recipe_ingredients ri ON po.recipe_id = ri.recipe_id
             WHERE po.status IN ('planned', 'waiting', 'ready')
               AND ri.input_item_id = ?
+            UNION ALL
+            SELECT l.item_id, l.qty_pending as qty
+            FROM qc_hold_batch_lines l
+            WHERE l.line_status = 'pending_inspection'
+              AND l.item_id = ?
         )
-    """, (item_id, item_id)).fetchone()
+    """, (item_id, item_id, item_id)).fetchone()
     return int(row[0]) if row else 0
 
 
