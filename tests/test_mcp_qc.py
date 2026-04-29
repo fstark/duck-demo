@@ -13,12 +13,12 @@ def _call(mcp_app, tool_name, **kwargs):
 # ── Read tools ──────────────────────────────────────────────────────────────
 
 def test_qc_list_pending_batches_returns_list(mcp_app):
-    result = _call(mcp_app, "qc_list_pending_batches")
+    result = _call(mcp_app, "qc_list_pending_inspections")
     assert isinstance(result, list)
 
 
 def test_qc_list_pending_batches_has_seeded_batch(mcp_app):
-    result = _call(mcp_app, "qc_list_pending_batches")
+    result = _call(mcp_app, "qc_list_pending_inspections")
     ids = [b["id"] for b in result]
     assert "QCB-T001" in ids
 

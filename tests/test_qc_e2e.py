@@ -43,9 +43,11 @@ def test_e2e_pass_release(qc_db):
     """Inspection passes → stock is released, batch status becomes 'released'."""
     mock_resp = _make_mock_response({
         "decision": "pass",
-        "confidence_overall": 0.99,
         "decision_reason": "Perfect",
-        "findings": [],
+        "ducks": [
+            {"bbox": [0.05, 0.05, 0.45, 0.95], "severity": "none", "defects": []},
+            {"bbox": [0.55, 0.05, 0.95, 0.95], "severity": "none", "defects": []},
+        ],
     })
 
     with patch("services.myforterro.chat_completion", return_value=mock_resp):
@@ -68,10 +70,9 @@ def test_e2e_full_scrap_flow(qc_db):
     """Full scrap → all qty scrapped, batch closed, replacement MO created."""
     mock_resp = _make_mock_response({
         "decision": "full_scrap",
-        "confidence_overall": 0.95,
         "decision_reason": "All items damaged",
-        "findings": [
-            {"severity": "critical", "location": "body", "description": "Melted", "affected_qty": 12}
+        "ducks": [
+            {"bbox": [0.05, 0.05, 0.95, 0.95], "severity": "critical", "defects": ["Melted"]},
         ],
     })
 

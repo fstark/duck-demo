@@ -23,22 +23,18 @@ def _make_mock_response(payload: dict):
 
 _PASS_PAYLOAD = {
     "decision": "pass",
-    "confidence_overall": 0.97,
     "decision_reason": "No visible defects",
-    "findings": [],
+    "ducks": [
+        {"bbox": [0.1, 0.1, 0.4, 0.6], "severity": "none", "defects": []},
+        {"bbox": [0.5, 0.1, 0.9, 0.6], "severity": "none", "defects": []},
+    ],
 }
 
 _FAIL_PAYLOAD = {
     "decision": "full_scrap",
-    "confidence_overall": 0.82,
     "decision_reason": "Paintwork damage on beak",
-    "findings": [
-        {
-            "severity": "major",
-            "location": "beak",
-            "description": "Chipped paint",
-            "affected_qty": 3,
-        }
+    "ducks": [
+        {"bbox": [0.1, 0.1, 0.4, 0.6], "severity": "major", "defects": ["Chipped paint on beak"]},
     ],
 }
 

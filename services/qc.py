@@ -76,6 +76,43 @@ ID_PREFIXES = {
 }
 
 
+def _to_data_uri(blob: bytes) -> str:
+    """Convert a raw image BLOB to a base64 data URI."""
+    if blob[:8] == b"\x89PNG\r\n\x1a\n":
+        mime = "image/png"
+    elif blob[:3] == b"\xff\xd8\xff":
+        mime = "image/jpeg"
+    elif blob[:4] == b"RIFF" and blob[8:12] == b"WEBP":
+        mime = "image/webp"
+    else:
+        mime = "image/jpeg"
+    return f"data:{mime};base64,{base64.b64encode(blob).decode('ascii')}"
+
+
+def _mock_ducks(n: int) -> list[dict]:
+    """Generate *n* evenly-laid-out mock duck results for testing."""
+    cols = math.ceil(math.sqrt(n))
+    rows = math.ceil(n / cols)
+    ducks: list[dict] = []
+    severities = ["none", "major", "critical", "minor"]
+    defect_texts = [
+        [], ["[MOCK] Uneven paint on beak."], ["[MOCK] Severe deformation."], ["[MOCK] Slight smear."],
+    ]
+    for i in range(n):
+        r, c = divmod(i, cols)
+        x1 = c / cols + 0.02
+        y1 = r / rows + 0.02
+        x2 = (c + 1) / cols - 0.02
+        y2 = (r + 1) / rows - 0.02
+        sev = severities[i % len(severities)]
+        ducks.append({
+            "bbox": [round(x1, 3), round(y1, 3), round(x2, 3), round(y2, 3)],
+            "severity": sev,
+            "defects": defect_texts[i % len(defect_texts)],
+        })
+    return ducks
+
+
 def _assert_invariant(line: dict) -> None:
     """Assert qty_released + qty_scrapped + qty_pending == qty_on_hold."""
     total = line["qty_released"] + line["qty_scrapped"] + line["qty_pending"]
@@ -218,6 +255,36 @@ class QcService:
                 "SELECT * FROM qc_inspection_findings WHERE qc_inspection_id = ? ORDER BY created_at",
                 (inspection_id,),
             ))
+            if result.get("duck_results"):
+                try:
+                    result["duck_results"] = json.loads(result["duck_results"])
+                except (json.JSONDecodeError, TypeError):
+                    pass
+
+            # Attach operator image and reference image as data URIs for the UI
+            batch_row = conn.execute(
+                "SELECT b.production_order_id, po.item_id "
+                "FROM qc_hold_batches b "
+                "JOIN production_orders po ON b.production_order_id = po.id "
+                "WHERE b.id = ?",
+                (result["qc_hold_batch_id"],),
+            ).fetchone()
+            if batch_row:
+                # Operator image (first submitted image)
+                op_row = conn.execute(
+                    "SELECT image_data FROM qc_hold_images "
+                    "WHERE qc_hold_batch_id = ? ORDER BY created_at LIMIT 1",
+                    (result["qc_hold_batch_id"],),
+                ).fetchone()
+                if op_row and op_row["image_data"]:
+                    result["operator_image_uri"] = _to_data_uri(op_row["image_data"])
+                # Reference image from item
+                ref_row = conn.execute(
+                    "SELECT image FROM items WHERE id = ?",
+                    (batch_row["item_id"],),
+                ).fetchone()
+                if ref_row and ref_row["image"]:
+                    result["reference_image_uri"] = _to_data_uri(ref_row["image"])
         return result
 
     # ------------------------------------------------------------------
@@ -316,17 +383,15 @@ class QcService:
                     "Upload a reference image to the item record first."
                 )
             img_bytes = item_row["image"]
-            # Detect actual format from magic bytes to avoid Bedrock media-type mismatch
-            if img_bytes[:8] == b"\x89PNG\r\n\x1a\n":
-                mime = "image/png"
-            elif img_bytes[:3] == b"\xff\xd8\xff":
-                mime = "image/jpeg"
-            elif img_bytes[:4] == b"RIFF" and img_bytes[8:12] == b"WEBP":
-                mime = "image/webp"
-            else:
-                mime = "image/jpeg"  # fallback
-            reference_image_b64 = base64.b64encode(img_bytes).decode("ascii")
-            reference_image_uri = f"data:{mime};base64,{reference_image_b64}"
+            reference_image_uri = _to_data_uri(img_bytes)
+
+            # Expected duck count from the hold batch line
+            line_row = conn.execute(
+                "SELECT SUM(qty_on_hold) AS total_qty FROM qc_hold_batch_lines "
+                "WHERE qc_hold_batch_id = ?",
+                (batch_id,),
+            ).fetchone()
+            expected_qty = line_row["total_qty"] if line_row else None
 
             sim_time = simulation_service.get_current_time()
 
@@ -345,15 +410,7 @@ class QcService:
         # Phase 2: Call inference API (outside any long-lived connection block)
         # image_data is stored as a BLOB — encode directly to base64 data URI.
         blob = images[0]["image_data"]
-        if blob[:8] == b"\x89PNG\r\n\x1a\n":
-            op_mime = "image/png"
-        elif blob[:3] == b"\xff\xd8\xff":
-            op_mime = "image/jpeg"
-        elif blob[:4] == b"RIFF" and blob[8:12] == b"WEBP":
-            op_mime = "image/webp"
-        else:
-            op_mime = "image/jpeg"
-        operator_image_uri = f"data:{op_mime};base64,{base64.b64encode(blob).decode('ascii')}"
+        operator_image_uri = _to_data_uri(blob)
         logger.info("[QC Inspection] batch=%s — operator image read from BLOB", batch_id)
         messages = [
             {
@@ -363,19 +420,25 @@ class QcService:
                         "type": "text",
                         "text": (
                             "You are a quality control inspector for rubber duck manufacturing. "
-                            "Compare the reference product image (first) with the submitted batch image (second). "
-                            "Identify any defects or quality issues. "
+                            "The first image is the approved reference product. "
+                            "The second image is the submitted batch taken by the operator. "
+                            f"The batch contains exactly {expected_qty} ducks. "
+                            "Locate every individual duck visible in the submitted image and assess each one. "
+                            f"Return exactly {expected_qty} entries in the ducks array, one per duck. "
                             "Respond ONLY with a valid JSON object matching this schema exactly:\n"
                             '{"decision": "pass|partial_scrap|full_scrap", '
-                            '"confidence_overall": <float 0-1>, '
                             '"decision_reason": "<string>", '
-                            '"findings": [{"type": "<finding_type>", "severity": "<severity>", '
-                            '"confidence": <float 0-1>, "description": "<string>", '
-                            '"image_ref": null, "location_hint": null}]}\n'
-                            "finding_type must be one of: wrong_product, paint_defect, shape_defect, "
-                            "assembly_defect, packaging_defect, missing_part. "
-                            "severity must be one of: critical, major, minor. "
-                            "decision: pass=all good, partial_scrap=some defects, full_scrap=all defective."
+                            '"ducks": [{'
+                            '"bbox": [x1, y1, x2, y2], '
+                            '"severity": "none|minor|major|critical", '
+                            '"defects": ["<description>"]'
+                            '}]}\n'
+                            "bbox coordinates are normalised floats in [0, 1] relative to the submitted image "
+                            "width and height (x1,y1 = top-left corner, x2,y2 = bottom-right corner). "
+                            "severity: none=no defects, minor=cosmetic only, major=functional concern, "
+                            "critical=reject. "
+                            "decision: pass=all ducks acceptable, partial_scrap=some critical ducks, "
+                            "full_scrap=all ducks critical."
                         ),
                     },
                     {"type": "image_url", "image_url": {"url": reference_image_uri}},
@@ -392,26 +455,8 @@ class QcService:
                 )
                 raw_content = json.dumps({
                     "decision": "partial_scrap",
-                    "confidence_overall": 0.82,
-                    "decision_reason": "[MOCK] Paint defects detected on approximately 30% of units. Remaining units meet quality standards.",
-                    "findings": [
-                        {
-                            "type": "paint_defect",
-                            "severity": "major",
-                            "confidence": 0.88,
-                            "description": "[MOCK] Uneven paint coverage on beak area, visible colour bleed.",
-                            "image_ref": None,
-                            "location_hint": "beak",
-                        },
-                        {
-                            "type": "shape_defect",
-                            "severity": "minor",
-                            "confidence": 0.65,
-                            "description": "[MOCK] Slight deformation on tail section, within acceptable tolerance for most units.",
-                            "image_ref": None,
-                            "location_hint": "tail",
-                        },
-                    ],
+                    "decision_reason": "[MOCK] Most ducks look good but two have visible paint defects.",
+                    "ducks": _mock_ducks(expected_qty or 6),
                 })
             else:
                 logger.info(
@@ -442,23 +487,47 @@ class QcService:
                     f"Inspection model returned invalid decision '{parsed['decision']}'. "
                     f"Must be one of: {INFERENCE_DECISIONS}"
                 )
-            if not isinstance(parsed.get("findings"), list):
-                raise ValueError("Inspection model response 'findings' must be a list.")
+            if not isinstance(parsed.get("ducks"), list):
+                raise ValueError("Inspection model response 'ducks' must be a list.")
+
+            logger.info(
+                "[QC Inspection] batch=%s — %d ducks:\n%s",
+                batch_id, len(parsed["ducks"]),
+                json.dumps(parsed["ducks"], indent=2),
+            )
+
+            duck_results_json = json.dumps(parsed["ducks"])
+
+            # Derive legacy findings from duck results for backward-compatibility
+            legacy_findings: list[dict] = []
+            for duck in parsed["ducks"]:
+                sev = duck.get("severity", "none")
+                if sev == "none":
+                    continue
+                for desc in duck.get("defects", []):
+                    legacy_findings.append({
+                        "type": "shape_defect",
+                        "severity": "critical" if sev == "critical" else ("major" if sev == "major" else "minor"),
+                        "confidence": None,
+                        "description": desc,
+                        "image_ref": None,
+                        "location_hint": None,
+                    })
 
             with db_conn() as conn:
                 sim_time = simulation_service.get_current_time()
                 conn.execute(
                     "UPDATE qc_inspections SET status='completed', decision=?, "
-                    "confidence_overall=?, decision_reason=?, completed_at=? WHERE id=?",
+                    "decision_reason=?, duck_results=?, completed_at=? WHERE id=?",
                     (
                         parsed["decision"],
-                        parsed.get("confidence_overall"),
                         parsed.get("decision_reason"),
+                        duck_results_json,
                         sim_time,
                         inspection_id,
                     ),
                 )
-                for finding in parsed["findings"]:
+                for finding in legacy_findings:
                     finding_id = generate_id(
                         conn, ID_PREFIXES["qc_inspection_findings"], "qc_inspection_findings"
                     )
@@ -469,12 +538,12 @@ class QcService:
                         "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
                         (
                             finding_id, inspection_id,
-                            finding.get("type", finding.get("finding_type", "")),
+                            finding.get("type", "shape_defect"),
                             finding.get("severity", ""),
                             finding.get("confidence"),
-                            finding.get("description", finding.get("issue", "")),
+                            finding.get("description", ""),
                             finding.get("image_ref"),
-                            finding.get("location_hint", finding.get("location")),
+                            finding.get("location_hint"),
                             sim_time,
                         ),
                     )
@@ -485,11 +554,11 @@ class QcService:
                 conn.commit()
 
             logger.info(
-                "[QC Inspection] batch=%s — decision=%s confidence=%.2f findings=%d",
+                "[QC Inspection] batch=%s — decision=%s ducks=%d findings=%d",
                 batch_id,
                 parsed["decision"],
-                parsed.get("confidence_overall") or 0.0,
-                len(parsed.get("findings", [])),
+                len(parsed.get("ducks", [])),
+                len(legacy_findings),
             )
 
         except Exception as exc:
@@ -780,12 +849,7 @@ class QcService:
                     f"No inspection found for production order {production_order_id}. "
                     "Run the inspection first."
                 )
-            result = dict(insp)
-            result["findings"] = dict_rows(conn.execute(
-                "SELECT * FROM qc_inspection_findings WHERE qc_inspection_id = ? ORDER BY created_at",
-                (insp["id"],),
-            ))
-        return result
+        return self.get_inspection(inspection_id=insp["id"])
 
     # ------------------------------------------------------------------
     # Single-shot image submission (label extraction + inspection)

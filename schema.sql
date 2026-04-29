@@ -413,6 +413,7 @@ CREATE TABLE IF NOT EXISTS qc_inspections (
     confidence_overall REAL,
     decision_reason TEXT,
     prompt_version TEXT,
+    duck_results TEXT,
     created_at TEXT NOT NULL,
     completed_at TEXT
 );

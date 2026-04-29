@@ -59,7 +59,7 @@ def test_qc_inspections_columns(qc_db):
     conn.close()
     for col in ["id", "qc_hold_batch_id", "production_order_id", "model_name", "status",
                 "decision", "confidence_overall", "decision_reason", "prompt_version",
-                "created_at", "completed_at"]:
+                "duck_results", "created_at", "completed_at"]:
         assert col in cols, f"Column {col} missing from qc_inspections"
 
 
