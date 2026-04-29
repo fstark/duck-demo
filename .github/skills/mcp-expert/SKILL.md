@@ -92,3 +92,27 @@ The core challenge was making the _meta field appear in MCP tool responses so VS
 
 On the server side, each UI type needs a resource registered like @mcp.resource("ui://mcpapp/form", mime_type="text/html;profile=mcp-app") that serves the corresponding HTML file from the mcp_apps_ui directory. The mime_type="text/html;profile=mcp-app" is important — it signals to VS Code that this is an MCP App UI resource. After making changes to the server code, a full VS Code window reload (Developer: Reload Window) is required for the MCP server to restart and pick up the new tool metadata. Also worth noting: duck-demo uses structured_output=False on its @mcp.tool() decorator, but that parameter crashes FastMCP 3.1.0 — using output_schema=None achieves the same effect in FastMCP.
 
+### MCP App → Server communication (callbacks)
+
+MCP apps do **not** use `fetch()` / REST to talk back to the server. They use `app.callServerTool()` from the `@modelcontextprotocol/ext-apps` SDK, which sends a JSON-RPC `tools/call` message via `postMessage` to the host (VS Code), which forwards it to the MCP server.
+
+```javascript
+const result = await app.callServerTool({
+  name: "generic_confirm_action",
+  arguments: { original_tool: "crm_create_customer", arguments: { name: "Alice" } }
+});
+```
+
+Tools meant only for MCP app callbacks (not for agent use) must have `visibility: ["app"]` and empty tags:
+
+```python
+@mcp.tool(name="my_app_tool", meta={
+    "tags": [],              # empty — hidden from agents
+    "ui": {"visibility": ["app"]}  # only callable by MCP apps
+})
+```
+
+The existing `generic_confirm_action` tool follows this pattern — it dispatches confirmed actions from MCP apps to the correct service method. For domain-specific app interactions (e.g. data import fix/execute), create dedicated app-only tools instead of REST endpoints.
+
+Spec: https://modelcontextprotocol.io/specification/2025-06-18/features/mcp-apps
+
