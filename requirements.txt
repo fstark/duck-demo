@@ -4,3 +4,5 @@ requests
 Pillow
 matplotlib
 squarify
+openpyxl
+chardet

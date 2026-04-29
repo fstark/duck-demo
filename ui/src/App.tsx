@@ -40,11 +40,13 @@ import { DashboardPage } from './pages/DashboardPage'
 import { DashboardData } from './types'
 import { QcQueuePage } from './pages/QcQueuePage'
 import { QcBatchDetailPage } from './pages/QcBatchDetailPage'
+import { ImportJobsListPage } from './pages/ImportJobsListPage'
+import { ImportJobDetailPage } from './pages/ImportJobDetailPage'
 
 type SortDir = 'asc' | 'desc'
 type SortState<T> = { key: keyof T; dir: SortDir }
 
-type ViewPage = 'home' | 'customers' | 'items' | 'stock' | 'orders' | 'shipments' | 'production' | 'suppliers' | 'recipes' | 'purchase-orders' | 'emails' | 'invoices' | 'quotes' | 'work-centers' | 'dashboard' | 'activity' | 'qc-queue'
+type ViewPage = 'home' | 'customers' | 'items' | 'stock' | 'orders' | 'shipments' | 'production' | 'suppliers' | 'recipes' | 'purchase-orders' | 'emails' | 'invoices' | 'quotes' | 'work-centers' | 'dashboard' | 'activity' | 'qc-queue' | 'import-jobs'
 type ViewState = { page: ViewPage; id?: string }
 
 function SectionHeading({ id, title }: { id: string; title: string }) {
@@ -61,7 +63,7 @@ function parseHash(): ViewState {
   const parts = hash.split('/').filter(Boolean)
   const page = (parts[0] as ViewPage) || 'home'
   const id = parts[1] ? decodeURIComponent(parts.slice(1).join('/')) : undefined
-  const allowed: ViewPage[] = ['home', 'customers', 'items', 'stock', 'orders', 'shipments', 'production', 'suppliers', 'recipes', 'purchase-orders', 'emails', 'invoices', 'quotes', 'work-centers', 'dashboard', 'activity', 'qc-queue']
+  const allowed: ViewPage[] = ['home', 'customers', 'items', 'stock', 'orders', 'shipments', 'production', 'suppliers', 'recipes', 'purchase-orders', 'emails', 'invoices', 'quotes', 'work-centers', 'dashboard', 'activity', 'qc-queue', 'import-jobs']
   return { page: allowed.includes(page) ? page : 'home', id }
 }
 
@@ -218,6 +220,7 @@ function AppContent() {
       items: [
         { page: 'dashboard' as ViewPage, label: 'Dashboard' },
         { page: 'activity' as ViewPage, label: 'Activity Log' },
+        { page: 'import-jobs' as ViewPage, label: 'Data Imports' },
       ],
     },
   ]
@@ -472,6 +475,9 @@ function AppContent() {
 
         {view.page === 'qc-queue' && !view.id && <QcQueuePage onSelect={(id) => setHash('qc-queue', id)} />}
         {view.page === 'qc-queue' && view.id && <QcBatchDetailPage batchId={view.id} />}
+
+        {view.page === 'import-jobs' && !view.id && <ImportJobsListPage />}
+        {view.page === 'import-jobs' && view.id && <ImportJobDetailPage jobId={view.id} />}
 
       </div>
     </Layout>

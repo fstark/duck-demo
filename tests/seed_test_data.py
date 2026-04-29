@@ -566,4 +566,7 @@ TABLE_DATA = [
     ("sales_order_lines", QC_SALES_ORDER_LINES),
     ("production_orders", QC_PRODUCTION_ORDERS),
     ("qc_hold_batches", QC_HOLD_BATCHES),
+    # Import tables (empty — jobs created on demand)
+    ("import_jobs", []),
+    ("import_rows", []),
 ]

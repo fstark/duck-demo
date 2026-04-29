@@ -63,9 +63,12 @@ def get_inference_client() -> openai.OpenAI:
 def chat_completion(*, model: str, messages: list[dict], **kwargs):
     """Send a chat completion request via MyForterro inference."""
     client = get_inference_client()
-    return client.chat.completions.create(
+    t0 = time.time()
+    result = client.chat.completions.create(
         model=model, messages=messages, **kwargs
     )
+    logger.info("LLM call [%s] completed in %.1fs", model, time.time() - t0)
+    return result
 
 
 def openai_chat_completion(*, model: str, messages: list[dict], **kwargs):
@@ -74,6 +77,9 @@ def openai_chat_completion(*, model: str, messages: list[dict], **kwargs):
     if not api_key:
         raise RuntimeError("OPENAI_API_KEY not set — cannot use openai provider")
     client = openai.OpenAI(api_key=api_key)
-    return client.chat.completions.create(
+    t0 = time.time()
+    result = client.chat.completions.create(
         model=model, messages=messages, **kwargs
     )
+    logger.info("LLM call [%s] (openai) completed in %.1fs", model, time.time() - t0)
+    return result

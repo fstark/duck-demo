@@ -22,6 +22,7 @@ from services.activity import activity_service, ActivityService
 from services.mrp import mrp_service, MrpService
 from services.fulfillment import fulfillment_service, FulfillmentService
 from services.qc import qc_service, QcService
+from services.data_import import data_import_service, DataImportService
 
 __all__ = [
     "db_conn",
@@ -46,4 +47,5 @@ __all__ = [
     "mrp_service", "MrpService",
     "fulfillment_service", "FulfillmentService",
     "qc_service", "QcService",
+    "data_import_service", "DataImportService",
 ]

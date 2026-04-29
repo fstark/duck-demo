@@ -206,10 +206,14 @@ export function QcBatchDetailPage({ batchId }: { batchId: string }) {
                                 <Table
                                     columns={[
                                         { key: 'finding_type' as keyof QcInspectionFinding, label: 'Type', sortable: true },
-                                        { key: 'severity' as keyof QcInspectionFinding, label: 'Severity', sortable: true,
-                                          render: (f) => <Badge color={SEVERITY_COLORS[f.severity] ?? 'gray'}>{f.severity}</Badge> },
-                                        { key: 'confidence' as keyof QcInspectionFinding, label: 'Confidence', sortable: true,
-                                          render: (f) => <>{f.confidence != null ? `${(f.confidence * 100).toFixed(0)}%` : '—'}</> },
+                                        {
+                                            key: 'severity' as keyof QcInspectionFinding, label: 'Severity', sortable: true,
+                                            render: (f) => <Badge color={SEVERITY_COLORS[f.severity] ?? 'gray'}>{f.severity}</Badge>
+                                        },
+                                        {
+                                            key: 'confidence' as keyof QcInspectionFinding, label: 'Confidence', sortable: true,
+                                            render: (f) => <>{f.confidence != null ? `${(f.confidence * 100).toFixed(0)}%` : '—'}</>
+                                        },
                                         { key: 'description' as keyof QcInspectionFinding, label: 'Description', sortable: false },
                                         { key: 'location_hint' as keyof QcInspectionFinding, label: 'Location', sortable: false },
                                     ]}

@@ -1,4 +1,4 @@
-import { Customer, Item, SalesOrder, SalesOrderDetail, Shipment, StockSummary, QuoteOption, ProductionOrder, Recipe, Supplier, PurchaseOrder, Email, EmailDetail, Invoice, InvoiceDetail, Quote, QuoteDetail, WorkCenter, WorkCenterDetail, ActivityLogEntry, DashboardData, SalesOrderTimeline, ProductionOrderTimeline, QcHoldBatch, QcHoldBatchDetail, QcInspection } from './types'
+import { Customer, Item, SalesOrder, SalesOrderDetail, Shipment, StockSummary, QuoteOption, ProductionOrder, Recipe, Supplier, PurchaseOrder, Email, EmailDetail, Invoice, InvoiceDetail, Quote, QuoteDetail, WorkCenter, WorkCenterDetail, ActivityLogEntry, DashboardData, SalesOrderTimeline, ProductionOrderTimeline, QcHoldBatch, QcHoldBatchDetail, QcInspection, ImportJob, ImportJobDetail } from './types'
 
 const API_BASE = import.meta.env.VITE_API_BASE || '/api'
 
@@ -126,4 +126,6 @@ export const api = {
     fetchJson<{ batches: QcHoldBatch[] }>(`/qc/batches${status ? `?status=${encodeURIComponent(status)}` : ''}`),
   qcBatch: (id: string) => fetchJson<QcHoldBatchDetail>(`/qc/batches/${encodeURIComponent(id)}`),
   qcInspection: (id: string) => fetchJson<QcInspection>(`/qc/inspections/${encodeURIComponent(id)}`),
+  importJobs: () => fetchJson<{ import_jobs: ImportJob[] }>(`/import-jobs`),
+  importJobDetail: (id: string) => fetchJson<ImportJobDetail>(`/import-jobs/${encodeURIComponent(id)}`),
 }

@@ -434,3 +434,37 @@ CREATE INDEX IF NOT EXISTS idx_actlog_ts       ON activity_log(timestamp);
 CREATE INDEX IF NOT EXISTS idx_actlog_entity   ON activity_log(entity_type, entity_id);
 CREATE INDEX IF NOT EXISTS idx_actlog_action   ON activity_log(action);
 CREATE INDEX IF NOT EXISTS idx_actlog_category ON activity_log(category);
+
+-- Data Import: staging tables for file-based data import
+CREATE TABLE IF NOT EXISTS import_jobs (
+    id TEXT PRIMARY KEY,
+    entity_type TEXT,
+    source_filename TEXT,
+    source_format TEXT,
+    source_content TEXT,
+    hint TEXT,
+    status TEXT NOT NULL DEFAULT 'staging',
+    row_count INTEGER,
+    columns_detected TEXT,
+    mapping_plan TEXT,
+    issues_summary TEXT,
+    created_at TEXT NOT NULL,
+    executed_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS import_rows (
+    id TEXT PRIMARY KEY,
+    job_id TEXT NOT NULL,
+    source_row INTEGER NOT NULL,
+    raw_data TEXT NOT NULL,
+    mapped_data TEXT,
+    resolved_refs TEXT,
+    status TEXT NOT NULL DEFAULT 'pending',
+    issues TEXT,
+    merged_into TEXT,
+    created_entity_type TEXT,
+    created_entity_id TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_import_rows_job ON import_rows(job_id);
+CREATE INDEX IF NOT EXISTS idx_import_rows_status ON import_rows(status);

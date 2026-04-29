@@ -633,3 +633,34 @@ export type QcInspectionFinding = {
   location_hint?: string
 }
 
+export type ImportJob = {
+  id: string
+  entity_type?: string
+  source_filename?: string
+  source_format?: string
+  status: string
+  row_count?: number
+  created_at: string
+  executed_at?: string
+}
+
+export type ImportRow = {
+  id: string
+  source_row: number
+  raw_data: Record<string, any>
+  mapped_data: Record<string, any>
+  resolved_refs: Record<string, any>
+  status: string
+  issues: Array<{ severity: string; field: string; message: string }>
+  merged_into?: string
+  created_entity_type?: string
+  created_entity_id?: string
+}
+
+export type ImportJobDetail = ImportJob & {
+  columns_detected: string[]
+  mapping_plan?: Array<{ source: string; target: string | null; transform?: string; confidence?: number }>
+  issues_summary: Record<string, number>
+  rows: ImportRow[]
+}
+

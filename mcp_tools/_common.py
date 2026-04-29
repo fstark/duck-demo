@@ -37,13 +37,14 @@ TOOL_ACTION_MAP: Dict[str, tuple] = {
     "messaging_send_email":      ("sales",      "email.sent"),
     "sales_link_shipment":       ("logistics",  "shipment.linked"),
     "qc_apply_disposition":      ("quality",    "qc.disposition_applied"),
+    "data_import_upload":        ("data_import","import.uploaded"),
 }
 
 # Keys in a tool result dict that identify an entity ID
 _ENTITY_ID_KEYS = [
     "sales_order_id", "production_order_id", "shipment_id", "invoice_id",
     "quote_id", "purchase_order_id", "customer_id", "email_id", "payment_id",
-    "qc_hold_batch_id", "qc_inspection_id",
+    "qc_hold_batch_id", "qc_inspection_id", "job_id",
 ]
 
 # entity_id key → entity_type value
@@ -59,6 +60,7 @@ _KEY_TO_TYPE = {
     "payment_id": "payment",
     "qc_hold_batch_id": "qc_hold_batch",
     "qc_inspection_id": "qc_inspection",
+    "job_id": "import_job",
 }
 
 
