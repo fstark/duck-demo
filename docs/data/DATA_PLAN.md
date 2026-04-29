@@ -4,7 +4,7 @@ Step-by-step implementation plan for the data import feature. Each step produces
 
 **Reference documents:**
 - [DATA.md](DATA.md) — vision & feature overview
-- [DATA_DESIGN.md](DATA_DESIGN.md) — technical design (data model, prompts, REST API, MCP app)
+- [DATA_DESIGN.md](DATA_DESIGN.md) — technical design (data model, prompts, app-only MCP tools, MCP app)
 - [DEMO_FLOW.md](DEMO_FLOW.md) — end-to-end demo walkthrough
 
 **Coding rules:** Follow [docs/CODING.md](../CODING.md) strictly. Key points:
@@ -488,7 +488,7 @@ Run: `pytest tests/test_data_import.py -v`
 
 ---
 
-## Step 5 — Fix Endpoint (Service + REST)
+## Step 5 — App-Only MCP Tools (Fix, Execute, Get State)
 
 ### What to do
 
@@ -515,51 +515,56 @@ Logic:
 
 For simple deterministic instructions (e.g. entire instruction is "reject" or "keep both"), bypass the LLM and apply directly in Python. Only call the LLM when interpretation is needed.
 
-#### 5b. REST endpoints
+#### 5b. App-only MCP tools
 
-Create `api_routes/data_import_routes.py`:
+Add the three app-only tools in `mcp_tools/data_import_tools.py` (alongside `data_import_upload`):
 
 ```python
-"""REST endpoints for data import (MCP app → backend)."""
+    @mcp.tool(name="data_import_fix", meta={
+        "tags": [],  # Not exposed to agents
+        "ui": {"visibility": ["app"]}
+    })
+    @log_tool("data_import_fix")
+    def data_import_fix(job_id: str, instruction: str) -> dict:
+        """Interpret a free-text fix instruction and apply it to staging data.
 
-from api_routes._common import _json, cors_handler
-from services.data_import import data_import_service
+        Called by the MCP app when the user types in the Fix field.
 
+        Args:
+            job_id: Import job ID (e.g. "IMP-001")
+            instruction: Free-text fix instruction
+        """
+        return data_import_service.fix(job_id=job_id, instruction=instruction)
 
-def register(mcp):
-    """Register data import REST routes."""
+    @mcp.tool(name="data_import_execute", meta={
+        "tags": [],
+        "ui": {"visibility": ["app"]}
+    })
+    @log_tool("data_import_execute")
+    def data_import_execute(job_id: str) -> dict:
+        """Execute the import — create records in the ERP.
 
-    @mcp.custom_route("/api/data-import/{job_id}/fix", methods=["POST", "OPTIONS"])
-    @cors_handler(["POST"])
-    async def api_data_import_fix(request):
-        job_id = request.path_params["job_id"]
-        body = await request.json()
-        instruction = body.get("instruction", "")
-        result = data_import_service.fix(job_id=job_id, instruction=instruction)
-        return _json(result)
+        Called by the MCP app when the user clicks Import.
 
-    @mcp.custom_route("/api/data-import/{job_id}/execute", methods=["POST", "OPTIONS"])
-    @cors_handler(["POST"])
-    async def api_data_import_execute(request):
-        job_id = request.path_params["job_id"]
-        result = data_import_service.execute(job_id=job_id)
-        return _json(result)
+        Args:
+            job_id: Import job ID
+        """
+        return data_import_service.execute(job_id=job_id)
 
-    @mcp.custom_route("/api/data-import/{job_id}/state", methods=["GET", "OPTIONS"])
-    @cors_handler(["GET"])
-    async def api_data_import_state(request):
-        job_id = request.path_params["job_id"]
-        result = data_import_service.get_state(job_id=job_id)
-        return _json(result)
-```
+    @mcp.tool(name="data_import_get_state", meta={
+        "tags": [],
+        "ui": {"visibility": ["app"]}
+    })
+    @log_tool("data_import_get_state")
+    def data_import_get_state(job_id: str) -> dict:
+        """Get the current staging state for an import job.
 
-#### 5c. Register routes
+        Called by the MCP app to refresh state (e.g. after reconnect).
 
-Edit `api_routes/__init__.py` — import and register:
-```python
-from api_routes import data_import_routes
-# in register_all_routes():
-data_import_routes.register(mcp)
+        Args:
+            job_id: Import job ID
+        """
+        return data_import_service.get_state(job_id=job_id)
 ```
 
 ### Test
@@ -588,25 +593,18 @@ def test_fix_merges_duplicate_rows(_mock, tmp_path):
     assert len(active_rows) == 1
 ```
 
-REST-level tests:
+MCP tool-level tests (via `app.callServerTool` pattern — call the tool function directly):
 
 ```python
-def test_fix_endpoint_returns_200(rest_client):
-    """POST /api/data-import/{job_id}/fix returns 200."""
-    # First create a job (needs setup — use a fixture or direct DB insert)
-    # Then POST to /api/data-import/IMP-0001/fix with instruction
-    # Assert 200 and response has 'rows' key
+def test_fix_tool_returns_updated_state():
+    """data_import_fix tool returns updated staging state."""
+    # Setup: create a job, then call data_import_fix tool function
+    # Assert response has 'rows' key
 
 
-def test_state_endpoint_returns_200(rest_client):
-    """GET /api/data-import/{job_id}/state returns 200."""
-    # Assert 200 and response matches staging state shape
-
-
-def test_state_endpoint_404_for_missing_job(rest_client):
-    """GET /api/data-import/NOPE/state returns 404."""
-    resp = rest_client.get("/api/data-import/NOPE/state")
-    assert resp.status_code == 404
+def test_get_state_tool_returns_state():
+    """data_import_get_state tool returns current staging state."""
+    # Assert response matches staging state shape
 ```
 
 Run: `pytest tests/test_data_import.py -v`
@@ -654,7 +652,7 @@ Logic:
 ### Test
 
 ```python
-def test_execute_creates_customers(rest_client):
+def test_execute_creates_customers():
     """execute() creates customer records in the customers table."""
     # Setup: insert a validated import job + rows directly into DB
     # with mapped_data containing valid customer fields
@@ -668,25 +666,20 @@ def test_rollback_deletes_created_customers():
     # Setup: execute an import, then rollback
     # Assert customers no longer exist
     # Assert job status is 'rolled_back'
-
-
-def test_execute_endpoint_returns_200(rest_client):
-    """POST /api/data-import/{job_id}/execute returns 200."""
-    # Test via REST endpoint
 ```
 
 Run: `pytest tests/test_data_import.py -v`
 
 ---
 
-## Step 7 — MCP Tool
+## Step 7 — MCP Tool Registration
 
 ### What to do
 
-Create `mcp_tools/data_import_tools.py`:
+The `mcp_tools/data_import_tools.py` file was created in Steps 5 (app-only tools) and now needs the agent-facing tool added:
 
 ```python
-"""MCP tool for data import."""
+"""MCP tools for data import."""
 
 from mcp_tools._common import log_tool
 from services.data_import import data_import_service
@@ -694,6 +687,8 @@ from services.data_import import data_import_service
 
 def register(mcp):
     """Register data import tools."""
+
+    # --- Agent-facing tool (visibility: model + app) ---
 
     @mcp.tool(
         name="data_import_upload",
@@ -786,30 +781,30 @@ The app receives the initial structured content via `window.__MCP_STRUCTURED_CON
 - Fix input field + Fix button
 - Import button (disabled unless all rows are `ready` or `needs_review` with no errors)
 
-#### Fetch calls
+#### Communication via `app.callServerTool()`
+
+The MCP app uses the `App` class from `@modelcontextprotocol/ext-apps` to communicate with the backend via app-only MCP tools. This follows the same pattern as `qc-inspection.html` and `generic-confirm.html`.
 
 ```javascript
 // Fix button click
 async function handleFix(instruction) {
     setLoading(true);
-    const resp = await fetch(`/api/data-import/${jobId}/fix`, {
-        method: "POST",
-        headers: {"Content-Type": "application/json"},
-        body: JSON.stringify({instruction}),
+    const result = await app.callServerTool({
+        name: "data_import_fix",
+        arguments: { job_id: jobId, instruction }
     });
-    const newState = await resp.json();
-    setState(newState);  // re-render everything
+    setState(parseToolResult(result));  // re-render everything
     setLoading(false);
 }
 
 // Import button click
 async function handleExecute() {
     setLoading(true);
-    const resp = await fetch(`/api/data-import/${jobId}/execute`, {
-        method: "POST",
+    const result = await app.callServerTool({
+        name: "data_import_execute",
+        arguments: { job_id: jobId }
     });
-    const result = await resp.json();
-    setState(result);  // show execution summary
+    setState(parseToolResult(result));  // show execution summary
     setLoading(false);
 }
 ```
@@ -937,7 +932,7 @@ log_activity(
 ### 10b. Error handling
 
 - `upload()` with invalid file path → return `{"error": "File not found: ..."}` (not an exception — surface the error)
-- `fix()` with invalid job_id → raise `ValueError`, caught by REST route → 404
+- `fix()` with invalid job_id → raise `ValueError`, surfaced as tool error
 - `execute()` on non-validated job → raise `ValueError`
 - LLM returns unparseable JSON → log warning, fall back to empty mapping / no transforms (degrade gracefully, don't crash)
 
@@ -972,8 +967,8 @@ pytest tests/ -v  # full suite — make sure nothing broke
 | Fix instruction | Service call, mock `chat_completion` for Prompt 4 | `@patch` with `side_effect` list |
 | Execute | Service call, assert customer records created | Mock LLM for upload pipeline |
 | Rollback | Service call, assert records deleted | No LLM involved |
-| REST endpoints | `rest_client.get/post`, assert status + shape | Mock LLM for upload pipeline |
-| MCP tool | Direct tool function call | Mock LLM for upload pipeline |
+| App-only MCP tools | Direct tool function call, assert response shape | Mock LLM for upload pipeline |
+| MCP tool (upload) | Direct tool function call | Mock LLM for upload pipeline |
 | MCP app | Manual testing only | N/A |
 
 **Mock pattern:** Always `@patch("services.data_import.chat_completion", ...)`. Use `side_effect=[resp1, resp2, ...]` when multiple LLM calls happen in sequence (upload calls detect + map + transform). Use `return_value=` when only one call is expected (fix).
@@ -987,7 +982,6 @@ pytest tests/ -v  # full suite — make sure nothing broke
 New files:
 - [ ] `services/data_import.py`
 - [ ] `mcp_tools/data_import_tools.py`
-- [ ] `api_routes/data_import_routes.py`
 - [ ] `mcp_apps_ui/data-import.html`
 - [ ] `tests/test_data_import.py`
 
@@ -998,7 +992,6 @@ Modified files:
 - [ ] `services/__init__.py` — import `data_import_service`
 - [ ] `services/admin.py` — add import tables to reset
 - [ ] `mcp_tools/__init__.py` — add `data_import_tools` to `_MODULES`
-- [ ] `api_routes/__init__.py` — register `data_import_routes`
 - [ ] `server.py` — add `ui://data-import/result` resource
 - [ ] `tests/seed_test_data.py` — add empty import table entries to `TABLE_DATA`
 
@@ -1022,13 +1015,14 @@ Step 3 (LLM detect + map + transform) ─ can test (mocked LLM)
 Step 4 (validate + entity resolution) ─ can test (mocked LLM)
   │
   ▼
-Step 5 (fix endpoint) ──────────────── can test (mocked LLM + REST)
+Step 5 (app-only MCP tools: fix,       ─ can test (mocked LLM + tool calls)
+        execute, get_state)
   │
   ▼
-Step 6 (execute + rollback) ────────── can test (service + REST)
+Step 6 (execute + rollback) ────────── can test (service)
   │
   ▼
-Step 7 (MCP tool) ──────────────────── can test (mocked LLM)
+Step 7 (MCP tool registration) ────── can test (mocked LLM)
   │
   ▼
 Step 8 (MCP app HTML) ──────────────── manual test only

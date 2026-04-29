@@ -35,7 +35,7 @@ Instead of the agent mediating every fix (user → agent → tool → agent → 
 This gives us:
 - **1 agent tool call** (Extract) — near-zero drift surface
 - **Direct MCP app ↔ backend loop** (Transform) — no LLM round-trips, instant feedback
-- **One-click execution** (Load) — MCP app calls backend REST endpoint directly
+- **One-click execution** (Load) — MCP app calls app-only MCP tool directly
 
 ### Dedicated import agent
 
@@ -71,23 +71,27 @@ For a realistic 200-row import, the expected interaction is ~2 fix rounds in the
 
 ### How the "Fix" field works
 
-The MCP app presents a batch question and a free-text input field. The user types a natural language instruction (e.g. "merge them, use the longer name"). The MCP app sends this directly to a backend REST endpoint:
+The MCP app presents a batch question and a free-text input field. The user types a natural language instruction (e.g. "merge them, use the longer name"). The MCP app calls the backend via an app-only MCP tool:
 
-```
-POST /api/data-import/{job_id}/fix
-Content-Type: application/json
-
-{
-  "instruction": "merge the duplicates, use the longer name, keep both emails"
-}
+```javascript
+await app.callServerTool({
+  name: "data_import_fix",
+  arguments: {
+    job_id: "IMP-001",
+    instruction: "merge the duplicates, use the longer name, keep both emails"
+  }
+});
 ```
 
 The backend LLM interprets the instruction against the actual row data, applies the fix, re-validates, and returns the updated staging state + next batch question (if any). The MCP app refreshes its display — no page reload, just a DOM update.
 
 When the user is satisfied, they click **"Import"**. The MCP app calls:
 
-```
-POST /api/data-import/{job_id}/execute
+```javascript
+await app.callServerTool({
+  name: "data_import_execute",
+  arguments: { job_id: "IMP-001" }
+});
 ```
 
 The backend creates the records via the service layer and returns the result. The MCP app shows the execution summary.
@@ -161,9 +165,14 @@ The agent's job is done. Everything from here happens in the MCP app.
 > Merge the duplicates, use the longer name, keep both emails
 
 **MCP app calls:**
-```
-POST /api/data-import/IMP-001/fix
-{ "instruction": "Merge the duplicates, use the longer name, keep both emails" }
+```javascript
+await app.callServerTool({
+  name: "data_import_fix",
+  arguments: {
+    job_id: "IMP-001",
+    instruction: "Merge the duplicates, use the longer name, keep both emails"
+  }
+});
 ```
 
 **Backend does:**
@@ -186,8 +195,11 @@ If there were more issues, the app would show the next batch question and the cy
 **User clicks "Import".**
 
 **MCP app calls:**
-```
-POST /api/data-import/IMP-001/execute
+```javascript
+await app.callServerTool({
+  name: "data_import_execute",
+  arguments: { job_id: "IMP-001" }
+});
 ```
 
 **Backend does:**
@@ -228,12 +240,13 @@ User message
   └─────┬─────┘     └──────┬─────┘
         │                   │
         ▼                   ▼
-  POST /fix              POST /execute
-  (backend LLM           (service layer
-   interprets,            creates records)
+  callServerTool       callServerTool
+  (data_import_fix)    (data_import_execute)
+  backend LLM           service layer
+   interprets,          creates records
    re-validates,
    returns updated
-   state)
+   state
         │
         ▼
   MCP App refreshes
@@ -241,7 +254,7 @@ User message
 ```
 
 **Agent tool calls: 1** (`data_import_upload`)
-**MCP app ↔ backend round-trips: 1–3** (fix iterations, no agent involved)
+**MCP app ↔ backend tool calls: 1–3** (fix iterations via `data_import_fix`, no agent involved)
 **User clicks: 1** ("Import")
 
 ---

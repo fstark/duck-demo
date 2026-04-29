@@ -231,7 +231,7 @@ Two new staging tables (`import_jobs`, `import_rows`) isolated from operational 
 | `data_export_from_template` | shared | Export matching a sample file's format |
 | `data_export_list` | shared | List recent exports |
 
-The import flow uses only **one MCP tool** (`data_import_upload`). All subsequent interaction (fix issues, execute import) happens in the interactive MCP app via REST endpoints — the agent is not involved after the initial call. See [DATA_DESIGN.md](DATA_DESIGN.md) §5 for REST endpoint details.
+The import flow uses only **one MCP tool** (`data_import_upload`). All subsequent interaction (fix issues, execute import) happens in the interactive MCP app via app-only MCP tools (`data_import_fix`, `data_import_execute`) — the agent is not involved after the initial call. See [DATA_DESIGN.md](DATA_DESIGN.md) §5 for app-only tool definitions.
 
 ---
 
@@ -314,11 +314,11 @@ One interactive MCP app (`data-import.html`) handles the entire review, fix, and
 - **Auto-fix log:** collapsible list of corrections applied automatically ("'france' → FR")
 - **Batch question area:** the current grouped question (if any issues remain)
 - **Fix field:** free-text input where the user types fix instructions (e.g. "merge them, use the longer name")
-- **Import button:** enabled when all errors are resolved; clicks execute the import via REST endpoint
+- **Import button:** enabled when all errors are resolved; clicks execute the import via `app.callServerTool({name: "data_import_execute", ...})`
 
 ### How it works
 
-The MCP app communicates directly with the backend via REST endpoints — no agent involvement. When the user types in the Fix field, the app sends the instruction to `POST /api/data-import/{job_id}/fix`. The backend LLM interprets the instruction, applies fixes, re-validates, and returns the updated staging state. The app re-renders. When the user clicks "Import", the app calls `POST /api/data-import/{job_id}/execute`.
+The MCP app communicates directly with the backend via `app.callServerTool()` (the standard MCP Apps postMessage mechanism) — no agent involvement. When the user types in the Fix field, the app calls `data_import_fix` with the job ID and instruction. The backend LLM interprets the instruction, applies fixes, re-validates, and returns the updated staging state. The app re-renders. When the user clicks "Import", the app calls `data_import_execute`.
 
 After execution, the panel shows created entity IDs with links to each record in the ERP.
 
@@ -329,12 +329,12 @@ After execution, the panel shows created entity IDs with links to each record in
 The import follows an **Extract → Transform → Load** pattern:
 
 - **Extract:** Agent calls `data_import_upload` (one MCP tool call). The backend parses the file, maps columns, validates, resolves entities — all server-side.
-- **Transform:** The interactive MCP app renders. The user reviews data, fixes issues via free-text instructions (MCP app ↔ backend REST, no agent involved).
+- **Transform:** The interactive MCP app renders. The user reviews data, fixes issues via free-text instructions (MCP app ↔ backend via app-only MCP tools, no agent involved).
 - **Load:** User clicks "Import" in the panel. Backend creates records via the service layer.
 
 The agent is a thin launcher — it calls one tool, summarises the result, and the MCP app takes over. No multi-step agent orchestration, no workflow drift.
 
-For the full technical design — service architecture, LLM prompts, REST endpoints, MCP app design, and dependencies — see [DATA_DESIGN.md](DATA_DESIGN.md).
+For the full technical design — service architecture, LLM prompts, app-only MCP tools, MCP app design, and dependencies — see [DATA_DESIGN.md](DATA_DESIGN.md).
 
 ---
 

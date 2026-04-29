@@ -1,6 +1,6 @@
 # Data Import — Technical Design
 
-This document is the implementation blueprint for the data import feature described in [DATA.md](DATA.md). It covers the data model, service architecture, MCP tools, REST endpoints, LLM prompts, and the interactive MCP app.
+This document is the implementation blueprint for the data import feature described in [DATA.md](DATA.md). It covers the data model, service architecture, MCP tools, app-only MCP tools, LLM prompts, and the interactive MCP app.
 
 See [DEMO_FLOW.md](DEMO_FLOW.md) for the end-to-end user-facing flow of Demo A.
 
@@ -174,9 +174,9 @@ Stateless, all state in the database.
 
 `upload()` does the work of what was previously five separate steps. This is the "Extract" in the ETL pattern — one tool call, all server-side, no agent round-trips.
 
-`fix()` is called by the MCP app directly via a REST endpoint (not an MCP tool). The agent is not involved. It takes a free-text instruction like "merge the duplicates, use the longer name" and uses Prompt 4 to interpret it against the actual row data. After applying the fix, it re-validates and returns the full updated state so the MCP app can re-render.
+`fix()` is called by the MCP app directly via an app-only MCP tool (`data_import_fix`) — not by the agent. It takes a free-text instruction like "merge the duplicates, use the longer name" and uses Prompt 4 to interpret it against the actual row data. After applying the fix, it re-validates and returns the full updated state so the MCP app can re-render.
 
-`execute()` and `rollback()` are also called via REST endpoints from the MCP app (via the confirm pattern), not by the agent.
+`execute()` and `rollback()` are also called via app-only MCP tools from the MCP app, not by the agent.
 
 #### Internal Methods (called within `upload()` and `fix()`)
 
@@ -286,7 +286,7 @@ For large files that exceed context limits, chunk into batches of ~50 rows per c
 Input: current staging state (rows, issues, batch questions) + user's free-text instruction.
 Output: a list of actions to apply to the staging data.
 
-This is the backend LLM call made during `fix()`. It's called by the MCP app via a REST endpoint — the agent is not involved. The LLM sees the full staging context and interprets the user's natural language instruction against it.
+This is the backend LLM call made during `fix()`. It's called by the MCP app via an app-only MCP tool — the agent is not involved. The LLM sees the full staging context and interprets the user's natural language instruction against it.
 
 ```
 You are a data import assistant. The user is reviewing staged import data
@@ -365,9 +365,9 @@ def data_import_upload(
     """
 ```
 
-That's it. No `data_import_validate`, no `data_import_fix_issue`, no `data_import_preview`. Those operations happen inside the MCP app via REST endpoints (see §5).
+That's it. No `data_import_validate`, no `data_import_fix_issue`, no `data_import_preview`. Those operations happen inside the MCP app via app-only MCP tools (see §5).
 
-`data_import_execute` and `data_import_rollback` exist in the service layer but are called by the MCP app via `generic_confirm_action`, not by the agent.
+`data_import_execute` and `data_import_rollback` are app-only MCP tools called by the MCP app via `app.callServerTool()`, not by the agent.
 
 ### 4.2 Tool Registration
 
@@ -394,69 +394,85 @@ These are already tagged `shared` and need no changes.
 
 ---
 
-## 5. REST API Endpoints
+## 5. App-Only MCP Tools
 
-The MCP app communicates directly with the backend via REST. These are **not** MCP tools — the agent never calls them. They follow the same pattern as other MCP app → backend interactions (e.g. `generic_confirm_action`).
+The MCP app communicates with the backend via `app.callServerTool()` — the standard MCP Apps mechanism (postMessage JSON-RPC through the host). These are MCP tools with `visibility: ["app"]`, meaning only MCP apps can call them — the agent never sees them. This follows the same pattern as `generic_confirm_action` in the existing codebase.
 
-### 5.1 Endpoints
+### 5.1 Tools
 
-#### `POST /api/data-import/{job_id}/fix`
+#### `data_import_fix`
 
 Called by the MCP app when the user types in the Fix field.
 
 ```python
-@router.post("/api/data-import/{job_id}/fix")
-async def fix_import(job_id: str, body: dict):
+@mcp.tool(name="data_import_fix", meta={
+    "tags": [],  # Not exposed to agents
+    "ui": {"visibility": ["app"]}
+})
+def data_import_fix(job_id: str, instruction: str) -> dict:
     """
     Interpret a free-text fix instruction and apply it to the staging data.
 
-    Request body:
-        {"instruction": "merge the duplicates, use the longer name"}
+    The backend LLM interprets the instruction against the current staging
+    state, applies changes, re-validates, and returns the updated state.
+
+    Args:
+        job_id: Import job ID (e.g. "IMP-001")
+        instruction: Free-text fix instruction (e.g. "merge the duplicates, use the longer name")
 
     Returns:
         Updated staging state (same shape as data_import_upload response).
     """
-    result = data_import_service.fix(job_id, body["instruction"])
-    return result
+    return data_import_service.fix(job_id=job_id, instruction=instruction)
 ```
 
-#### `POST /api/data-import/{job_id}/execute`
+#### `data_import_execute`
 
 Called by the MCP app when the user clicks "Import".
 
 ```python
-@router.post("/api/data-import/{job_id}/execute")
-async def execute_import(job_id: str):
+@mcp.tool(name="data_import_execute", meta={
+    "tags": [],
+    "ui": {"visibility": ["app"]}
+})
+def data_import_execute(job_id: str) -> dict:
     """
     Execute the import — create records in the ERP.
+
+    Args:
+        job_id: Import job ID
 
     Returns:
         Execution summary with created entity IDs.
     """
-    result = data_import_service.execute(job_id)
-    return result
+    return data_import_service.execute(job_id=job_id)
 ```
 
-#### `GET /api/data-import/{job_id}/state`
+#### `data_import_get_state`
 
-Called by the MCP app to refresh the current staging state (e.g. after a fix).
+Called by the MCP app to refresh the current staging state (e.g. after reconnect).
 
 ```python
-@router.get("/api/data-import/{job_id}/state")
-async def get_import_state(job_id: str):
+@mcp.tool(name="data_import_get_state", meta={
+    "tags": [],
+    "ui": {"visibility": ["app"]}
+})
+def data_import_get_state(job_id: str) -> dict:
     """
     Get the current staging state for an import job.
+
+    Args:
+        job_id: Import job ID
 
     Returns:
         Full staging state (mapping, rows, issues, batch questions).
     """
-    result = data_import_service.get_state(job_id)
-    return result
+    return data_import_service.get_state(job_id=job_id)
 ```
 
-### 5.2 Route Registration
+### 5.2 Registration
 
-In `api_routes/data_import_routes.py`, following the existing pattern. Registered via `api_routes/__init__.py`.
+All app-only tools are registered in `mcp_tools/data_import_tools.py` alongside `data_import_upload`. Registered via `mcp_tools/__init__.py`.
 
 ---
 
@@ -484,44 +500,44 @@ The app has three sections that update dynamically based on the staging state:
 **Interaction section:**
 - Batch question area: displays the current grouped question (if any)
 - **Fix** text input field: free-text input for the user's instruction
-- **Fix** submit button: sends the instruction to `POST /api/data-import/{job_id}/fix`
-- **Import** button: enabled only when no errors remain. Calls `POST /api/data-import/{job_id}/execute`
+- **Fix** submit button: sends the instruction via `app.callServerTool({name: "data_import_fix", ...})`
+- **Import** button: enabled only when no errors remain. Calls `app.callServerTool({name: "data_import_execute", ...})`
 
 After execution, the data section updates to show the created entity IDs with links.
 
 ### 6.3 Communication Pattern
 
 ```
-MCP App                          Backend
-  │                                 │
-  │  (initial render from           │
-  │   structured content data)      │
-  │                                 │
-  │──POST /fix {instruction}──────>│
-  │                                 │  ← backend LLM interprets
-  │<──── updated staging state ────│
-  │                                 │
-  │  (re-render data grid,          │
-  │   show next batch question)     │
-  │                                 │
-  │──POST /execute ──────────────>│
-  │                                 │  ← service creates records
-  │<──── execution result ─────────│
-  │                                 │
-  │  (show created entities)        │
+MCP App                    Host (postMessage)           MCP Server
+  │                              │                          │
+  │  (initial render from        │                          │
+  │   structured content data)   │                          │
+  │                              │                          │
+  │──callServerTool─────────────>│──data_import_fix────────>│
+  │  (data_import_fix)           │                          │  ← backend LLM interprets
+  │<──── updated staging state──│<───── tool result ───────│
+  │                              │                          │
+  │  (re-render data grid,       │                          │
+  │   show next batch question)  │                          │
+  │                              │                          │
+  │──callServerTool─────────────>│──data_import_execute────>│
+  │  (data_import_execute)       │                          │  ← service creates records
+  │<──── execution result───────│<───── tool result ───────│
+  │                              │                          │
+  │  (show created entities)     │                          │
 ```
 
-The MCP app is a self-contained HTML/JS iframe. All communication uses `fetch()` to the backend REST endpoints. The agent is not involved after the initial `data_import_upload` call.
+The MCP app is a self-contained HTML/JS iframe. All communication uses `app.callServerTool()` (postMessage JSON-RPC through the host), which forwards tool calls to the MCP server. The agent is not involved after the initial `data_import_upload` call.
 
 ### 6.4 Existing Pattern
 
 This follows the same architecture as other interactive MCP apps in the codebase:
 
-- `tariff-picker.html` — user selects tariff codes, app POSTs to backend
-- `generic-confirm.html` — user confirms an action, app calls backend to execute
-- `qc-inspection.html` — displays AI inspection results with interactive elements
+- `tariff-picker.html` — user selects tariff codes, app calls `app.callServerTool()` to submit
+- `generic-confirm.html` — user confirms an action, app calls `generic_confirm_action` via `app.callServerTool()`
+- `qc-inspection.html` — displays AI inspection results, submits disposition via `app.callServerTool()`
 
-The key difference: `data-import.html` has a free-text input field (the Fix field), which is new. But the communication pattern (MCP app → REST endpoint → re-render) is identical.
+The key difference: `data-import.html` has a free-text input field (the Fix field), which is new. But the communication pattern (`app.callServerTool()` → MCP server → re-render) is identical.
 
 ---
 
@@ -564,8 +580,7 @@ New files to create:
 
 ```
 services/data_import.py          — DataImportService
-mcp_tools/data_import_tools.py   — single MCP tool (data_import_upload)
-api_routes/data_import_routes.py — REST endpoints (fix, execute, state)
+mcp_tools/data_import_tools.py   — MCP tools (data_import_upload + app-only fix/execute/get_state)
 mcp_apps_ui/data-import.html     — interactive staging/import app
 ```
 
@@ -575,7 +590,6 @@ Files to modify:
 schema.sql                       — add import_jobs + import_rows tables
 services/__init__.py             — register data_import_service
 mcp_tools/__init__.py            — register data_import_tools
-api_routes/__init__.py           — register data_import_routes
 server.py                        — register ui://data-import resource
 config.py                        — add DATA_IMPORT_MODEL constant
 ```
@@ -617,7 +631,7 @@ Use the existing `_next_id()` helper pattern from other services.
 
 ## 11. Activity Log Integration
 
-Import execution and rollback produce activity log entries. Since these are triggered via REST endpoints (not MCP tools), they are logged directly by the service methods:
+Import execution and rollback produce activity log entries. Since these are triggered via app-only MCP tools (not agent-facing tools), they are logged directly by the service methods:
 
 ```python
 # In data_import_service.execute():
