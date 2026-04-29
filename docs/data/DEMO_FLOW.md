@@ -32,6 +32,12 @@ Every tool in the import pipeline returns a `next_step` field that tells the age
 
 This is the single most important design decision. Without it, the flow will break on step 3 or 4.
 
+### Dedicated import agent
+
+Data import uses its own agent with a purpose-built prompt. This agent knows nothing about sales, production, or logistics — it only handles imports. This eliminates an entire class of drift: the agent cannot wander into "let me also create a quote for these customers" territory because it has no tools for that.
+
+The agent's tool set is limited to the `data_import_*` tools plus read-only catalog/CRM lookups (needed for entity resolution). No mutating business tools.
+
 ---
 
 ## Sample File
@@ -44,7 +50,7 @@ Kd-Nr;Firma;Ansprechpartner;E-Mail;Straße;PLZ;Ort;Land;Telefon;Zahlungsziel
 104;DuckFan Paris SARL;J. Dupont;j.dupont@duckfan-paris.example;12 Rue du Canard;75001;Paris;FR;;45 jours
 ```
 
-Saved as `samples/german_customers.csv`.
+Saved as `docs/data/DEMO_A/Kundenstammdatenübernahme_Altdatenbank.csv` — "customer master data takeover from legacy database". The kind of filename that makes a non-German speaker stare blankly and reach for the import wizard.
 
 ---
 
@@ -54,7 +60,7 @@ Saved as `samples/german_customers.csv`.
 
 The user pastes the file path in chat:
 
-> Please import this customer list: file:///Users/demo/Downloads/german_customers.csv
+> Please import this customer list: file:///Users/demo/Downloads/Kundenstammdatenübernahme_Altdatenbank.csv
 
 Nothing else. No hint about entity type, no column descriptions.
 
@@ -65,7 +71,7 @@ Nothing else. No hint about entity type, no column descriptions.
 **Agent calls:**
 ```
 data_import_upload(
-    source="file:///Users/demo/Downloads/german_customers.csv",
+    source="file:///Users/demo/Downloads/Kundenstammdatenübernahme_Altdatenbank.csv",
     hint=null
 )
 ```
@@ -83,7 +89,7 @@ data_import_upload(
 {
   "job_id": "IMP-001",
   "status": "mapped",
-  "source_filename": "german_customers.csv",
+  "source_filename": "Kundenstammdatenübernahme_Altdatenbank.csv",
   "detected_format": "csv (semicolon-separated, UTF-8)",
   "detected_entity": "customer",
   "row_count": 4,
@@ -100,7 +106,7 @@ data_import_upload(
     {"source": "Telefon",         "target": "phone",        "transform": "E.164 normalise",   "confidence": 0.85},
     {"source": "Zahlungsziel",    "target": "payment_terms","transform": "parse int from text","confidence": 0.79}
   ],
-  "message": "Uploaded 4 rows from german_customers.csv. Detected as **customer** data with 10 columns mapped. Review the mapping and confirm, or ask me to change any column assignment.",
+  "message": "Uploaded 4 rows from Kundenstammdatenübernahme_Altdatenbank.csv. Detected as **customer** data with 10 columns mapped. Review the mapping and confirm, or ask me to change any column assignment.",
   "next_step": {
     "description": "Review the mapping above. Say 'looks good' to proceed, or tell me which columns to change.",
     "awaits": "user_confirmation",
@@ -115,7 +121,7 @@ data_import_upload(
 **MCP app:** `data-import-mapping` renders inline — a table showing each source column → target field with confidence badges.
 
 **Agent says to user:**
-> I've uploaded 4 rows from `german_customers.csv` and detected them as **customer** records.
+> I've uploaded 4 rows from `Kundenstammdatenübernahme_Altdatenbank.csv` and detected them as **customer** records.
 > Here's the mapping I've inferred: _(MCP app renders the mapping table)_
 > Does this look right, or should I adjust any columns?
 

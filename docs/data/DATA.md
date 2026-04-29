@@ -238,39 +238,7 @@ This builds on the existing QC vision pipeline (MyForterro inference with image 
 
 ## Database Changes
 
-One new staging area, kept separate from the operational tables:
-
-```sql
-CREATE TABLE IF NOT EXISTS import_jobs (
-    id TEXT PRIMARY KEY,
-    entity_type TEXT,                 -- detected: 'customer', 'sales_order', 'item', etc.
-    source_filename TEXT,
-    source_format TEXT,               -- 'csv', 'xlsx', 'image', 'json', 'pdf', 'text'
-    hint TEXT,                        -- user-provided description
-    status TEXT NOT NULL DEFAULT 'staging',  -- staging → mapped → validated → executed → rolled_back
-    row_count INTEGER,
-    mapping_plan TEXT,                -- JSON: column→field mappings with confidence
-    stats TEXT,                       -- JSON: {ready: N, needs_review: N, rejected: N}
-    created_at TEXT NOT NULL,
-    executed_at TEXT,
-    executed_ids TEXT                  -- JSON: list of created/updated entity IDs (for rollback)
-);
-
-CREATE TABLE IF NOT EXISTS import_rows (
-    id TEXT PRIMARY KEY,
-    job_id TEXT NOT NULL,
-    source_row INTEGER NOT NULL,      -- original row number for traceability
-    raw_data TEXT NOT NULL,           -- JSON: original values as extracted
-    mapped_data TEXT,                 -- JSON: values after mapping + transform
-    resolved_refs TEXT,               -- JSON: entity resolution results
-    status TEXT NOT NULL DEFAULT 'pending',  -- pending → ready / needs_review / rejected → imported
-    issues TEXT,                      -- JSON: list of {severity, field, message, suggestion}
-    created_entity_id TEXT            -- ID of created/updated record (after execution)
-);
-
-CREATE INDEX IF NOT EXISTS idx_import_rows_job ON import_rows(job_id);
-CREATE INDEX IF NOT EXISTS idx_import_rows_status ON import_rows(status);
-```
+Two new staging tables (`import_jobs`, `import_rows`) isolated from operational data. See [DATA_DESIGN.md](DATA_DESIGN.md) § 1 for full schema.
 
 ---
 
@@ -411,15 +379,9 @@ Displayed after `data_import_execute`. Shows:
 
 ## Implementation Notes
 
-- **All interaction is via chat.** The agent calls MCP tools; MCP apps render read-only visualisations in the chat. No new UI tabs or pages.
-- The staging tables (`import_jobs`, `import_rows`) live in the same SQLite database. They are transient — cleared on data reset.
-- LLM calls use the existing `myforterro.chat_completion()` pipeline. Schema mapping and entity resolution prompts should be crafted carefully and tested with the demo data.
-- Import execution uses the service layer directly (not raw SQL), so all business rules, activity logging, and stock movements are honoured.
-- Rollback records created entity IDs and issues `DELETE` statements in reverse order. Since this is a demo, full transactional rollback is acceptable.
-- **File input:** Today the user pastes a `file://` URL in chat; the tool reads from the local filesystem. When the chat client supports document attachments, the tool will accept inline content — a one-line change to the ingest step.
-- For images, the vision model is called for extraction; for structured files, Python libraries (csv, openpyxl, pdfplumber) do the parsing.
-- The import service is a new `services/data_import.py` with a corresponding `mcp_tools/data_import_tools.py` and `api_routes/data_import_routes.py`.
-- MCP apps live in `mcp_apps_ui/data-import-*.html`, registered as `ui://data-import-mapping/result` etc. in `server.py`.
+All interaction is via chat. The agent calls MCP tools; MCP apps render read-only visualisations inline. No new UI tabs.
+
+For the full technical design — service architecture, LLM prompts, `next_step` orchestration, file structure, and dependencies — see [DATA_DESIGN.md](DATA_DESIGN.md).
 
 ---
 
