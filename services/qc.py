@@ -218,11 +218,14 @@ class QcService:
                 "SELECT * FROM qc_hold_batch_lines WHERE qc_hold_batch_id = ?",
                 (batch_id,),
             ))
-            result["images"] = dict_rows(conn.execute(
+            image_rows = dict_rows(conn.execute(
                 "SELECT id, qc_hold_batch_id, qc_hold_batch_line_id, created_at, uploaded_by "
                 "FROM qc_hold_images WHERE qc_hold_batch_id = ? ORDER BY created_at",
                 (batch_id,),
             ))
+            for img in image_rows:
+                img["image_url"] = f"/api/qc/images/{img['id']}"
+            result["images"] = image_rows
             inspection = conn.execute(
                 "SELECT * FROM qc_inspections WHERE qc_hold_batch_id = ? AND status != 'failed' ORDER BY created_at DESC LIMIT 1",
                 (batch_id,),
@@ -244,6 +247,26 @@ class QcService:
             ))
             result["replacements"] = replacements
         return result
+
+    def get_image_blob(self, *, image_id: str) -> tuple[bytes, str]:
+        """Return (raw_bytes, mime_type) for a QC hold image."""
+        with db_conn() as conn:
+            row = conn.execute(
+                "SELECT image_data FROM qc_hold_images WHERE id = ?",
+                (image_id,),
+            ).fetchone()
+            if not row or not row["image_data"]:
+                raise ValueError(f"QC image {image_id} not found")
+            blob = row["image_data"]
+            if blob[:8] == b"\x89PNG\r\n\x1a\n":
+                mime = "image/png"
+            elif blob[:3] == b"\xff\xd8\xff":
+                mime = "image/jpeg"
+            elif blob[:4] == b"RIFF" and blob[8:12] == b"WEBP":
+                mime = "image/webp"
+            else:
+                mime = "image/jpeg"
+            return blob, mime
 
     def get_inspection(self, *, inspection_id: str) -> dict[str, Any]:
         with db_conn() as conn:
@@ -470,8 +493,8 @@ class QcService:
                 if config.QC_INFERENCE_PROVIDER == "openai":
                     response = myforterro.openai_chat_completion(
                         model=config.QC_INFERENCE_MODEL,
-                        messages=messages,
-                        max_completion_tokens=100000,
+                        messages=messages
+                        # max_completion_tokens=100000,
                     )
                 else:
                     response = myforterro.chat_completion(

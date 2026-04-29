@@ -137,23 +137,26 @@ export function QcBatchDetailPage({ batchId }: { batchId: string }) {
         {!batch.images || batch.images.length === 0 ? (
           <div className="text-slate-500 text-sm">No images attached yet. Use the MCP chat interface to attach images.</div>
         ) : (
-          <div className="space-y-2">
-            {batch.images.map((img) => (
-              <div key={img.id} className="flex items-center gap-3 text-sm">
-                <a
-                  href={img.image_url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="text-blue-600 hover:underline truncate max-w-[400px]"
-                >
-                  {img.image_url}
-                </a>
-                {img.uploaded_by && (
-                  <span className="text-slate-500">by {img.uploaded_by}</span>
-                )}
-                <span className="text-slate-400 text-xs">{img.created_at}</span>
-              </div>
-            ))}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {batch.images.map((img) => {
+              const src = img.image_url
+              return (
+                <div key={img.id} className="space-y-1">
+                  <a href={src} target="_blank" rel="noreferrer">
+                    <img
+                      src={src}
+                      alt={`QC evidence ${img.id}`}
+                      className="rounded border border-slate-200 max-h-64 object-contain w-full bg-slate-50"
+                    />
+                  </a>
+                  <div className="flex items-center gap-2 text-xs text-slate-500">
+                    <span className="font-mono">{img.id}</span>
+                    {img.uploaded_by && <span>by {img.uploaded_by}</span>}
+                    <span>{img.created_at}</span>
+                  </div>
+                </div>
+              )
+            })}
           </div>
         )}
       </Card>
