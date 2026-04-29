@@ -44,6 +44,8 @@ Supported inputs:
 | Email body (pasted) | Regex + LLM structured extraction |
 | Clipboard (HTML table) | Parse HTML table tags |
 
+**File delivery:** Currently via `file://` URL pasted in chat (the agent reads the file from the local path). When the chat client supports document attachments, the tool will accept inline base64 content instead — no design change needed.
+
 The ingest step produces a normalised **staging table**: a list of flat dicts with raw string values and a `_source_row` reference back to the original.
 
 **MCP tool:** `data_import_upload`
@@ -366,49 +368,58 @@ The agent:
 
 ---
 
-## UI Components
+## MCP Apps (UI)
 
-### Import Job Dashboard
+All UI is read-only. The agent drives every mutation via MCP tools. Where visual feedback helps, small self-contained MCP apps render inside the chat — same pattern as `qc-inspection.html`, `item-inspect.html`, and `tariff-picker.html`.
 
-A new tab in the UI showing:
-- Active and recent import jobs
-- Status progression (staging → mapped → validated → executed)
-- Per-job stats: row count, issues by severity, entity matches
+### `data-import-mapping` — Mapping Review
 
-### Mapping Review
-
-Interactive mapping editor with:
+Displayed after `data_import_map_columns` returns. Shows:
 - Side-by-side: staging columns ↔ target fields
-- Confidence badges (green/yellow/red) on each mapping
-- Sample values for verification
-- Drag-and-drop to reassign columns
+- Confidence badges (green / yellow / red) per mapping
+- Sample values from first rows for visual verification
 
-### Row-Level Issue View
+The user reviews in the chat, then tells the agent which mappings to override (if any). The agent calls `data_import_update_mapping` — no interactive UI mutation needed.
 
-Table of all rows with:
-- Status badge (ready / needs review / rejected)
-- Expandable issue list per row
-- Inline correction inputs
-- Batch actions ("auto-fix all warnings", "reject all errors")
+### `data-import-issues` — Validation Report
 
-### Import Diff Preview
+Displayed after `data_import_validate`. Shows:
+- Summary bar: N ready, N needs review, N rejected
+- Expandable issue list grouped by severity
+- Per-row status badges
 
-Before execution, show a summary:
+The user discusses fixes conversationally; the agent calls `data_import_fix_issue`.
+
+### `data-import-preview` — Import Diff
+
+Displayed before `data_import_execute`. Shows:
 - New records to create (grouped by entity type)
-- Existing records to update (with diff highlighting)
-- Skipped/rejected rows
-- Side effects (downstream entities that will be created)
+- Existing records to update (with field-level diff highlighting)
+- Skipped / rejected rows
+- Side effects ("will also create 3 quotes")
+
+The user says "go" and the agent executes.
+
+### `data-import-result` — Execution Summary
+
+Displayed after `data_import_execute`. Shows:
+- Created / updated / skipped counts
+- Links to created entities (customer IDs, quote IDs, etc.)
+- Any errors encountered during execution
 
 ---
 
 ## Implementation Notes
 
+- **All interaction is via chat.** The agent calls MCP tools; MCP apps render read-only visualisations in the chat. No new UI tabs or pages.
 - The staging tables (`import_jobs`, `import_rows`) live in the same SQLite database. They are transient — cleared on data reset.
 - LLM calls use the existing `myforterro.chat_completion()` pipeline. Schema mapping and entity resolution prompts should be crafted carefully and tested with the demo data.
 - Import execution uses the service layer directly (not raw SQL), so all business rules, activity logging, and stock movements are honoured.
 - Rollback records created entity IDs and issues `DELETE` statements in reverse order. Since this is a demo, full transactional rollback is acceptable.
-- File upload is handled as base64 via the MCP tool (consistent with QC image upload). For images, the vision model is called for extraction; for structured files, Python libraries (csv, openpyxl, pdfplumber) do the parsing.
+- **File input:** Today the user pastes a `file://` URL in chat; the tool reads from the local filesystem. When the chat client supports document attachments, the tool will accept inline content — a one-line change to the ingest step.
+- For images, the vision model is called for extraction; for structured files, Python libraries (csv, openpyxl, pdfplumber) do the parsing.
 - The import service is a new `services/data_import.py` with a corresponding `mcp_tools/data_import_tools.py` and `api_routes/data_import_routes.py`.
+- MCP apps live in `mcp_apps_ui/data-import-*.html`, registered as `ui://data-import-mapping/result` etc. in `server.py`.
 
 ---
 
