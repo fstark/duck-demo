@@ -66,3 +66,14 @@ def chat_completion(*, model: str, messages: list[dict], **kwargs):
     return client.chat.completions.create(
         model=model, messages=messages, **kwargs
     )
+
+
+def openai_chat_completion(*, model: str, messages: list[dict], **kwargs):
+    """Send a chat completion request directly to OpenAI."""
+    api_key = os.environ.get("OPENAI_API_KEY")
+    if not api_key:
+        raise RuntimeError("OPENAI_API_KEY not set — cannot use openai provider")
+    client = openai.OpenAI(api_key=api_key)
+    return client.chat.completions.create(
+        model=model, messages=messages, **kwargs
+    )

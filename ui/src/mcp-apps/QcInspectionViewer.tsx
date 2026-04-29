@@ -6,7 +6,7 @@ import { AppShell, AppCard, SectionTitle, PrimaryButton, uiColors } from './shar
 
 interface Duck {
     bbox: [number, number, number, number]; // [x1, y1, x2, y2] normalised to [0, 1]
-    severity: 'none' | 'minor' | 'major' | 'critical';
+    severity: 'none' | 'minor' | 'major';
     defects: string[];
 }
 
@@ -30,9 +30,8 @@ const SEV_COLOR: Record<string, string> = {
     none:     '#22c55e',
     minor:    '#f97316',
     major:    '#ef4444',
-    critical: '#dc2626',
 };
-const SEV_ORDER = ['none', 'minor', 'major', 'critical'] as const;
+const SEV_ORDER = ['none', 'minor', 'major'] as const;
 
 function cycleSeverity(sev: string): string {
     const idx = SEV_ORDER.indexOf(sev as typeof SEV_ORDER[number]);
@@ -220,11 +219,15 @@ export default function QcInspectionViewer() {
     const [result, setResult] = useState<InspectionResult | null>(null);
     const [overrides, setOverrides] = useState<Record<number, string>>({});
     const [hoveredDuck, setHoveredDuck] = useState<number | null>(null);
+    const [dispositionStatus, setDispositionStatus] = useState<'idle' | 'submitting' | 'done' | 'error'>('idle');
+    const [dispositionSummary, setDispositionSummary] = useState('');
+    const appRef = useRef<any>(null);
 
     const { isConnected, error } = useApp({
         appInfo: { name: 'QcInspectionViewer', version: '2.0.0' },
         capabilities: {},
         onAppCreated: (app) => {
+            appRef.current = app;
             app.ontoolresult = (params: any) => {
                 let data: InspectionResult | null = null;
                 if (params?.structuredContent?.decision) {
@@ -271,13 +274,56 @@ export default function QcInspectionViewer() {
         return overrides[idx] ?? duck.severity;
     }
 
-    const passCount = ducks.filter((d, i) => getEffectiveSeverity(d, i) !== 'critical').length;
+    const passCount = ducks.filter((d, i) => getEffectiveSeverity(d, i) !== 'major').length;
     const hasImages = !!(result.reference_image_uri || result.operator_image_uri);
 
     function handleClickDuck(idx: number) {
         const current = getEffectiveSeverity(ducks[idx], idx);
         setOverrides(prev => ({ ...prev, [idx]: cycleSeverity(current) }));
     }
+
+    const handlePass = async () => {
+        const app = appRef.current;
+        if (!app || !result?.id) return;
+        const majorCount = ducks.filter((d, i) => getEffectiveSeverity(d, i) === 'major').length;
+        const total = ducks.length;
+        let action: string;
+        let qty_scrapped = 0;
+        if (majorCount === 0) {
+            action = 'pass_release';
+        } else if (majorCount < total) {
+            action = 'partial_scrap';
+            qty_scrapped = majorCount;
+        } else {
+            action = 'full_scrap';
+        }
+        try {
+            setDispositionStatus('submitting');
+            await app.callServerTool({
+                name: 'generic_confirm_action',
+                arguments: {
+                    original_tool: 'qc_apply_disposition',
+                    arguments: {
+                        qc_inspection_id: result.id,
+                        action,
+                        qty_scrapped,
+                        reason: `Operator review: ${passCount}/${total} passed`,
+                    },
+                },
+            });
+            if (action === 'pass_release') {
+                setDispositionSummary(`All ${total} ducks released to stock.`);
+            } else if (action === 'partial_scrap') {
+                setDispositionSummary(`${passCount} released, ${majorCount} scrapped. Replacement MO created.`);
+            } else {
+                setDispositionSummary(`All ${total} ducks scrapped. Replacement MO created.`);
+            }
+            setDispositionStatus('done');
+        } catch (err) {
+            console.error('[QC] disposition failed:', err);
+            setDispositionStatus('error');
+        }
+    };
 
     return (
         <AppShell maxWidth={920}>
@@ -308,7 +354,7 @@ export default function QcInspectionViewer() {
             {/* Two-panel image view */}
             {hasImages && (
                 <div style={{ display: 'flex', gap: 14, marginBottom: 14, alignItems: 'flex-start' }}>
-                    <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ flex: '0 0 33%', minWidth: 0 }}>
                         <SectionTitle>Reference</SectionTitle>
                         <LeftPanel
                             referenceUri={result.reference_image_uri}
@@ -355,11 +401,24 @@ export default function QcInspectionViewer() {
                     ))}
                     <span style={{ fontSize: 12, color: uiColors.muted }}>· hover to inspect · click to cycle</span>
                     <div style={{ marginLeft: 'auto' }}>
-                        <PrimaryButton backgroundColor="#16a34a" onClick={() => {}}>
-                            Pass ({passCount})
+                        <PrimaryButton
+                            backgroundColor={dispositionStatus === 'done' ? '#6b7280' : dispositionStatus === 'error' ? '#dc2626' : '#16a34a'}
+                            onClick={handlePass}
+                            disabled={dispositionStatus === 'submitting' || dispositionStatus === 'done'}
+                        >
+                            {dispositionStatus === 'submitting' ? 'Submitting…'
+                                : dispositionStatus === 'done' ? '✓ Submitted'
+                                : dispositionStatus === 'error' ? 'Retry'
+                                : `Pass (${passCount})`}
                         </PrimaryButton>
                     </div>
                 </div>
+            )}
+
+            {dispositionSummary && (
+                <AppCard marginBottom={0}>
+                    <p style={{ margin: 0, fontSize: 13, color: uiColors.text }}>{dispositionSummary}</p>
+                </AppCard>
             )}
 
         </AppShell>

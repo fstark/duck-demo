@@ -184,13 +184,27 @@ def register(mcp):
 
         # QC Tools
         elif original_tool == "qc_apply_disposition":
-            return qc_service.apply_disposition(
+            result = qc_service.apply_disposition(
                 qc_inspection_id=arguments["qc_inspection_id"],
                 action=arguments["action"],
                 approved_by=arguments.get("approved_by"),
                 reason=arguments.get("reason"),
                 qty_scrapped=int(arguments.get("qty_scrapped") or 0),
             )
+            # Return a concise chat-friendly summary instead of the full inspection blob
+            action = arguments["action"]
+            qty_scrap = int(arguments.get("qty_scrapped") or 0)
+            mo_id = result.get("production_order_id", "?")
+            batch_id = result.get("qc_hold_batch_id", "?")
+            if action == "pass_release":
+                return f"✅ QC disposition applied — **{mo_id}** ({batch_id}): all units released to stock."
+            elif action == "partial_scrap":
+                return (f"⚠️ QC disposition applied — **{mo_id}** ({batch_id}): "
+                        f"{qty_scrap} unit(s) scrapped, remainder released to stock. "
+                        f"A replacement production order has been created.")
+            else:
+                return (f"❌ QC disposition applied — **{mo_id}** ({batch_id}): "
+                        f"all units scrapped. A replacement production order has been created.")
 
         else:
             raise ValueError(f"Unknown tool for confirmation: {original_tool}")

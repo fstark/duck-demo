@@ -40,8 +40,9 @@ _FAIL_PAYLOAD = {
 
 
 @pytest.fixture(autouse=True)
-def _use_qc_db(qc_db):
+def _use_qc_db(qc_db, monkeypatch):
     """Use the function-scoped QC database for every test in this module."""
+    monkeypatch.setattr(config, "QC_INFERENCE_PROVIDER", "myforterro")
     # Also insert a dummy image BLOB so run_inspection() doesn't reject the batch
     import db as _db
     conn = _db.get_connection()

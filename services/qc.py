@@ -5,10 +5,13 @@ Manages the full QC lifecycle:
 """
 
 import base64
+import io
 import json
 import logging
 import math
 from typing import Any
+
+from PIL import Image
 
 import config
 from db import dict_rows, generate_id
@@ -89,24 +92,24 @@ def _to_data_uri(blob: bytes) -> str:
     return f"data:{mime};base64,{base64.b64encode(blob).decode('ascii')}"
 
 
-def _mock_ducks(n: int) -> list[dict]:
-    """Generate *n* evenly-laid-out mock duck results for testing."""
+def _mock_ducks(n: int, img_w: int = 1024, img_h: int = 1024) -> list[dict]:
+    """Generate *n* evenly-laid-out mock duck results (pixel coords)."""
     cols = math.ceil(math.sqrt(n))
     rows = math.ceil(n / cols)
     ducks: list[dict] = []
-    severities = ["none", "major", "critical", "minor"]
+    severities = ["none", "major", "minor"]
     defect_texts = [
-        [], ["[MOCK] Uneven paint on beak."], ["[MOCK] Severe deformation."], ["[MOCK] Slight smear."],
+        [], ["[MOCK] Uneven paint on beak."], ["[MOCK] Slight smear."],
     ]
     for i in range(n):
         r, c = divmod(i, cols)
-        x1 = c / cols + 0.02
-        y1 = r / rows + 0.02
-        x2 = (c + 1) / cols - 0.02
-        y2 = (r + 1) / rows - 0.02
+        x1 = round(c / cols * img_w + 10)
+        y1 = round(r / rows * img_h + 10)
+        x2 = round((c + 1) / cols * img_w - 10)
+        y2 = round((r + 1) / rows * img_h - 10)
         sev = severities[i % len(severities)]
         ducks.append({
-            "bbox": [round(x1, 3), round(y1, 3), round(x2, 3), round(y2, 3)],
+            "bbox": [x1, y1, x2, y2],
             "severity": sev,
             "defects": defect_texts[i % len(defect_texts)],
         })
@@ -411,7 +414,8 @@ class QcService:
         # image_data is stored as a BLOB — encode directly to base64 data URI.
         blob = images[0]["image_data"]
         operator_image_uri = _to_data_uri(blob)
-        logger.info("[QC Inspection] batch=%s — operator image read from BLOB", batch_id)
+        img_w, img_h = Image.open(io.BytesIO(blob)).size
+        logger.info("[QC Inspection] batch=%s — operator image %dx%d read from BLOB", batch_id, img_w, img_h)
         messages = [
             {
                 "role": "user",
@@ -430,15 +434,15 @@ class QcService:
                             '"decision_reason": "<string>", '
                             '"ducks": [{'
                             '"bbox": [x1, y1, x2, y2], '
-                            '"severity": "none|minor|major|critical", '
+                            '"severity": "none|minor|major", '
                             '"defects": ["<description>"]'
                             '}]}\n'
-                            "bbox coordinates are normalised floats in [0, 1] relative to the submitted image "
-                            "width and height (x1,y1 = top-left corner, x2,y2 = bottom-right corner). "
-                            "severity: none=no defects, minor=cosmetic only, major=functional concern, "
-                            "critical=reject. "
-                            "decision: pass=all ducks acceptable, partial_scrap=some critical ducks, "
-                            "full_scrap=all ducks critical."
+                            "bbox coordinates are in pixels relative to the submitted image "
+                            f"(which is {img_w}×{img_h} px). "
+                            "x1,y1 = top-left corner, x2,y2 = bottom-right corner. "
+                            "severity: none=no defects, minor=cosmetic only, major=reject. "
+                            "decision: pass=all ducks acceptable, partial_scrap=some major ducks, "
+                            "full_scrap=all ducks major."
                         ),
                     },
                     {"type": "image_url", "image_url": {"url": reference_image_uri}},
@@ -456,17 +460,24 @@ class QcService:
                 raw_content = json.dumps({
                     "decision": "partial_scrap",
                     "decision_reason": "[MOCK] Most ducks look good but two have visible paint defects.",
-                    "ducks": _mock_ducks(expected_qty or 6),
+                    "ducks": _mock_ducks(expected_qty or 6, img_w, img_h),
                 })
             else:
                 logger.info(
-                    "[QC Inspection] batch=%s model=%s images=%d — calling inference API...",
-                    batch_id, config.QC_INFERENCE_MODEL, len(images),
+                    "[QC Inspection] batch=%s model=%s provider=%s images=%d — calling inference API...",
+                    batch_id, config.QC_INFERENCE_MODEL, config.QC_INFERENCE_PROVIDER, len(images),
                 )
-                response = myforterro.chat_completion(
-                    model=config.QC_INFERENCE_MODEL,
-                    messages=messages,
-                )
+                if config.QC_INFERENCE_PROVIDER == "openai":
+                    response = myforterro.openai_chat_completion(
+                        model=config.QC_INFERENCE_MODEL,
+                        messages=messages,
+                        max_completion_tokens=100000,
+                    )
+                else:
+                    response = myforterro.chat_completion(
+                        model=config.QC_INFERENCE_MODEL,
+                        messages=messages,
+                    )
                 raw_content = response.choices[0].message.content
 
             # Strip markdown code fences if the model wraps JSON in ```json ... ```
@@ -490,6 +501,17 @@ class QcService:
             if not isinstance(parsed.get("ducks"), list):
                 raise ValueError("Inspection model response 'ducks' must be a list.")
 
+            # Normalise pixel bbox → [0, 1] floats for storage and UI
+            for duck in parsed["ducks"]:
+                if "bbox" in duck and len(duck["bbox"]) == 4:
+                    x1, y1, x2, y2 = duck["bbox"]
+                    duck["bbox"] = [
+                        round(x1 / img_w, 4),
+                        round(y1 / img_h, 4),
+                        round(x2 / img_w, 4),
+                        round(y2 / img_h, 4),
+                    ]
+
             logger.info(
                 "[QC Inspection] batch=%s — %d ducks:\n%s",
                 batch_id, len(parsed["ducks"]),
@@ -507,7 +529,7 @@ class QcService:
                 for desc in duck.get("defects", []):
                     legacy_findings.append({
                         "type": "shape_defect",
-                        "severity": "critical" if sev == "critical" else ("major" if sev == "major" else "minor"),
+                        "severity": "major" if sev == "major" else "minor",
                         "confidence": None,
                         "description": desc,
                         "image_ref": None,
@@ -934,10 +956,16 @@ class QcService:
                 }
             ]
             logger.info("[QC Submit] Phase 1 — extracting MO label from image...")
-            label_response = myforterro.chat_completion(
-                model=config.QC_LABEL_MODEL,
-                messages=label_messages,
-            )
+            if config.QC_INFERENCE_PROVIDER == "openai":
+                label_response = myforterro.openai_chat_completion(
+                    model=config.QC_LABEL_MODEL,
+                    messages=label_messages,
+                )
+            else:
+                label_response = myforterro.chat_completion(
+                    model=config.QC_LABEL_MODEL,
+                    messages=label_messages,
+                )
             raw = label_response.choices[0].message.content.strip()
             if raw.startswith("```"):
                 raw = raw.split("\n", 1)[1].rsplit("```", 1)[0].strip()

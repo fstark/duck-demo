@@ -83,6 +83,8 @@ remove option 3 and add a fun duck fact at the end of the email. show me the mai
 
 
 ```
+Manage this email:
+
 **From:** Sarah Martin [sarah@martin-retail.example](mailto:sarah@martin-retail.example)
 **Subject:** Order status?
 Hi, can you tell me the status of my last two orders?

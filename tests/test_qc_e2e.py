@@ -11,6 +11,7 @@ import pytest
 
 from services import production_service, qc_service
 from services.inventory import get_stock_summary
+import config
 import db
 
 
@@ -25,7 +26,8 @@ def _make_mock_response(payload: dict):
 
 
 @pytest.fixture(autouse=True)
-def _use_qc_db(qc_db):
+def _use_qc_db(qc_db, monkeypatch):
+    monkeypatch.setattr(config, "QC_INFERENCE_PROVIDER", "myforterro")
     # Insert a dummy image BLOB so run_inspection() doesn't reject the batch
     conn = db.get_connection()
     conn.execute(
@@ -72,7 +74,7 @@ def test_e2e_full_scrap_flow(qc_db):
         "decision": "full_scrap",
         "decision_reason": "All items damaged",
         "ducks": [
-            {"bbox": [0.05, 0.05, 0.95, 0.95], "severity": "critical", "defects": ["Melted"]},
+            {"bbox": [0.05, 0.05, 0.95, 0.95], "severity": "major", "defects": ["Melted"]},
         ],
     })
 
