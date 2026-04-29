@@ -46,12 +46,13 @@ _FAIL_PAYLOAD = {
 @pytest.fixture(autouse=True)
 def _use_qc_db(qc_db):
     """Use the function-scoped QC database for every test in this module."""
-    # Also insert a dummy image URL so run_inspection() doesn't reject the batch
+    # Also insert a dummy image BLOB so run_inspection() doesn't reject the batch
     import db as _db
     conn = _db.get_connection()
     conn.execute(
-        "INSERT INTO qc_hold_images (id, qc_hold_batch_id, image_url, created_at) "
-        "VALUES ('QCIMG-T001', 'QCB-T001', 'http://example.com/img.jpg', '2025-08-01T08:00:00')"
+        "INSERT INTO qc_hold_images (id, qc_hold_batch_id, image_data, created_at) "
+        "VALUES ('QCIMG-T001', 'QCB-T001', ?, '2025-08-01T08:00:00')",
+        (b'\x89PNG\r\n\x1a\n',),  # minimal PNG magic bytes
     )
     conn.commit()
     conn.close()

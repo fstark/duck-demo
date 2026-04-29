@@ -1,47 +1,30 @@
-"""Quick smoke test: send reference + qc/MO-9000.png to the inference API (identical to the app call)."""
+"""Quick smoke test: submit qc/MO-9000.png via the new qc_submit_image flow.
+
+Uses QC_INFERENCE_MOCK=false to exercise the real two-phase call:
+  Phase 1 — Opus extracts 'MO-9000' label from the image.
+  Phase 2 — image is stored as BLOB, AI inspection runs, result printed.
+
+Run with:
+  source venv/bin/activate
+  source secrets.sh
+  python qc_test.py
+"""
 
 import base64
-import config
-from services import myforterro
+import os
+os.environ.setdefault("QC_INFERENCE_MOCK", "false")
 
+from services.qc import qc_service
 
-def _img_uri(path: str) -> str:
-    data = open(path, "rb").read()
-    b64 = base64.b64encode(data).decode()
-    return f"data:image/png;base64,{b64}"
+operator_image = open("qc/MO-9000.png", "rb").read()
+operator_b64 = f"data:image/png;base64,{base64.b64encode(operator_image).decode()}"
 
+result = qc_service.submit_image(image_input=operator_b64, uploaded_by="test-operator")
 
-reference_uri = _img_uri("images/ELVIS-DUCK-20CM.png")
-operator_uri = _img_uri("qc/MO-9000.png")
+print("decision          :", result["decision"])
+print("confidence_overall:", result.get("confidence_overall"))
+print("decision_reason   :", result.get("decision_reason"))
+print("findings          :", len(result.get("findings", [])))
+for f in result.get("findings", []):
+    print(f"  [{f.get('severity')}] {f.get('finding_type')} — {f.get('description')}")
 
-messages = [
-    {
-        "role": "user",
-        "content": [
-            {
-                "type": "text",
-                "text": (
-                    "You are a quality control inspector for rubber duck manufacturing. "
-                    "Compare the reference product image (first) with the submitted batch image (second). "
-                    "Identify any defects or quality issues. "
-                    "Respond ONLY with a valid JSON object matching this schema exactly:\n"
-                    '{"decision": "pass|partial_scrap|full_scrap", '
-                    '"confidence_overall": <float 0-1>, '
-                    '"decision_reason": "<string>", '
-                    '"findings": [{"type": "<finding_type>", "severity": "<severity>", '
-                    '"confidence": <float 0-1>, "description": "<string>", '
-                    '"image_ref": null, "location_hint": null}]}\n'
-                    "finding_type must be one of: wrong_product, paint_defect, shape_defect, "
-                    "assembly_defect, packaging_defect, missing_part. "
-                    "severity must be one of: critical, major, minor. "
-                    "decision: pass=all good, partial_scrap=some defects, full_scrap=all defective."
-                ),
-            },
-            {"type": "image_url", "image_url": {"url": reference_uri}},
-            {"type": "image_url", "image_url": {"url": operator_uri}},
-        ],
-    }
-]
-
-resp = myforterro.chat_completion(model=config.QC_INFERENCE_MODEL, messages=messages)
-print(repr(resp.choices[0].message.content))

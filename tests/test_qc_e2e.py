@@ -26,11 +26,12 @@ def _make_mock_response(payload: dict):
 
 @pytest.fixture(autouse=True)
 def _use_qc_db(qc_db):
-    # Insert a dummy image so run_inspection() doesn't reject the batch
+    # Insert a dummy image BLOB so run_inspection() doesn't reject the batch
     conn = db.get_connection()
     conn.execute(
-        "INSERT INTO qc_hold_images (id, qc_hold_batch_id, image_url, created_at) "
-        "VALUES ('QCIMG-E001', 'QCB-T001', 'http://example.com/img.jpg', '2025-08-01T08:00:00')"
+        "INSERT INTO qc_hold_images (id, qc_hold_batch_id, image_data, created_at) "
+        "VALUES ('QCIMG-E001', 'QCB-T001', ?, '2025-08-01T08:00:00')",
+        (b'\x89PNG\r\n\x1a\n',),  # minimal PNG magic bytes
     )
     conn.commit()
     conn.close()

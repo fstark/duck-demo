@@ -391,13 +391,12 @@ CREATE TABLE IF NOT EXISTS qc_hold_batch_lines (
 CREATE INDEX IF NOT EXISTS idx_qc_hold_line_batch ON qc_hold_batch_lines(qc_hold_batch_id);
 CREATE INDEX IF NOT EXISTS idx_qc_hold_line_status ON qc_hold_batch_lines(line_status);
 
--- QC Hold images: evidence image URLs attached by operator
+-- QC Hold images: evidence images (stored as BLOBs) attached by operator
 CREATE TABLE IF NOT EXISTS qc_hold_images (
     id TEXT PRIMARY KEY,
     qc_hold_batch_id TEXT NOT NULL,
     qc_hold_batch_line_id TEXT,
-    image_url TEXT NOT NULL,
-    image_hash TEXT,
+    image_data BLOB NOT NULL,
     created_at TEXT NOT NULL,
     uploaded_by TEXT
 );

@@ -1,5 +1,6 @@
 """MCP tools – Quality Control (QC) operations."""
 
+import base64
 from typing import Any, Dict, List, Optional
 
 from mcp_tools._common import log_tool, create_confirmation_response
@@ -9,21 +10,70 @@ from services import qc_service
 def register(mcp):
     """Register QC tools."""
 
-    @mcp.tool(name="qc_list_pending_batches", meta={"tags": ["quality"]})
-    @log_tool("qc_list_pending_batches")
-    def qc_list_pending_batches(status: str = "pending_images") -> List[Dict[str, Any]]:
+    @mcp.tool(name="qc_submit_image", meta={
+        "tags": ["quality"],
+        "ui": {
+            "resourceUri": "ui://qc-inspection/result",
+            "visibility": ["model", "app"]
+        }
+    }, structured_output=False)
+    @log_tool("qc_submit_image")
+    def qc_submit_image(
+        image: str,
+        uploaded_by: Optional[str] = None,
+    ) -> Dict[str, Any]:
         """
-        List QC hold batches filtered by status.
+        Submit a QC inspection photo. The Manufacturing Order label is read
+        automatically from the image — no need to specify an MO ID.
+
+        This is the single demo step: take a picture of a production batch
+        and the system does the rest.
+
+        What happens:
+          1. The MO label (e.g., MO-9000) is extracted from the image via AI.
+          2. If the MO is in 'pending_inspection' status, the image is stored
+             and the AI inspection runs immediately.
 
         Parameters:
-            status: Batch status filter (default: 'pending_images').
+            image: Image as a base64 string, data URI ('data:image/png;base64,...'),
+                   or file path URL ('file:///path/to/image.png')
+            uploaded_by: Optional operator identifier
+
+        Returns:
+            Inspection record with decision, confidence, reason, and findings.
+        """
+        return qc_service.submit_image(image_input=image, uploaded_by=uploaded_by)
+
+    @mcp.tool(name="qc_list_pending_inspections", meta={"tags": ["quality"]})
+    @log_tool("qc_list_pending_inspections")
+    def qc_list_pending_inspections(status: str = "pending_images") -> List[Dict[str, Any]]:
+        """
+        List production orders currently under QC hold, filtered by status.
+
+        Parameters:
+            status: QC status filter (default: 'pending_images').
                     Values: pending_images, ready_for_inspection, inspected,
                             released, partially_released, closed
 
         Returns:
-            List of QC hold batches with item details and quantity summaries.
+            List of QC hold records with production_order_id and item/quantity details.
         """
         return qc_service.list_pending_batches(status=status)
+
+    @mcp.tool(name="qc_get_mo_inspection", meta={"tags": ["quality"]})
+    @log_tool("qc_get_mo_inspection")
+    def qc_get_mo_inspection(production_order_id: str) -> Dict[str, Any]:
+        """
+        Get the QC inspection result for a Manufacturing Order.
+        There is at most one inspection per MO.
+
+        Parameters:
+            production_order_id: The Manufacturing Order ID (e.g., 'MO-9000')
+
+        Returns:
+            Inspection record with model decision, confidence, reason, and findings list.
+        """
+        return qc_service.get_inspection_for_mo(production_order_id=production_order_id)
 
     @mcp.tool(name="qc_get_batch", meta={"tags": ["quality"]})
     @log_tool("qc_get_batch")
@@ -64,24 +114,32 @@ def register(mcp):
     @log_tool("qc_attach_images")
     def qc_attach_images(
         batch_id: str,
-        image_urls: List[str],
+        image_data: List[str],
         uploaded_by: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
-        Attach evidence image URLs to a QC hold batch and immediately run the AI inspection.
-        This is the single step to both submit images and get the inspection result.
+        Attach evidence images to a QC hold batch and immediately run the AI inspection.
+        💡 Prefer qc_submit_image for the demo flow — it reads the MO label automatically.
+        Use this tool only when you already have the QCB batch ID.
 
         Parameters:
             batch_id: The QC hold batch ID (e.g., 'QCB-0001')
-            image_urls: List of image URLs to attach as inspection evidence
+            image_data: List of base64-encoded image strings or data URIs
             uploaded_by: Optional identifier of the operator uploading the images
 
         Returns:
             Inspection record with model decision, confidence, reason, and findings.
         """
+        blobs = []
+        for img_str in image_data:
+            if img_str.startswith("data:"):
+                _, b64data = img_str.split(",", 1)
+                blobs.append(base64.b64decode(b64data))
+            else:
+                blobs.append(base64.b64decode(img_str))
         return qc_service.attach_images(
             batch_id=batch_id,
-            image_urls=image_urls,
+            image_blobs=blobs,
             uploaded_by=uploaded_by,
         )
 

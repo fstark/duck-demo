@@ -179,7 +179,8 @@ class QcService:
                 (batch_id,),
             ))
             result["images"] = dict_rows(conn.execute(
-                "SELECT * FROM qc_hold_images WHERE qc_hold_batch_id = ? ORDER BY created_at",
+                "SELECT id, qc_hold_batch_id, qc_hold_batch_line_id, created_at, uploaded_by "
+                "FROM qc_hold_images WHERE qc_hold_batch_id = ? ORDER BY created_at",
                 (batch_id,),
             ))
             inspection = conn.execute(
@@ -227,10 +228,10 @@ class QcService:
         self,
         *,
         batch_id: str,
-        image_urls: list[str],
+        image_blobs: list[bytes],
         uploaded_by: str | None = None,
     ) -> dict[str, Any]:
-        """Attach evidence image URLs to a hold batch."""
+        """Attach evidence image BLOBs to a hold batch and immediately run inspection."""
         with db_conn() as conn:
             batch = conn.execute(
                 "SELECT * FROM qc_hold_batches WHERE id = ?",
@@ -240,12 +241,12 @@ class QcService:
                 raise ValueError(f"QC hold batch {batch_id} not found")
             from services.simulation import simulation_service
             sim_time = simulation_service.get_current_time()
-            for url in image_urls:
+            for blob in image_blobs:
                 img_id = generate_id(conn, ID_PREFIXES["qc_hold_images"], "qc_hold_images")
                 conn.execute(
-                    "INSERT INTO qc_hold_images (id, qc_hold_batch_id, image_url, created_at, uploaded_by) "
+                    "INSERT INTO qc_hold_images (id, qc_hold_batch_id, image_data, created_at, uploaded_by) "
                     "VALUES (?, ?, ?, ?, ?)",
-                    (img_id, batch_id, url, sim_time, uploaded_by),
+                    (img_id, batch_id, blob, sim_time, uploaded_by),
                 )
             conn.execute(
                 "UPDATE qc_hold_batches SET status = 'ready_for_inspection' WHERE id = ?",
@@ -298,7 +299,7 @@ class QcService:
 
             # Validate images exist
             images = dict_rows(conn.execute(
-                "SELECT * FROM qc_hold_images WHERE qc_hold_batch_id = ? ORDER BY created_at",
+                "SELECT image_data FROM qc_hold_images WHERE qc_hold_batch_id = ? ORDER BY created_at",
                 (batch_id,),
             ))
             if not images:
@@ -342,29 +343,18 @@ class QcService:
             conn.commit()
 
         # Phase 2: Call inference API (outside any long-lived connection block)
-        # The remote inference API cannot fetch arbitrary URLs, so all operator images
-        # must be inlined as data URIs.
-        def _to_data_uri(url: str) -> str:
-            if url.startswith("data:"):
-                return url
-            if url.startswith("file://"):
-                img_bytes = open(url[len("file://"):], "rb").read()
-            else:
-                import urllib.request
-                with urllib.request.urlopen(url) as r:  # nosec — internal trusted URLs only
-                    img_bytes = r.read()
-            if img_bytes[:8] == b"\x89PNG\r\n\x1a\n":
-                mime = "image/png"
-            elif img_bytes[:3] == b"\xff\xd8\xff":
-                mime = "image/jpeg"
-            elif img_bytes[:4] == b"RIFF" and img_bytes[8:12] == b"WEBP":
-                mime = "image/webp"
-            else:
-                mime = "image/jpeg"
-            return f"data:{mime};base64,{base64.b64encode(img_bytes).decode('ascii')}"
-
-        operator_image_url = _to_data_uri(images[0]["image_url"])
-        logger.info("[QC Inspection] batch=%s — operator image inlined as data URI", batch_id)
+        # image_data is stored as a BLOB — encode directly to base64 data URI.
+        blob = images[0]["image_data"]
+        if blob[:8] == b"\x89PNG\r\n\x1a\n":
+            op_mime = "image/png"
+        elif blob[:3] == b"\xff\xd8\xff":
+            op_mime = "image/jpeg"
+        elif blob[:4] == b"RIFF" and blob[8:12] == b"WEBP":
+            op_mime = "image/webp"
+        else:
+            op_mime = "image/jpeg"
+        operator_image_uri = f"data:{op_mime};base64,{base64.b64encode(blob).decode('ascii')}"
+        logger.info("[QC Inspection] batch=%s — operator image read from BLOB", batch_id)
         messages = [
             {
                 "role": "user",
@@ -389,7 +379,7 @@ class QcService:
                         ),
                     },
                     {"type": "image_url", "image_url": {"url": reference_image_uri}},
-                    {"type": "image_url", "image_url": {"url": operator_image_url}},
+                    {"type": "image_url", "image_url": {"url": operator_image_uri}},
                 ],
             }
         ]
@@ -766,6 +756,169 @@ class QcService:
 
         logger.info("Created replacement MO %s for batch %s (scrapped=%d, replacement=%d)",
                     new_mo_id, batch_id, qty_to_scrap, qty_replacement)
+
+    # ------------------------------------------------------------------
+    # MO-centric helpers
+    # ------------------------------------------------------------------
+
+    def get_inspection_for_mo(self, *, production_order_id: str) -> dict[str, Any]:
+        """Return the QC inspection for a production order (there is at most one)."""
+        with db_conn() as conn:
+            batch = conn.execute(
+                "SELECT id FROM qc_hold_batches WHERE production_order_id = ?",
+                (production_order_id,),
+            ).fetchone()
+            if not batch:
+                raise ValueError(f"No QC hold batch found for production order {production_order_id}")
+            insp = conn.execute(
+                "SELECT * FROM qc_inspections WHERE qc_hold_batch_id = ? AND status != 'failed' "
+                "ORDER BY created_at DESC LIMIT 1",
+                (batch["id"],),
+            ).fetchone()
+            if not insp:
+                raise ValueError(
+                    f"No inspection found for production order {production_order_id}. "
+                    "Run the inspection first."
+                )
+            result = dict(insp)
+            result["findings"] = dict_rows(conn.execute(
+                "SELECT * FROM qc_inspection_findings WHERE qc_inspection_id = ? ORDER BY created_at",
+                (insp["id"],),
+            ))
+        return result
+
+    # ------------------------------------------------------------------
+    # Single-shot image submission (label extraction + inspection)
+    # ------------------------------------------------------------------
+
+    def submit_image(
+        self,
+        *,
+        image_input: str,
+        uploaded_by: str | None = None,
+    ) -> dict[str, Any]:
+        """Two-phase QC image submission for the demo workflow.
+
+        Phase 1: Extract the Manufacturing Order label from the image via AI.
+        Phase 2: Validate the MO is pending inspection, attach the image as a BLOB,
+                 and run the AI inspection immediately.
+
+        Parameters:
+            image_input: base64-encoded image string or data URI
+                         (e.g. 'data:image/png;base64,...' or plain base64)
+            uploaded_by: optional operator identifier
+
+        Returns:
+            Inspection record with decision, confidence, reason, and findings.
+        """
+        from services import myforterro
+        from services.simulation import simulation_service
+
+        # Decode input to raw bytes (accepts data URI, file:// URL, or raw base64)
+        if image_input.startswith("data:"):
+            _, b64data = image_input.split(",", 1)
+            img_bytes = base64.b64decode(b64data)
+        elif image_input.startswith("file://"):
+            img_bytes = open(image_input[len("file://"):], "rb").read()
+        else:
+            img_bytes = base64.b64decode(image_input)
+
+        # Detect mime from magic bytes
+        if img_bytes[:8] == b"\x89PNG\r\n\x1a\n":
+            mime = "image/png"
+        elif img_bytes[:3] == b"\xff\xd8\xff":
+            mime = "image/jpeg"
+        elif img_bytes[:4] == b"RIFF" and img_bytes[8:12] == b"WEBP":
+            mime = "image/webp"
+        else:
+            mime = "image/jpeg"
+        image_data_uri = f"data:{mime};base64,{base64.b64encode(img_bytes).decode('ascii')}"
+
+        # Phase 1: Extract MO label from image
+        if config.QC_INFERENCE_MOCK:
+            # In mock mode, pick the first MO waiting for inspection
+            with db_conn() as conn:
+                row = conn.execute(
+                    "SELECT id FROM production_orders "
+                    "WHERE inspection_status = 'pending_inspection' LIMIT 1"
+                ).fetchone()
+            if not row:
+                raise ValueError(
+                    "No production orders in pending_inspection status (mock mode). "
+                    "Run a scenario to generate data."
+                )
+            mo_id = row["id"]
+            logger.info("[QC Submit] MOCK mode — using first pending MO: %s", mo_id)
+        else:
+            label_messages = [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": (
+                                "Look carefully at this manufacturing batch image. "
+                                "Find the Manufacturing Order label printed on it. "
+                                "It will be in the format MO-XXXX (e.g., MO-2001, MO-9000). "
+                                "Respond ONLY with a JSON object: "
+                                "{\"mo_id\": \"MO-XXXX\"} if found, "
+                                "or {\"mo_id\": null} if no label is visible."
+                            ),
+                        },
+                        {"type": "image_url", "image_url": {"url": image_data_uri}},
+                    ],
+                }
+            ]
+            logger.info("[QC Submit] Phase 1 — extracting MO label from image...")
+            label_response = myforterro.chat_completion(
+                model=config.QC_LABEL_MODEL,
+                messages=label_messages,
+            )
+            raw = label_response.choices[0].message.content.strip()
+            if raw.startswith("```"):
+                raw = raw.split("\n", 1)[1].rsplit("```", 1)[0].strip()
+            try:
+                parsed_label = json.loads(raw)
+            except json.JSONDecodeError as exc:
+                raise ValueError(
+                    f"Label extraction returned invalid JSON: {exc}. Content: {raw[:200]}"
+                ) from exc
+            mo_id = parsed_label.get("mo_id")
+            if not mo_id:
+                raise ValueError(
+                    "No Manufacturing Order label found in image. "
+                    "Make sure the MO label is clearly visible on the batch."
+                )
+            logger.info("[QC Submit] Phase 1 — extracted label: %s", mo_id)
+
+        # Phase 2: Validate MO exists and is pending inspection
+        with db_conn() as conn:
+            mo = conn.execute(
+                "SELECT id, inspection_status FROM production_orders WHERE id = ?",
+                (mo_id,),
+            ).fetchone()
+            if not mo:
+                raise ValueError(f"Production order {mo_id} not found.")
+            if mo["inspection_status"] != "pending_inspection":
+                raise ValueError(
+                    f"Production order {mo_id} is not awaiting inspection "
+                    f"(inspection_status='{mo['inspection_status']}'). "
+                    "Only orders in 'pending_inspection' status can be submitted."
+                )
+            batch = conn.execute(
+                "SELECT id FROM qc_hold_batches WHERE production_order_id = ?",
+                (mo_id,),
+            ).fetchone()
+            if not batch:
+                raise ValueError(f"No QC hold batch found for production order {mo_id}.")
+            batch_id = batch["id"]
+
+        # Phase 3: Attach image as BLOB and run inspection immediately
+        logger.info(
+            "[QC Submit] Phase 2 — attaching image to %s (batch %s) and running inspection...",
+            mo_id, batch_id,
+        )
+        return self.attach_images(batch_id=batch_id, image_blobs=[img_bytes], uploaded_by=uploaded_by)
 
 
 qc_service = QcService()

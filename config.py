@@ -51,6 +51,7 @@ API_BASE = os.getenv("API_BASE", "http://127.0.0.1:5173")
 # QC constants
 LOC_SCRAP = "SCRAP"
 QC_INFERENCE_MODEL = "claude-4.6-opus"
+QC_LABEL_MODEL = "claude-4.6-opus"  # model used for MO-label extraction from images
 # Set QC_INFERENCE_MOCK=true to skip the real API call and return a canned result
 QC_INFERENCE_MOCK = os.getenv("QC_INFERENCE_MOCK", "false").lower() == "true"
 
