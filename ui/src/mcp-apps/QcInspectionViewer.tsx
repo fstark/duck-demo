@@ -314,9 +314,9 @@ export default function QcInspectionViewer() {
             if (action === 'pass_release') {
                 setDispositionSummary(`All ${total} ducks released to stock.`);
             } else if (action === 'partial_scrap') {
-                setDispositionSummary(`${passCount} released, ${majorCount} scrapped. Replacement MO created.`);
+                setDispositionSummary(`${passCount} released, ${majorCount} scrapped.`);
             } else {
-                setDispositionSummary(`All ${total} ducks scrapped. Replacement MO created.`);
+                setDispositionSummary(`All ${total} ducks scrapped.`);
             }
             setDispositionStatus('done');
         } catch (err) {

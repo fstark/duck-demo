@@ -353,49 +353,33 @@ CREATE TABLE IF NOT EXISTS stock_movements (
     reference_type TEXT,
     reference_id TEXT,
     notes TEXT,
-    qc_hold_batch_line_id TEXT,
     qc_inspection_id TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_stock_mov_item ON stock_movements(item_id, timestamp);
 CREATE INDEX IF NOT EXISTS idx_stock_mov_stock ON stock_movements(stock_id);
 CREATE INDEX IF NOT EXISTS idx_stock_mov_ref ON stock_movements(reference_type, reference_id);
 
--- QC Hold: one container per flagged production order completion
+-- QC Hold: one batch per flagged production order completion
 CREATE TABLE IF NOT EXISTS qc_hold_batches (
     id TEXT PRIMARY KEY,
     production_order_id TEXT NOT NULL,
     sales_order_id TEXT,
     item_id TEXT NOT NULL,
     status TEXT NOT NULL,
+    qty_on_hold INTEGER NOT NULL,
+    qty_released INTEGER NOT NULL DEFAULT 0,
+    qty_scrapped INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL,
-    released_at TEXT,
-    replacement_triggered INTEGER NOT NULL DEFAULT 0
+    released_at TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_po_qc_required ON production_orders(inspection_required, status);
 CREATE INDEX IF NOT EXISTS idx_qc_hold_batch_status ON qc_hold_batches(status, created_at);
 CREATE INDEX IF NOT EXISTS idx_qc_hold_batch_po ON qc_hold_batches(production_order_id);
 
--- QC Hold lines: quantity accounting at batch-line granularity
-CREATE TABLE IF NOT EXISTS qc_hold_batch_lines (
-    id TEXT PRIMARY KEY,
-    qc_hold_batch_id TEXT NOT NULL,
-    item_id TEXT NOT NULL,
-    qty_on_hold INTEGER NOT NULL,
-    qty_pending INTEGER NOT NULL,
-    qty_released INTEGER NOT NULL DEFAULT 0,
-    qty_scrapped INTEGER NOT NULL DEFAULT 0,
-    line_status TEXT NOT NULL,
-    created_at TEXT NOT NULL,
-    closed_at TEXT
-);
-CREATE INDEX IF NOT EXISTS idx_qc_hold_line_batch ON qc_hold_batch_lines(qc_hold_batch_id);
-CREATE INDEX IF NOT EXISTS idx_qc_hold_line_status ON qc_hold_batch_lines(line_status);
-
--- QC Hold images: evidence images (stored as BLOBs) attached by operator
+-- QC Hold images: evidence image (stored as BLOB) attached by operator
 CREATE TABLE IF NOT EXISTS qc_hold_images (
     id TEXT PRIMARY KEY,
     qc_hold_batch_id TEXT NOT NULL,
-    qc_hold_batch_line_id TEXT,
     image_data BLOB NOT NULL,
     created_at TEXT NOT NULL,
     uploaded_by TEXT
@@ -434,31 +418,6 @@ CREATE TABLE IF NOT EXISTS qc_inspection_findings (
     created_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_qc_findings_inspection ON qc_inspection_findings(qc_inspection_id);
-
--- QC Dispositions: human-approved final action after inspection
-CREATE TABLE IF NOT EXISTS qc_dispositions (
-    id TEXT PRIMARY KEY,
-    qc_inspection_id TEXT NOT NULL UNIQUE,
-    qc_hold_batch_id TEXT NOT NULL,
-    action TEXT NOT NULL,
-    approved_by TEXT,
-    reason TEXT,
-    created_at TEXT NOT NULL
-);
-CREATE INDEX IF NOT EXISTS idx_qc_dispositions_batch ON qc_dispositions(qc_hold_batch_id);
-
--- QC Replacements: traces scrap-driven shortage to replacement production orders
-CREATE TABLE IF NOT EXISTS qc_replacements (
-    id TEXT PRIMARY KEY,
-    qc_disposition_id TEXT NOT NULL,
-    sales_order_id TEXT NOT NULL,
-    item_id TEXT NOT NULL,
-    qty_short INTEGER NOT NULL,
-    qty_replacement INTEGER NOT NULL,
-    replacement_production_order_id TEXT NOT NULL,
-    created_at TEXT NOT NULL
-);
-CREATE INDEX IF NOT EXISTS idx_qc_replacements_so ON qc_replacements(sales_order_id);
 
 -- Activity log: persistent event stream for factory observability
 CREATE TABLE IF NOT EXISTS activity_log (

@@ -46,14 +46,13 @@ def register(mcp):
 
     @mcp.tool(name="qc_list_pending_inspections", meta={"tags": ["quality"]})
     @log_tool("qc_list_pending_inspections")
-    def qc_list_pending_inspections(status: str = "pending_images") -> List[Dict[str, Any]]:
+    def qc_list_pending_inspections(status: str = "pending") -> List[Dict[str, Any]]:
         """
         List production orders currently under QC hold, filtered by status.
 
         Parameters:
-            status: QC status filter (default: 'pending_images').
-                    Values: pending_images, ready_for_inspection, inspected,
-                            released, partially_released, closed
+            status: QC status filter (default: 'pending').
+                    Values: pending, inspected, closed
 
         Returns:
             List of QC hold records with production_order_id and item/quantity details.
@@ -79,92 +78,15 @@ def register(mcp):
     @log_tool("qc_get_batch")
     def qc_get_batch(batch_id: str) -> Dict[str, Any]:
         """
-        Get a QC hold batch with its lines, images, inspection summary, and replacements.
+        Get a QC hold batch with images and inspection summary.
 
         Parameters:
             batch_id: The QC hold batch ID (e.g., 'QCB-0001')
 
         Returns:
-            Full batch detail including lines, images, inspection (if run), replacements.
+            Full batch detail including images and inspection (if run).
         """
         return qc_service.get_batch(batch_id=batch_id)
-
-    @mcp.tool(name="qc_get_inspection", meta={"tags": ["quality"]})
-    @log_tool("qc_get_inspection")
-    def qc_get_inspection(inspection_id: str) -> Dict[str, Any]:
-        """
-        Get a QC inspection result with all findings.
-
-        Parameters:
-            inspection_id: The inspection ID (e.g., 'QCI-0001')
-
-        Returns:
-            Inspection record with model decision, confidence, reason, and findings list.
-        """
-        return qc_service.get_inspection(inspection_id=inspection_id)
-
-    # MUTATING TOOL
-    @mcp.tool(name="qc_attach_images", meta={
-        "tags": ["quality"],
-        "ui": {
-            "resourceUri": "ui://qc-inspection/result",
-            "visibility": ["model", "app"]
-        }
-    }, structured_output=False)
-    @log_tool("qc_attach_images")
-    def qc_attach_images(
-        batch_id: str,
-        image_data: List[str],
-        uploaded_by: Optional[str] = None,
-    ) -> Dict[str, Any]:
-        """
-        Attach evidence images to a QC hold batch and immediately run the AI inspection.
-        💡 Prefer qc_submit_image for the demo flow — it reads the MO label automatically.
-        Use this tool only when you already have the QCB batch ID.
-
-        Parameters:
-            batch_id: The QC hold batch ID (e.g., 'QCB-0001')
-            image_data: List of base64-encoded image strings or data URIs
-            uploaded_by: Optional identifier of the operator uploading the images
-
-        Returns:
-            Inspection record with model decision, confidence, reason, and findings.
-        """
-        blobs = []
-        for img_str in image_data:
-            if img_str.startswith("data:"):
-                _, b64data = img_str.split(",", 1)
-                blobs.append(base64.b64decode(b64data))
-            else:
-                blobs.append(base64.b64decode(img_str))
-        return qc_service.attach_images(
-            batch_id=batch_id,
-            image_blobs=blobs,
-            uploaded_by=uploaded_by,
-        )
-
-    # MUTATING TOOL
-    @mcp.tool(name="qc_run_inspection", meta={
-        "tags": ["quality"],
-        "ui": {
-            "resourceUri": "ui://qc-inspection/result",
-            "visibility": ["model", "app"]
-        }
-    }, structured_output=False)
-    @log_tool("qc_run_inspection")
-    def qc_run_inspection(batch_id: str) -> Dict[str, Any]:
-        """
-        Run AI image inspection for a QC hold batch.
-        Compares operator-submitted images against the reference product image.
-        Requires images to be attached first (qc_attach_images).
-
-        Parameters:
-            batch_id: The QC hold batch ID (e.g., 'QCB-0001')
-
-        Returns:
-            Inspection record with model decision, confidence, and findings.
-        """
-        return qc_service.run_inspection(batch_id=batch_id)
 
     # MUTATING TOOL — returns confirmation payload for human approval
     @mcp.tool(name="qc_apply_disposition", meta={
@@ -230,7 +152,7 @@ def register(mcp):
         return create_confirmation_response(
             tool_name="qc_apply_disposition",
             title=f"Apply QC Disposition: {action}",
-            description="This will apply the QC disposition. For scrap actions, a replacement production order will be created automatically.",
+            description="This will apply the QC disposition and update stock accordingly.",
             field_configs=field_configs,
             arguments=arguments,
             category="quality",

@@ -24,17 +24,11 @@ def test_qc_completion_creates_hold_not_stock(qc_db):
     # Verify batch exists
     batch = conn.execute("SELECT * FROM qc_hold_batches WHERE id = ?", (batch_id,)).fetchone()
     assert batch is not None
-    assert batch["status"] == "pending_images"
+    assert batch["status"] == "pending"
     assert batch["production_order_id"] == "MO-QC002"
-
-    # Verify hold line exists with correct quantities
-    line = conn.execute("SELECT * FROM qc_hold_batch_lines WHERE qc_hold_batch_id = ?", (batch_id,)).fetchone()
-    assert line is not None
-    assert line["qty_on_hold"] == 12
-    assert line["qty_pending"] == 12
-    assert line["qty_released"] == 0
-    assert line["qty_scrapped"] == 0
-    assert line["line_status"] == "pending_inspection"
+    assert batch["qty_on_hold"] == 12
+    assert batch["qty_released"] == 0
+    assert batch["qty_scrapped"] == 0
 
     # Verify NO stock row was created for the QC item
     stock = conn.execute("SELECT * FROM stock WHERE item_id = 'ITEM-QC-DUCK' AND location = 'FG'").fetchone()

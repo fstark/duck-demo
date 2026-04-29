@@ -44,8 +44,6 @@ export function QcBatchDetailPage({ batchId }: { batchId: string }) {
   if (error) return <div className="text-red-600 text-sm py-4">{error}</div>
   if (!batch) return null
 
-  const line = batch.lines?.[0]
-
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-2">
@@ -107,29 +105,23 @@ export function QcBatchDetailPage({ batchId }: { batchId: string }) {
           </div>
         </div>
 
-        {line && (
-          <div className="mt-4 pt-4 border-t border-slate-100">
+        <div className="mt-4 pt-4 border-t border-slate-100">
             <div className="text-sm font-medium text-slate-700 mb-2">Quantities</div>
-            <div className="grid grid-cols-4 gap-4 text-sm">
+            <div className="grid grid-cols-3 gap-4 text-sm">
               <div>
                 <div className="text-slate-500">On Hold</div>
-                <div className="font-semibold">{line.qty_on_hold}</div>
-              </div>
-              <div>
-                <div className="text-slate-500">Pending</div>
-                <div className="font-semibold text-yellow-700">{line.qty_pending}</div>
+                <div className="font-semibold">{batch.qty_on_hold}</div>
               </div>
               <div>
                 <div className="text-slate-500">Released</div>
-                <div className="font-semibold text-green-700">{line.qty_released}</div>
+                <div className="font-semibold text-green-700">{batch.qty_released}</div>
               </div>
               <div>
                 <div className="text-slate-500">Scrapped</div>
-                <div className="font-semibold text-red-700">{line.qty_scrapped}</div>
+                <div className="font-semibold text-red-700">{batch.qty_scrapped}</div>
               </div>
             </div>
           </div>
-        )}
       </Card>
 
       {/* Images */}
@@ -237,28 +229,6 @@ export function QcBatchDetailPage({ batchId }: { batchId: string }) {
           </div>
         )}
       </Card>
-
-      {/* Replacements */}
-      {batch.replacements && batch.replacements.length > 0 && (
-        <Card title={`Replacement Orders (${batch.replacements.length})`}>
-          <div className="space-y-2">
-            {batch.replacements.map((r) => (
-              <div key={r.id} className="flex items-center gap-4 text-sm">
-                <span className="text-slate-500">Replacement MO:</span>
-                <button
-                  className="text-blue-600 hover:underline font-mono"
-                  onClick={() => setHash('production', r.replacement_production_order_id)}
-                  type="button"
-                >
-                  {r.replacement_production_order_id || '(pending)'}
-                </button>
-                <span className="text-slate-500">Scrapped: {r.qty_short}</span>
-                <span className="text-slate-500">Replacement qty: {r.qty_replacement}</span>
-              </div>
-            ))}
-          </div>
-        </Card>
-      )}
     </div>
   )
 }

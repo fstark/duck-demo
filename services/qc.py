@@ -1,7 +1,7 @@
 """Service for Quality Control operations.
 
-Manages the full QC lifecycle:
-  hold batch creation → image attachment → AI inspection → disposition → replacement.
+Manages the QC lifecycle:
+  hold batch creation → image submission → AI inspection → disposition.
 """
 
 import base64
@@ -23,28 +23,10 @@ logger = logging.getLogger("duck-demo")
 # Domain constants
 # ---------------------------------------------------------------------------
 
-INSPECTION_STATUS_VALUES = frozenset({
-    "none",
-    "pending_inspection",
-    "inspected",
-    "partially_released",
-    "released",
-})
-
 HOLD_BATCH_STATUS_VALUES = frozenset({
-    "pending_images",
-    "ready_for_inspection",
+    "pending",
     "inspected",
-    "released",
-    "partially_released",
     "closed",
-})
-
-HOLD_LINE_STATUS_VALUES = frozenset({
-    "pending_inspection",
-    "released",
-    "partially_released",
-    "scrapped",
 })
 
 DISPOSITION_ACTIONS = frozenset({"pass_release", "partial_scrap", "full_scrap"})
@@ -58,24 +40,11 @@ FINDING_SEVERITIES = frozenset({"critical", "major", "minor"})
 
 INFERENCE_DECISIONS = frozenset({"pass", "partial_scrap", "full_scrap"})
 
-# Allowed inspection_status transitions keyed by action/event
-_INSPECTION_STATUS_TRANSITIONS: dict[str, list[str]] = {
-    "complete_with_hold": ["none"],
-    "attach_images": ["pending_inspection"],
-    "run_inspection": ["pending_inspection"],
-    "apply_disposition_pass": ["inspected"],
-    "apply_disposition_partial": ["inspected"],
-    "apply_disposition_full": ["inspected"],
-}
-
 ID_PREFIXES = {
     "qc_hold_batches": "QCB",
-    "qc_hold_batch_lines": "QCBL",
     "qc_hold_images": "QCIMG",
     "qc_inspections": "QCI",
     "qc_inspection_findings": "QCIF",
-    "qc_dispositions": "QCD",
-    "qc_replacements": "QCRPL",
 }
 
 
@@ -116,28 +85,8 @@ def _mock_ducks(n: int, img_w: int = 1024, img_h: int = 1024) -> list[dict]:
     return ducks
 
 
-def _assert_invariant(line: dict) -> None:
-    """Assert qty_released + qty_scrapped + qty_pending == qty_on_hold."""
-    total = line["qty_released"] + line["qty_scrapped"] + line["qty_pending"]
-    assert total == line["qty_on_hold"], (
-        f"QC quantity invariant violated on line {line['id']}: "
-        f"released={line['qty_released']} + scrapped={line['qty_scrapped']} "
-        f"+ pending={line['qty_pending']} = {total} != on_hold={line['qty_on_hold']}"
-    )
-
-
-def _validate_transition(*, current_status: str, event: str, entity: str = "production order") -> None:
-    """Validate an inspection_status transition, raising ValueError on invalid."""
-    allowed = _INSPECTION_STATUS_TRANSITIONS.get(event, [])
-    if current_status not in allowed:
-        raise ValueError(
-            f"Cannot apply '{event}' to {entity} with inspection_status='{current_status}'. "
-            f"Expected one of: {allowed}"
-        )
-
-
 class QcService:
-    """QC domain service — hold, inspect, dispose, replace."""
+    """QC domain service — hold, inspect, dispose."""
 
     # ------------------------------------------------------------------
     # Hold batch creation (called by production service at completion)
@@ -153,7 +102,7 @@ class QcService:
         qty_produced: int,
         sim_time: str,
     ) -> dict[str, Any]:
-        """Create a QC hold batch + line for an inspection-required MO.
+        """Create a QC hold batch for an inspection-required MO.
 
         Must be called within an existing db_conn() block (conn is provided).
         Does NOT commit; the caller's transaction owns the commit.
@@ -161,38 +110,27 @@ class QcService:
         batch_id = generate_id(conn, ID_PREFIXES["qc_hold_batches"], "qc_hold_batches")
         conn.execute(
             "INSERT INTO qc_hold_batches "
-            "(id, production_order_id, sales_order_id, item_id, status, created_at, replacement_triggered) "
-            "VALUES (?, ?, ?, ?, ?, ?, 0)",
-            (batch_id, production_order_id, sales_order_id, item_id, "pending_images", sim_time),
-        )
-        line_id = generate_id(conn, ID_PREFIXES["qc_hold_batch_lines"], "qc_hold_batch_lines")
-        conn.execute(
-            "INSERT INTO qc_hold_batch_lines "
-            "(id, qc_hold_batch_id, item_id, qty_on_hold, qty_pending, qty_released, qty_scrapped, line_status, created_at) "
-            "VALUES (?, ?, ?, ?, ?, 0, 0, 'pending_inspection', ?)",
-            (line_id, batch_id, item_id, qty_produced, qty_produced, sim_time),
+            "(id, production_order_id, sales_order_id, item_id, status, qty_on_hold, created_at) "
+            "VALUES (?, ?, ?, ?, 'pending', ?, ?)",
+            (batch_id, production_order_id, sales_order_id, item_id, qty_produced, sim_time),
         )
         conn.execute(
             "UPDATE production_orders SET inspection_status = 'pending_inspection' WHERE id = ?",
             (production_order_id,),
         )
-        return {"qc_hold_batch_id": batch_id, "qc_hold_batch_line_id": line_id}
+        return {"qc_hold_batch_id": batch_id}
 
     # ------------------------------------------------------------------
     # Read methods
     # ------------------------------------------------------------------
 
-    def list_pending_batches(self, *, status: str = "pending_images") -> list[dict]:
+    def list_pending_batches(self, *, status: str = "pending") -> list[dict]:
         with db_conn() as conn:
             rows = dict_rows(conn.execute(
                 """
-                SELECT b.*, i.sku as item_sku, i.name as item_name,
-                       COALESCE(l.qty_pending, 0) as qty_pending,
-                       COALESCE(l.qty_released, 0) as qty_released,
-                       COALESCE(l.qty_scrapped, 0) as qty_scrapped
+                SELECT b.*, i.sku as item_sku, i.name as item_name
                 FROM qc_hold_batches b
                 JOIN items i ON b.item_id = i.id
-                LEFT JOIN qc_hold_batch_lines l ON l.qc_hold_batch_id = b.id
                 WHERE b.status = ?
                 ORDER BY b.created_at ASC
                 """,
@@ -214,12 +152,8 @@ class QcService:
             if not batch:
                 raise ValueError(f"QC hold batch {batch_id} not found")
             result = dict(batch)
-            result["lines"] = dict_rows(conn.execute(
-                "SELECT * FROM qc_hold_batch_lines WHERE qc_hold_batch_id = ?",
-                (batch_id,),
-            ))
             image_rows = dict_rows(conn.execute(
-                "SELECT id, qc_hold_batch_id, qc_hold_batch_line_id, created_at, uploaded_by "
+                "SELECT id, qc_hold_batch_id, created_at, uploaded_by "
                 "FROM qc_hold_images WHERE qc_hold_batch_id = ? ORDER BY created_at",
                 (batch_id,),
             ))
@@ -239,13 +173,6 @@ class QcService:
                 result["inspection"] = insp_dict
             else:
                 result["inspection"] = None
-            replacements = dict_rows(conn.execute(
-                "SELECT r.* FROM qc_replacements r "
-                "JOIN qc_dispositions d ON r.qc_disposition_id = d.id "
-                "WHERE d.qc_hold_batch_id = ?",
-                (batch_id,),
-            ))
-            result["replacements"] = replacements
         return result
 
     def get_image_blob(self, *, image_id: str) -> tuple[bytes, str]:
@@ -268,7 +195,29 @@ class QcService:
                 mime = "image/jpeg"
             return blob, mime
 
-    def get_inspection(self, *, inspection_id: str) -> dict[str, Any]:
+    def get_inspection_for_mo(self, *, production_order_id: str) -> dict[str, Any]:
+        """Return the QC inspection for a production order (there is at most one)."""
+        with db_conn() as conn:
+            batch = conn.execute(
+                "SELECT id FROM qc_hold_batches WHERE production_order_id = ?",
+                (production_order_id,),
+            ).fetchone()
+            if not batch:
+                raise ValueError(f"No QC hold batch found for production order {production_order_id}")
+            insp = conn.execute(
+                "SELECT * FROM qc_inspections WHERE qc_hold_batch_id = ? AND status != 'failed' "
+                "ORDER BY created_at DESC LIMIT 1",
+                (batch["id"],),
+            ).fetchone()
+            if not insp:
+                raise ValueError(
+                    f"No inspection found for production order {production_order_id}. "
+                    "Run the inspection first."
+                )
+        return self._load_inspection(inspection_id=insp["id"])
+
+    def _load_inspection(self, *, inspection_id: str) -> dict[str, Any]:
+        """Load a full inspection record with findings and images for the MCP app."""
         with db_conn() as conn:
             insp = conn.execute(
                 "SELECT * FROM qc_inspections WHERE id = ?",
@@ -287,7 +236,7 @@ class QcService:
                 except (json.JSONDecodeError, TypeError):
                     pass
 
-            # Attach operator image and reference image as data URIs for the UI
+            # Attach operator image and reference image as data URIs for the MCP app
             batch_row = conn.execute(
                 "SELECT b.production_order_id, po.item_id "
                 "FROM qc_hold_batches b "
@@ -296,7 +245,6 @@ class QcService:
                 (result["qc_hold_batch_id"],),
             ).fetchone()
             if batch_row:
-                # Operator image (first submitted image)
                 op_row = conn.execute(
                     "SELECT image_data FROM qc_hold_images "
                     "WHERE qc_hold_batch_id = ? ORDER BY created_at LIMIT 1",
@@ -304,7 +252,6 @@ class QcService:
                 ).fetchone()
                 if op_row and op_row["image_data"]:
                     result["operator_image_uri"] = _to_data_uri(op_row["image_data"])
-                # Reference image from item
                 ref_row = conn.execute(
                     "SELECT image FROM items WHERE id = ?",
                     (batch_row["item_id"],),
@@ -314,47 +261,10 @@ class QcService:
         return result
 
     # ------------------------------------------------------------------
-    # Image attachment
+    # AI Inspection (internal — called by submit_image)
     # ------------------------------------------------------------------
 
-    def attach_images(
-        self,
-        *,
-        batch_id: str,
-        image_blobs: list[bytes],
-        uploaded_by: str | None = None,
-    ) -> dict[str, Any]:
-        """Attach evidence image BLOBs to a hold batch and immediately run inspection."""
-        with db_conn() as conn:
-            batch = conn.execute(
-                "SELECT * FROM qc_hold_batches WHERE id = ?",
-                (batch_id,),
-            ).fetchone()
-            if not batch:
-                raise ValueError(f"QC hold batch {batch_id} not found")
-            from services.simulation import simulation_service
-            sim_time = simulation_service.get_current_time()
-            for blob in image_blobs:
-                img_id = generate_id(conn, ID_PREFIXES["qc_hold_images"], "qc_hold_images")
-                conn.execute(
-                    "INSERT INTO qc_hold_images (id, qc_hold_batch_id, image_data, created_at, uploaded_by) "
-                    "VALUES (?, ?, ?, ?, ?)",
-                    (img_id, batch_id, blob, sim_time, uploaded_by),
-                )
-            conn.execute(
-                "UPDATE qc_hold_batches SET status = 'ready_for_inspection' WHERE id = ?",
-                (batch_id,),
-            )
-            conn.commit()
-
-        # Auto-run the AI inspection immediately after attaching images
-        return self.run_inspection(batch_id=batch_id)
-
-    # ------------------------------------------------------------------
-    # AI Inspection
-    # ------------------------------------------------------------------
-
-    def run_inspection(self, *, batch_id: str) -> dict[str, Any]:
+    def _run_inspection(self, *, batch_id: str) -> dict[str, Any]:
         """Run AI image inspection for a hold batch.
 
         Two-phase INSERT: inserts the inspection row first with status='pending',
@@ -381,7 +291,7 @@ class QcService:
                 (batch_id,),
             ).fetchone()
             if existing:
-                return self.get_inspection(inspection_id=existing["id"])
+                return self._load_inspection(inspection_id=existing["id"])
 
             # Delete any failed inspection so we can retry
             conn.execute(
@@ -408,20 +318,13 @@ class QcService:
                     f"Item {batch['item_id']} has no reference image. "
                     "Upload a reference image to the item record first."
                 )
-            img_bytes = item_row["image"]
-            reference_image_uri = _to_data_uri(img_bytes)
+            reference_image_uri = _to_data_uri(item_row["image"])
 
-            # Expected duck count from the hold batch line
-            line_row = conn.execute(
-                "SELECT SUM(qty_on_hold) AS total_qty FROM qc_hold_batch_lines "
-                "WHERE qc_hold_batch_id = ?",
-                (batch_id,),
-            ).fetchone()
-            expected_qty = line_row["total_qty"] if line_row else None
+            expected_qty = batch["qty_on_hold"]
 
             sim_time = simulation_service.get_current_time()
 
-            # Phase 1: INSERT with status='pending' and empty decision placeholder
+            # Phase 1: INSERT with status='pending'
             inspection_id = generate_id(conn, ID_PREFIXES["qc_inspections"], "qc_inspections")
             conn.execute(
                 "INSERT INTO qc_inspections "
@@ -434,7 +337,6 @@ class QcService:
             conn.commit()
 
         # Phase 2: Call inference API (outside any long-lived connection block)
-        # image_data is stored as a BLOB — encode directly to base64 data URI.
         blob = images[0]["image_data"]
         operator_image_uri = _to_data_uri(blob)
         img_w, img_h = Image.open(io.BytesIO(blob)).size
@@ -487,14 +389,13 @@ class QcService:
                 })
             else:
                 logger.info(
-                    "[QC Inspection] batch=%s model=%s provider=%s images=%d — calling inference API...",
-                    batch_id, config.QC_INFERENCE_MODEL, config.QC_INFERENCE_PROVIDER, len(images),
+                    "[QC Inspection] batch=%s model=%s provider=%s — calling inference API...",
+                    batch_id, config.QC_INFERENCE_MODEL, config.QC_INFERENCE_PROVIDER,
                 )
                 if config.QC_INFERENCE_PROVIDER == "openai":
                     response = myforterro.openai_chat_completion(
                         model=config.QC_INFERENCE_MODEL,
-                        messages=messages
-                        # max_completion_tokens=100000,
+                        messages=messages,
                     )
                 else:
                     response = myforterro.chat_completion(
@@ -508,12 +409,7 @@ class QcService:
             if stripped.startswith("```"):
                 stripped = stripped.split("\n", 1)[1].rsplit("```", 1)[0].strip()
 
-            # Parse and validate the JSON response
-            try:
-                parsed = json.loads(stripped)
-            except json.JSONDecodeError as exc:
-                raise ValueError(f"Inspection model returned invalid JSON: {exc}. Content: {stripped[:500]}") from exc
-
+            parsed = json.loads(stripped)
             if "decision" not in parsed:
                 raise ValueError(f"Inspection model response missing 'decision' field. Got: {parsed}")
             if parsed["decision"] not in INFERENCE_DECISIONS:
@@ -535,28 +431,19 @@ class QcService:
                         round(y2 / img_h, 4),
                     ]
 
-            logger.info(
-                "[QC Inspection] batch=%s — %d ducks:\n%s",
-                batch_id, len(parsed["ducks"]),
-                json.dumps(parsed["ducks"], indent=2),
-            )
-
             duck_results_json = json.dumps(parsed["ducks"])
 
-            # Derive legacy findings from duck results for backward-compatibility
-            legacy_findings: list[dict] = []
+            # Derive findings from duck results
+            findings: list[dict] = []
             for duck in parsed["ducks"]:
                 sev = duck.get("severity", "none")
                 if sev == "none":
                     continue
                 for desc in duck.get("defects", []):
-                    legacy_findings.append({
+                    findings.append({
                         "type": "shape_defect",
                         "severity": "major" if sev == "major" else "minor",
-                        "confidence": None,
                         "description": desc,
-                        "image_ref": None,
-                        "location_hint": None,
                     })
 
             with db_conn() as conn:
@@ -572,7 +459,7 @@ class QcService:
                         inspection_id,
                     ),
                 )
-                for finding in legacy_findings:
+                for finding in findings:
                     finding_id = generate_id(
                         conn, ID_PREFIXES["qc_inspection_findings"], "qc_inspection_findings"
                     )
@@ -585,10 +472,10 @@ class QcService:
                             finding_id, inspection_id,
                             finding.get("type", "shape_defect"),
                             finding.get("severity", ""),
-                            finding.get("confidence"),
+                            None,
                             finding.get("description", ""),
-                            finding.get("image_ref"),
-                            finding.get("location_hint"),
+                            None,
+                            None,
                             sim_time,
                         ),
                     )
@@ -600,10 +487,7 @@ class QcService:
 
             logger.info(
                 "[QC Inspection] batch=%s — decision=%s ducks=%d findings=%d",
-                batch_id,
-                parsed["decision"],
-                len(parsed.get("ducks", [])),
-                len(legacy_findings),
+                batch_id, parsed["decision"], len(parsed.get("ducks", [])), len(findings),
             )
 
         except Exception as exc:
@@ -616,7 +500,7 @@ class QcService:
                 conn.commit()
             raise
 
-        return self.get_inspection(inspection_id=inspection_id)
+        return self._load_inspection(inspection_id=inspection_id)
 
     # ------------------------------------------------------------------
     # Disposition
@@ -631,7 +515,7 @@ class QcService:
         reason: str | None = None,
         qty_scrapped: int = 0,
     ) -> dict[str, Any]:
-        """Apply a QC disposition. Transactional and idempotent.
+        """Apply a QC disposition.
 
         pass_release: release all qty into stock.
         partial_scrap: scrap qty_scrapped, release remainder.
@@ -641,14 +525,6 @@ class QcService:
             raise ValueError(f"Invalid disposition action '{action}'. Must be one of: {DISPOSITION_ACTIONS}")
 
         with db_conn() as conn:
-            # Idempotency: return existing disposition
-            existing = conn.execute(
-                "SELECT * FROM qc_dispositions WHERE qc_inspection_id = ?",
-                (qc_inspection_id,),
-            ).fetchone()
-            if existing:
-                return dict(existing)
-
             inspection = conn.execute(
                 "SELECT * FROM qc_inspections WHERE id = ?",
                 (qc_inspection_id,),
@@ -668,47 +544,35 @@ class QcService:
             ).fetchone()
             if not batch:
                 raise ValueError(f"QC hold batch {batch_id} not found")
-
-            line = conn.execute(
-                "SELECT * FROM qc_hold_batch_lines WHERE qc_hold_batch_id = ? LIMIT 1",
-                (batch_id,),
-            ).fetchone()
-            if not line:
-                raise ValueError(f"No hold lines found for batch {batch_id}")
-            line = dict(line)
+            if batch["status"] == "closed":
+                return self._load_inspection(inspection_id=qc_inspection_id)
 
             from services.simulation import simulation_service
             sim_time = simulation_service.get_current_time()
 
+            qty_pending = batch["qty_on_hold"] - batch["qty_released"] - batch["qty_scrapped"]
+
             if action == "partial_scrap":
                 if qty_scrapped <= 0:
                     raise ValueError("partial_scrap requires qty_scrapped > 0")
-                if qty_scrapped >= line["qty_pending"]:
+                if qty_scrapped >= qty_pending:
                     raise ValueError(
-                        f"qty_scrapped ({qty_scrapped}) must be less than qty_pending ({line['qty_pending']}) "
+                        f"qty_scrapped ({qty_scrapped}) must be less than qty_pending ({qty_pending}) "
                         "for partial_scrap. Use full_scrap to scrap all."
                     )
-
-            # Create disposition record
-            disposition_id = generate_id(conn, ID_PREFIXES["qc_dispositions"], "qc_dispositions")
-            conn.execute(
-                "INSERT INTO qc_dispositions (id, qc_inspection_id, qc_hold_batch_id, action, approved_by, reason, created_at) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?)",
-                (disposition_id, qc_inspection_id, batch_id, action, approved_by, reason, sim_time),
-            )
 
             qty_to_release = 0
             qty_to_scrap = 0
 
             if action == "pass_release":
-                qty_to_release = line["qty_pending"]
+                qty_to_release = qty_pending
             elif action == "partial_scrap":
                 qty_to_scrap = qty_scrapped
-                qty_to_release = line["qty_pending"] - qty_scrapped
+                qty_to_release = qty_pending - qty_scrapped
             else:  # full_scrap
-                qty_to_scrap = line["qty_pending"]
+                qty_to_scrap = qty_pending
 
-            # Apply stock movements and update hold line
+            # Apply stock movements
             if qty_to_release > 0:
                 stock_id = generate_id(conn, "STK", "stock")
                 conn.execute(
@@ -719,10 +583,10 @@ class QcService:
                 conn.execute(
                     "INSERT INTO stock_movements "
                     "(id, timestamp, item_id, movement_type, qty, stock_id, reference_type, reference_id, "
-                    "qc_hold_batch_line_id, qc_inspection_id) "
-                    "VALUES (?, ?, ?, 'qc_hold_release', ?, ?, 'qc_disposition', ?, ?, ?)",
+                    "qc_inspection_id) "
+                    "VALUES (?, ?, ?, 'qc_hold_release', ?, ?, 'qc_batch', ?, ?)",
                     (mov_id, sim_time, batch["item_id"], qty_to_release, stock_id,
-                     disposition_id, line["id"], qc_inspection_id),
+                     batch_id, qc_inspection_id),
                 )
 
             if qty_to_scrap > 0:
@@ -730,171 +594,29 @@ class QcService:
                 conn.execute(
                     "INSERT INTO stock_movements "
                     "(id, timestamp, item_id, movement_type, qty, stock_id, reference_type, reference_id, "
-                    "qc_hold_batch_line_id, qc_inspection_id) "
-                    "VALUES (?, ?, ?, 'qc_scrap', ?, NULL, 'qc_disposition', ?, ?, ?)",
+                    "qc_inspection_id) "
+                    "VALUES (?, ?, ?, 'qc_scrap', ?, NULL, 'qc_batch', ?, ?)",
                     (mov_id, sim_time, batch["item_id"], qty_to_scrap,
-                     disposition_id, line["id"], qc_inspection_id),
+                     batch_id, qc_inspection_id),
                 )
 
-            # Update hold line quantities
-            new_released = line["qty_released"] + qty_to_release
-            new_scrapped = line["qty_scrapped"] + qty_to_scrap
-            new_pending = 0  # always zero after disposition
-
-            if action == "pass_release":
-                new_line_status = "released"
-            elif action == "partial_scrap":
-                new_line_status = "partially_released"
-            else:
-                new_line_status = "scrapped"
+            # Update hold batch quantities and status
+            new_released = batch["qty_released"] + qty_to_release
+            new_scrapped = batch["qty_scrapped"] + qty_to_scrap
 
             conn.execute(
-                "UPDATE qc_hold_batch_lines SET qty_pending=?, qty_released=?, qty_scrapped=?, "
-                "line_status=?, closed_at=? WHERE id=?",
-                (new_pending, new_released, new_scrapped, new_line_status, sim_time, line["id"]),
+                "UPDATE qc_hold_batches SET qty_released=?, qty_scrapped=?, status='closed', released_at=? WHERE id=?",
+                (new_released, new_scrapped, sim_time, batch_id),
             )
 
-            # Update batch status
-            if action == "pass_release":
-                new_batch_status = "released"
-            elif action == "partial_scrap":
-                new_batch_status = "partially_released"
-            else:
-                new_batch_status = "closed"
-
-            released_at = sim_time if action in ("pass_release", "partial_scrap") else None
             conn.execute(
-                "UPDATE qc_hold_batches SET status=?, released_at=? WHERE id=?",
-                (new_batch_status, released_at, batch_id),
-            )
-
-            # Update production order inspection_status
-            if action == "pass_release":
-                new_inspection_status = "released"
-            elif action == "partial_scrap":
-                new_inspection_status = "partially_released"
-            else:
-                new_inspection_status = "released"  # fully scrapped counts as closed/released
-
-            conn.execute(
-                "UPDATE production_orders SET inspection_status=? WHERE id=?",
-                (new_inspection_status, batch["production_order_id"]),
+                "UPDATE production_orders SET inspection_status='released' WHERE id=?",
+                (batch["production_order_id"],),
             )
 
             conn.commit()
 
-        # Replacement logic (outside the transaction per plan)
-        if qty_to_scrap > 0:
-            self._maybe_create_replacement(
-                batch_id=batch_id,
-                batch=dict(batch),
-                line=line,
-                qty_to_scrap=qty_to_scrap,
-                disposition_id=disposition_id,
-                sim_time=sim_time,
-            )
-
-        return self.get_inspection(inspection_id=qc_inspection_id)
-
-    def _maybe_create_replacement(
-        self,
-        *,
-        batch_id: str,
-        batch: dict,
-        line: dict,
-        qty_to_scrap: int,
-        disposition_id: str,
-        sim_time: str,
-    ) -> None:
-        """Create a replacement production order if scrap creates a shortage."""
-        sales_order_id = batch.get("sales_order_id")
-        if not sales_order_id:
-            logger.debug("Skipping replacement creation: batch %s has no sales_order_id", batch_id)
-            return
-
-        # Resolve recipe and output_qty for the item
-        with db_conn() as conn:
-            recipe_row = conn.execute(
-                "SELECT id, output_qty FROM recipes WHERE output_item_id = ? LIMIT 1",
-                (batch["item_id"],),
-            ).fetchone()
-        if not recipe_row:
-            logger.warning("No recipe found for item %s; cannot create replacement MO", batch["item_id"])
-            return
-
-        output_qty = recipe_row["output_qty"]
-        qty_short = qty_to_scrap  # MVP: available_substitute_qty = 0
-        qty_replacement = math.ceil(qty_short / output_qty) * output_qty
-
-        # Phase 1: Insert qc_replacements placeholder inside its own transaction
-        with db_conn() as conn:
-            repl_id = generate_id(conn, ID_PREFIXES["qc_replacements"], "qc_replacements")
-            conn.execute(
-                "INSERT INTO qc_replacements "
-                "(id, qc_disposition_id, sales_order_id, item_id, qty_short, qty_replacement, "
-                "replacement_production_order_id, created_at) "
-                "VALUES (?, ?, ?, ?, ?, ?, '', ?)",
-                (repl_id, disposition_id, sales_order_id, batch["item_id"],
-                 qty_short, qty_replacement, sim_time),
-            )
-            conn.commit()
-
-        # Phase 2: Create the replacement MO (uses its own db_conn block internally)
-        from services.production import create_order
-        try:
-            mo_result = create_order(
-                recipe_id=recipe_row["id"],
-                sales_order_id=sales_order_id,
-                notes=f"QC replacement for {batch_id}",
-            )
-            new_mo_id = mo_result["production_order_id"]
-        except Exception as exc:
-            logger.warning(
-                "Failed to create replacement MO for batch %s: %s. "
-                "qc_replacements row %s has empty replacement_production_order_id.",
-                batch_id, exc, repl_id,
-            )
-            return
-
-        # Phase 3: Update the replacement row with the actual MO ID
-        with db_conn() as conn:
-            conn.execute(
-                "UPDATE qc_replacements SET replacement_production_order_id = ? WHERE id = ?",
-                (new_mo_id, repl_id),
-            )
-            conn.execute(
-                "UPDATE qc_hold_batches SET replacement_triggered = 1 WHERE id = ?",
-                (batch_id,),
-            )
-            conn.commit()
-
-        logger.info("Created replacement MO %s for batch %s (scrapped=%d, replacement=%d)",
-                    new_mo_id, batch_id, qty_to_scrap, qty_replacement)
-
-    # ------------------------------------------------------------------
-    # MO-centric helpers
-    # ------------------------------------------------------------------
-
-    def get_inspection_for_mo(self, *, production_order_id: str) -> dict[str, Any]:
-        """Return the QC inspection for a production order (there is at most one)."""
-        with db_conn() as conn:
-            batch = conn.execute(
-                "SELECT id FROM qc_hold_batches WHERE production_order_id = ?",
-                (production_order_id,),
-            ).fetchone()
-            if not batch:
-                raise ValueError(f"No QC hold batch found for production order {production_order_id}")
-            insp = conn.execute(
-                "SELECT * FROM qc_inspections WHERE qc_hold_batch_id = ? AND status != 'failed' "
-                "ORDER BY created_at DESC LIMIT 1",
-                (batch["id"],),
-            ).fetchone()
-            if not insp:
-                raise ValueError(
-                    f"No inspection found for production order {production_order_id}. "
-                    "Run the inspection first."
-                )
-        return self.get_inspection(inspection_id=insp["id"])
+        return self._load_inspection(inspection_id=qc_inspection_id)
 
     # ------------------------------------------------------------------
     # Single-shot image submission (label extraction + inspection)
@@ -906,15 +628,11 @@ class QcService:
         image_input: str,
         uploaded_by: str | None = None,
     ) -> dict[str, Any]:
-        """Two-phase QC image submission for the demo workflow.
-
-        Phase 1: Extract the Manufacturing Order label from the image via AI.
-        Phase 2: Validate the MO is pending inspection, attach the image as a BLOB,
-                 and run the AI inspection immediately.
+        """Single demo step: take a picture of a production batch and the system
+        extracts the MO label, stores the image, and runs AI inspection.
 
         Parameters:
-            image_input: base64-encoded image string or data URI
-                         (e.g. 'data:image/png;base64,...' or plain base64)
+            image_input: base64-encoded image string, data URI, or file path URL
             uploaded_by: optional operator identifier
 
         Returns:
@@ -923,7 +641,7 @@ class QcService:
         from services import myforterro
         from services.simulation import simulation_service
 
-        # Decode input to raw bytes (accepts data URI, file:// URL, or raw base64)
+        # Decode input to raw bytes
         if image_input.startswith("data:"):
             _, b64data = image_input.split(",", 1)
             img_bytes = base64.b64decode(b64data)
@@ -945,7 +663,6 @@ class QcService:
 
         # Phase 1: Extract MO label from image
         if config.QC_INFERENCE_MOCK:
-            # In mock mode, pick the first MO waiting for inspection
             with db_conn() as conn:
                 row = conn.execute(
                     "SELECT id FROM production_orders "
@@ -1006,7 +723,7 @@ class QcService:
                 )
             logger.info("[QC Submit] Phase 1 — extracted label: %s", mo_id)
 
-        # Phase 2: Validate MO exists and is pending inspection
+        # Phase 2: Validate MO and attach image
         with db_conn() as conn:
             mo = conn.execute(
                 "SELECT id, inspection_status FROM production_orders WHERE id = ?",
@@ -1028,12 +745,22 @@ class QcService:
                 raise ValueError(f"No QC hold batch found for production order {mo_id}.")
             batch_id = batch["id"]
 
-        # Phase 3: Attach image as BLOB and run inspection immediately
+            # Store the image
+            sim_time = simulation_service.get_current_time()
+            img_id = generate_id(conn, ID_PREFIXES["qc_hold_images"], "qc_hold_images")
+            conn.execute(
+                "INSERT INTO qc_hold_images (id, qc_hold_batch_id, image_data, created_at, uploaded_by) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (img_id, batch_id, img_bytes, sim_time, uploaded_by),
+            )
+            conn.commit()
+
+        # Phase 3: Run inspection
         logger.info(
-            "[QC Submit] Phase 2 — attaching image to %s (batch %s) and running inspection...",
+            "[QC Submit] Phase 2 — attached image to %s (batch %s), running inspection...",
             mo_id, batch_id,
         )
-        return self.attach_images(batch_id=batch_id, image_blobs=[img_bytes], uploaded_by=uploaded_by)
+        return self._run_inspection(batch_id=batch_id)
 
 
 qc_service = QcService()

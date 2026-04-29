@@ -25,12 +25,9 @@ def test_qc_tables_exist(qc_db):
     conn.close()
     for table in [
         "qc_hold_batches",
-        "qc_hold_batch_lines",
         "qc_hold_images",
         "qc_inspections",
         "qc_inspection_findings",
-        "qc_dispositions",
-        "qc_replacements",
     ]:
         assert table in tables, f"Table {table} missing from schema"
 
@@ -40,17 +37,8 @@ def test_qc_hold_batches_columns(qc_db):
     cols = _get_columns(conn, "qc_hold_batches")
     conn.close()
     for col in ["id", "production_order_id", "sales_order_id", "item_id", "status",
-                "created_at", "released_at", "replacement_triggered"]:
+                "qty_on_hold", "qty_released", "qty_scrapped", "created_at", "released_at"]:
         assert col in cols, f"Column {col} missing from qc_hold_batches"
-
-
-def test_qc_hold_batch_lines_columns(qc_db):
-    conn = db.get_connection()
-    cols = _get_columns(conn, "qc_hold_batch_lines")
-    conn.close()
-    for col in ["id", "qc_hold_batch_id", "item_id", "qty_on_hold", "qty_pending",
-                "qty_released", "qty_scrapped", "line_status", "created_at"]:
-        assert col in cols, f"Column {col} missing from qc_hold_batch_lines"
 
 
 def test_qc_inspections_columns(qc_db):
@@ -85,7 +73,6 @@ def test_stock_movements_has_qc_tracing_columns(qc_db):
     conn = db.get_connection()
     cols = _get_columns(conn, "stock_movements")
     conn.close()
-    assert "qc_hold_batch_line_id" in cols
     assert "qc_inspection_id" in cols
 
 
@@ -96,10 +83,8 @@ def test_qc_indexes_exist(qc_db):
     for idx in [
         "idx_po_qc_required",
         "idx_qc_hold_batch_status",
-        "idx_qc_hold_line_status",
         "idx_qc_inspection_batch",
         "idx_qc_inspection_batch_unique",
-        "idx_qc_replacements_so",
     ]:
         assert idx in indexes, f"Index {idx} missing from schema"
 

@@ -121,7 +121,7 @@ def qc_db(tmp_path, monkeypatch):
         PRODUCTION_ORDERS,
         QC_RECIPES, QC_RECIPE_INGREDIENTS,
         QC_SALES_ORDERS, QC_SALES_ORDER_LINES,
-        QC_PRODUCTION_ORDERS, QC_HOLD_BATCHES, QC_HOLD_BATCH_LINES,
+        QC_PRODUCTION_ORDERS, QC_HOLD_BATCHES,
         SIM_TIME,
     )
 
@@ -153,7 +153,6 @@ def qc_db(tmp_path, monkeypatch):
         ("sales_order_lines", QC_SALES_ORDER_LINES),
         ("production_orders", QC_PRODUCTION_ORDERS),
         ("qc_hold_batches", QC_HOLD_BATCHES),
-        ("qc_hold_batch_lines", QC_HOLD_BATCH_LINES),
     ]
     for table_name, rows in ordered_data:
         if not rows:

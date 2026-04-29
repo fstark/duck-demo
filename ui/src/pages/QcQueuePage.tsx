@@ -7,21 +7,15 @@ import { api } from '../api'
 import { useTableSort } from '../utils/useTableSort'
 
 const STATUS_COLORS: Record<string, 'yellow' | 'blue' | 'green' | 'red' | 'gray'> = {
-  pending_images: 'yellow',
-  ready_for_inspection: 'blue',
+  pending: 'yellow',
   inspected: 'blue',
-  released: 'green',
-  partially_released: 'green',
   closed: 'gray',
 }
 
 const STATUS_OPTIONS = [
   { value: '', label: 'All' },
-  { value: 'pending_images', label: 'Pending Images' },
-  { value: 'ready_for_inspection', label: 'Ready for Inspection' },
+  { value: 'pending', label: 'Pending' },
   { value: 'inspected', label: 'Inspected' },
-  { value: 'released', label: 'Released' },
-  { value: 'partially_released', label: 'Partially Released' },
   { value: 'closed', label: 'Closed' },
 ]
 
@@ -29,13 +23,13 @@ export function QcQueuePage({ onSelect }: { onSelect: (id: string) => void }) {
   const [batches, setBatches] = useState<QcHoldBatch[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [statusFilter, setStatusFilter] = useState('pending_images')
+  const [statusFilter, setStatusFilter] = useState('pending')
 
   const tableSort = useTableSort(batches)
 
   useEffect(() => {
     setLoading(true)
-    const endpoint = statusFilter ? statusFilter : 'pending_images'
+    const endpoint = statusFilter ? statusFilter : 'pending'
     api.qcBatches(endpoint)
       .then((res) => setBatches(res.batches ?? []))
       .catch((err) => setError(String(err)))

@@ -1,7 +1,7 @@
 """Scenario contract tests – QC fixtures injected by s01.
 
 These tests verify that after running scenario s01, exactly 3 QC hold batches
-with 'pending_images' status exist, bound to the expected SKUs.
+with 'pending' status exist, bound to the expected SKUs.
 
 We run the scenario against a fresh in-memory DB rather than the session DB
 to avoid polluting other tests.
@@ -21,7 +21,6 @@ def scenario_db(tmp_path, monkeypatch):
     db.init_db()
 
     from scenarios.base_setup import populate as base_setup
-    # Initialize simulation_state before base_setup uses simulation_service
     import db as _db
     conn = _db.get_connection()
     conn.execute("INSERT OR IGNORE INTO simulation_state (id, sim_time) VALUES (1, '2025-07-01 00:00:00')")
@@ -37,7 +36,7 @@ def scenario_db(tmp_path, monkeypatch):
 def test_s01_creates_three_pending_qc_batches(scenario_db):
     conn = db.get_connection()
     rows = conn.execute(
-        "SELECT id FROM qc_hold_batches WHERE status = 'pending_images'"
+        "SELECT id FROM qc_hold_batches WHERE status = 'pending'"
     ).fetchall()
     conn.close()
     assert len(rows) == 3
@@ -49,9 +48,8 @@ def test_s01_qc_batches_have_correct_skus(scenario_db):
         """
         SELECT DISTINCT i.sku
         FROM qc_hold_batches qhb
-        JOIN qc_hold_batch_lines qhbl ON qhbl.qc_hold_batch_id = qhb.id
-        JOIN items i ON i.id = qhbl.item_id
-        WHERE qhb.status = 'pending_images'
+        JOIN items i ON i.id = qhb.item_id
+        WHERE qhb.status = 'pending'
         """
     ).fetchall()
     conn.close()
@@ -65,15 +63,9 @@ def test_s01_qc_batches_have_correct_skus(scenario_db):
 def test_s01_qc_batches_not_consumed_by_shipments(scenario_db):
     """QC hold stock should not appear consumed in shipment allocations."""
     conn = db.get_connection()
-    # The QC hold lines must be in pending_inspection status
     rows = conn.execute(
-        """
-        SELECT qhbl.line_status FROM qc_hold_batch_lines qhbl
-        WHERE qhbl.qc_hold_batch_id IN (
-            SELECT id FROM qc_hold_batches WHERE status = 'pending_images'
-        )
-        """
+        "SELECT status FROM qc_hold_batches WHERE status = 'pending'"
     ).fetchall()
     conn.close()
     for row in rows:
-        assert row["line_status"] == "pending_inspection"
+        assert row["status"] == "pending"

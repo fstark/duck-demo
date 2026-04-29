@@ -438,25 +438,12 @@ QC_HOLD_BATCHES = [
         "production_order_id": "MO-QC001",
         "sales_order_id": "SO-QC001",
         "item_id": "ITEM-QC-DUCK",
-        "status": "pending_images",
-        "created_at": SIM_TIME,
-        "released_at": None,
-        "replacement_triggered": 0,
-    },
-]
-
-QC_HOLD_BATCH_LINES = [
-    {
-        "id": "QCBL-T001",
-        "qc_hold_batch_id": "QCB-T001",
-        "item_id": "ITEM-QC-DUCK",
+        "status": "pending",
         "qty_on_hold": 12,
-        "qty_pending": 12,
         "qty_released": 0,
         "qty_scrapped": 0,
-        "line_status": "pending_inspection",
         "created_at": SIM_TIME,
-        "closed_at": None,
+        "released_at": None,
     },
 ]
 
@@ -579,5 +566,4 @@ TABLE_DATA = [
     ("sales_order_lines", QC_SALES_ORDER_LINES),
     ("production_orders", QC_PRODUCTION_ORDERS),
     ("qc_hold_batches", QC_HOLD_BATCHES),
-    ("qc_hold_batch_lines", QC_HOLD_BATCH_LINES),
 ]
