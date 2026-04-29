@@ -27,9 +27,9 @@ interface InspectionResult {
 // ── Severity helpers ──────────────────────────────────────────────────────────
 
 const SEV_COLOR: Record<string, string> = {
-    none:     '#22c55e',
-    minor:    '#f97316',
-    major:    '#ef4444',
+    none: '#22c55e',
+    minor: '#f97316',
+    major: '#ef4444',
 };
 const SEV_ORDER = ['none', 'minor', 'major'] as const;
 
@@ -41,9 +41,9 @@ function cycleSeverity(sev: string): string {
 // ── Decision badge ────────────────────────────────────────────────────────────
 
 const DECISION_STYLES: Record<string, { bg: string; border: string; color: string; label: string }> = {
-    pass:          { bg: '#f0fdf4', border: '#86efac', color: '#15803d', label: '✓ Pass'          },
-    partial_scrap: { bg: '#fffbeb', border: '#fcd34d', color: '#b45309', label: '⚠ Partial Scrap'  },
-    full_scrap:    { bg: '#fef2f2', border: '#fca5a5', color: '#dc2626', label: '✗ Full Scrap'     },
+    pass: { bg: '#f0fdf4', border: '#86efac', color: '#15803d', label: '✓ Pass' },
+    partial_scrap: { bg: '#fffbeb', border: '#fcd34d', color: '#b45309', label: '⚠ Partial Scrap' },
+    full_scrap: { bg: '#fef2f2', border: '#fca5a5', color: '#dc2626', label: '✗ Full Scrap' },
 };
 
 function DecisionBadge({ decision }: { decision: string }) {
@@ -408,8 +408,8 @@ export default function QcInspectionViewer() {
                         >
                             {dispositionStatus === 'submitting' ? 'Submitting…'
                                 : dispositionStatus === 'done' ? '✓ Submitted'
-                                : dispositionStatus === 'error' ? 'Retry'
-                                : `Pass (${passCount})`}
+                                    : dispositionStatus === 'error' ? 'Retry'
+                                        : `Pass (${passCount})`}
                         </PrimaryButton>
                     </div>
                 </div>
