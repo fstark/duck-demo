@@ -170,7 +170,7 @@ Stateless, all state in the database. Methods correspond 1:1 to MCP tools.
 |--------|-------|------|---------|
 | `upload(source, hint)` | File URL or content | Parse file, detect format, extract rows, detect entity type, generate mapping via LLM | Job summary + mapping plan |
 | `validate(job_id)` | Job ID | Apply transforms, run schema validation, run entity resolution, flag issues | Issue summary |
-| `fix_issue(job_id, issue_type, rows, action, preferences)` | Job + issue details | Apply merge/correction, re-validate affected rows | Updated status |
+| `fix_issue(job_id, issue_type, rows, action, preferences)` | Job + issue details | Apply merge/correction, re-validate affected rows. For merges with free-text `preferences`, calls the backend LLM (Prompt 4) to interpret the instruction against the actual row data. For simple actions (keep_both, reject), pure Python. | Updated status |
 | `preview(job_id)` | Job ID | Build create/update/skip summary from current staging state | Preview object |
 | `execute(job_id)` | Job ID | Call service layer for each ready row, record created IDs | Execution result |
 | `rollback(job_id)` | Job ID | Delete created records by stored IDs | Rollback result |
@@ -185,7 +185,8 @@ Stateless, all state in the database. Methods correspond 1:1 to MCP tools.
 | `_apply_transforms(job_id)` | Apply mapping + transforms to all rows, write `mapped_data` |
 | `_validate_rows(job_id)` | Schema validation, write issues |
 | `_resolve_entities(job_id)` | Fuzzy matching against existing records, write `resolved_refs` |
-| `_merge_rows(job_id, primary_row, absorbed_rows, preferences)` | Combine rows, mark absorbed as `merged` |
+| `_merge_rows(job_id, primary_row, absorbed_rows, preferences)` | Combine rows via backend LLM (Prompt 4) if free-text preferences, else Python |
+| `_group_issues(job_id)` | Group similar issues for batch presentation (e.g. 15 missing phones → one decision) |
 
 ### 3.2 File Parsing — `_parse_file`
 
@@ -247,23 +248,61 @@ Rules:
 - If a column has no good match, set target to null
 ```
 
-#### Prompt 3 — Value Transform
+#### Prompt 3 — Value Transform (batched)
 
-Input: raw value, source column, target field, transform description.
-Output: transformed value.
+Input: all raw values for all columns that need LLM-based transforms, across all rows.
+Output: all transformed values in one shot.
 
-This is called **per-row per-column** only for columns that need LLM-based transforms (not for simple ones like lowercase). Simple transforms (country lookup, phone normalisation) are handled in Python code — the LLM is the fallback for ambiguous cases.
+**One LLM call for the entire transform step** — not per-value or per-row. Batching is not just faster, it's *better*: the LLM sees all values for a column at once and applies consistent logic (e.g. "these are all German payment terms → parse the same way"). Per-value calls would lose that cross-row context.
+
+Simple transforms (lowercase, country code lookup, phone normalisation) are handled in Python code and never hit the LLM. Only ambiguous or language-dependent transforms go through this prompt.
 
 ```
-Transform this value for import into an ERP system.
-Source column: {source_column}
-Target field: {target_field} ({field_type})
-Transform needed: {transform_description}
-Raw value: {raw_value}
-Context (other values in this row): {row_context}
+You are a data transformation expert. Transform the following raw values
+for import into an ERP system.
 
-Respond with ONLY a JSON object: {"value": ..., "notes": "..."}
+For each entry, apply the specified transform and return the cleaned value.
+
+Transforms to apply:
+{transforms_array}
+
+Example entry:
+{"row": 1, "source_column": "Zahlungsziel", "target_field": "payment_terms",
+ "target_type": "integer", "transform": "parse integer from text",
+ "raw_value": "30 Tage", "row_context": {"Firma": "DuckFan Paris", "Land": "france"}}
+
+Respond with ONLY a JSON array, one object per input entry:
+[{"row": 1, "source_column": "Zahlungsziel", "value": 30, "notes": "parsed '30 Tage' as 30 days"}]
 ```
+
+For large files that exceed context limits, chunk into batches of ~50 rows per call. Demo-scale data (dozens of rows) fits in a single call.
+
+#### Prompt 4 — Merge Interpretation
+
+Input: two (or more) data rows + user's free-text merge preferences.
+Output: a single merged row.
+
+This is the backend LLM call made during `fix_issue()` when the user provides natural language merge instructions. It's **not** called by the agent — the agent passes the user's text as `merge_preferences`, and the service interprets it.
+
+```
+Merge these data rows into one record. Apply the user's preferences.
+
+Rows to merge:
+{rows_json}
+
+User preferences: {merge_preferences}
+
+Rules:
+- Start from the first row as baseline
+- Apply the user's preferences to pick values from the other rows
+- If the user doesn't specify a preference for a field, keep the non-empty value
+  (or the value from the first row if both are non-empty)
+- Put any alternate values (e.g. second email) in a "notes" field
+
+Respond with ONLY a JSON object: the merged row with the same field names.
+```
+
+For simple actions (keep_both, reject), there is no LLM call — those are pure Python logic.
 
 ### 3.4 Entity Resolution — `_resolve_entities`
 

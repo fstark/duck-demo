@@ -40,6 +40,96 @@ The agent's tool set is limited to the `data_import_*` tools plus read-only cata
 
 ---
 
+## Issue Resolution: Scaling and Mechanics
+
+### How decisions scale (the "30 issues" problem)
+
+If every issue required a separate user decision, a 200-row file with messy data would mean 50 back-and-forth exchanges. That's unusable. The design avoids this with three tiers:
+
+**Tier 1 — Auto-fix (no user interaction).** The vast majority of issues are deterministic corrections that don't need human approval:
+- `"france"` → `"FR"` (country normalisation)
+- `"30 Tage"` → `30` (payment terms parsing)
+- Empty contact name → use company name as fallback
+- Phone number reformatting
+
+These are applied silently during `validate()` and reported as `info`-level issues with `auto_fixed: true`. The user sees them in the MCP app, but doesn't have to approve each one.
+
+**Tier 2 — Batch decisions (one answer fixes many rows).** Similar issues are grouped:
+- "15 rows are missing phone numbers → leave blank (default) or reject those rows?"
+- "8 rows reference 'Large Elvis' → I matched all 8 to ELVIS-DUCK-20CM. OK?"
+- "3 pairs of rows look like duplicates → merge all 3 pairs, or review individually?"
+
+The `validate()` response groups issues by type and proposes a batch action. One user response resolves the entire group.
+
+**Tier 3 — Individual decisions (rare).** Only genuinely unique ambiguities get individual attention:
+- "Row 17 has 'Canard Géant' — is this GNOME-DUCK-30CM or a product we don't carry?"
+
+In the Demo A scenario, there's exactly **one** tier-2 decision (the duplicate) and zero tier-3 decisions. The rest is auto-fixed.
+
+For a realistic 200-row import, the expected interaction would be:
+> "I auto-fixed 142 minor issues (country codes, phone formats, empty fields).
+> 3 pairs of rows look like duplicates. 12 rows are missing email addresses.
+> Merge the duplicates? Leave emails blank or reject those rows?"
+
+Two user answers. Done.
+
+### How user decisions become actions (the "two LLMs" problem)
+
+There are **two LLMs** in this flow, and they have different jobs:
+
+```
+User: "Merge them. Use the longer name and keep both emails."
+          │
+          ▼
+┌─────────────────────────────────────────────────┐
+│  AGENT LLM (in the chat)                        │
+│                                                   │
+│  Parses user intent into structured tool call:    │
+│    data_import_fix_issue(                         │
+│      job_id="IMP-001",                            │
+│      issue_type="possible_duplicate",             │
+│      rows=[1, 4],                                 │
+│      action="merge",                              │
+│      merge_preferences="Use 'Jean Dupont' as      │
+│        name, keep both emails"                    │
+│    )                                               │
+└────────────────────┬────────────────────────────┘
+                     │
+                     ▼
+┌─────────────────────────────────────────────────┐
+│  BACKEND LLM (server-side, in fix_issue)        │
+│                                                   │
+│  Receives: merge_preferences + actual row data    │
+│  Decides:                                         │
+│    - name: "Jean Dupont" (longer than "J. Dupont")│
+│    - email: "jean@..." (primary),                 │
+│      "j.dupont@..." → notes                      │
+│    - payment_terms: 45 (from row 4)               │
+│  Writes merged row to staging table               │
+└─────────────────────────────────────────────────┘
+```
+
+**Agent LLM** (the chat model): Interprets the user's natural language and maps it to a tool call. It decides `action="merge"` and passes the user's preferences as a string. This is what LLM agents do well — intent parsing.
+
+**Backend LLM** (called by the service): Receives the `merge_preferences` string plus the two actual data rows, and produces a concrete merged row. This is a **short, focused LLM call** — not a free-form conversation. The prompt is:
+
+```
+Merge these two data rows into one. Apply the user's preferences.
+
+Row 1: {"name": "Jean Dupont", "email": "jean@...", "payment_terms": 30, ...}
+Row 4: {"name": "J. Dupont", "email": "j.dupont@...", "payment_terms": 45, ...}
+
+User preferences: "Use the longer name and keep both emails"
+
+Respond with ONLY a JSON object: the merged row.
+```
+
+The result is deterministic, auditable, and stored in the staging table. The user sees the merged result in the preview step before anything is committed.
+
+**For simple actions** (`action="keep_both"`, `action="reject"`), there's no backend LLM call — those are pure Python logic. The backend LLM is only invoked when the user gives free-text merge preferences that require interpretation.
+
+---
+
 ## Sample File
 
 ```csv
