@@ -4,7 +4,23 @@ Customer import from a semicolon-separated CSV with German column headers, incon
 
 ---
 
-## The Agent Reliability Problem
+## The AI ETL Pattern
+
+The import follows an **Extract → Transform → Load** pattern, where the AI handles the hard parts:
+
+| Phase | Who does it | What happens |
+|-------|-------------|-------------|
+| **Extract** | Agent → single MCP tool call | Parse file, detect entity type, map columns, apply transforms, validate, resolve entities — all server-side |
+| **Transform** | User ↔ interactive MCP app | Review mapping and issues, fix problems via free-text input, iterate until clean |
+| **Load** | User clicks "Import" in MCP app | Execute via service layer, show results |
+
+The agent is a **thin launcher**. It calls one tool, the MCP app takes over, the user interacts directly with the MCP app until done. The agent never re-enters the loop.
+
+---
+
+## Why This Architecture
+
+### The agent reliability problem
 
 Multi-step workflows are the #1 failure mode with LLM agents. After 4–5 tool calls the agent tends to:
 - Summarise what it did and stop (forgetting there are remaining steps)
@@ -12,121 +28,69 @@ Multi-step workflows are the #1 failure mode with LLM agents. After 4–5 tool c
 - Re-explain the plan instead of executing the next step
 - Drift into a tangent if a tool returns unexpected output
 
-### How the existing codebase solves this
+### The fix: remove the agent from the loop
 
-The **shipment workflow** (Prompt_sales.md rule 8) works reliably because each tool response contains an explicit **next action directive**:
+Instead of the agent mediating every fix (user → agent → tool → agent → user), the MCP app talks directly to the backend. The agent is not involved in the Transform or Load phases at all.
 
-```json
-{
-  "status": "needs_additional_step",
-  "next_tool": "logistics_pick_tariff_for_shipment",
-  "next_arguments": { "shipment_id": "SH-001", ... }
-}
-```
-
-The agent doesn't have to remember a plan — the server tells it what to do next.
-
-### Applying this to data import
-
-Every tool in the import pipeline returns a `next_step` field that tells the agent exactly what to call next. The agent never has to recall "where it is" in a workflow — the response **is** the instruction.
-
-This is the single most important design decision. Without it, the flow will break on step 3 or 4.
+This gives us:
+- **1 agent tool call** (Extract) — near-zero drift surface
+- **Direct MCP app ↔ backend loop** (Transform) — no LLM round-trips, instant feedback
+- **One-click execution** (Load) — MCP app calls backend REST endpoint directly
 
 ### Dedicated import agent
 
-Data import uses its own agent with a purpose-built prompt. This agent knows nothing about sales, production, or logistics — it only handles imports. This eliminates an entire class of drift: the agent cannot wander into "let me also create a quote for these customers" territory because it has no tools for that.
-
-The agent's tool set is limited to the `data_import_*` tools plus read-only catalog/CRM lookups (needed for entity resolution). No mutating business tools.
+Data import uses its own agent with a purpose-built prompt. This agent knows nothing about sales, production, or logistics — it only handles imports. The agent's tool set is limited to `data_import_upload` plus read-only catalog/CRM lookups. No mutating business tools. It cannot drift because it has almost nothing to drift into.
 
 ---
 
-## Issue Resolution: Scaling and Mechanics
+## Issue Resolution in the MCP App
 
 ### How decisions scale (the "30 issues" problem)
 
-If every issue required a separate user decision, a 200-row file with messy data would mean 50 back-and-forth exchanges. That's unusable. The design avoids this with three tiers:
+The validate step uses aggressive auto-resolution with three tiers:
 
-**Tier 1 — Auto-fix (no user interaction).** The vast majority of issues are deterministic corrections that don't need human approval:
+**Tier 1 — Auto-fix (no user interaction).** The vast majority of issues are deterministic corrections:
 - `"france"` → `"FR"` (country normalisation)
 - `"30 Tage"` → `30` (payment terms parsing)
 - Empty contact name → use company name as fallback
 - Phone number reformatting
 
-These are applied silently during `validate()` and reported as `info`-level issues with `auto_fixed: true`. The user sees them in the MCP app, but doesn't have to approve each one.
+These are applied silently during Extract and shown as `info`-level annotations in the MCP app. The user sees them but doesn't have to approve each one.
 
-**Tier 2 — Batch decisions (one answer fixes many rows).** Similar issues are grouped:
+**Tier 2 — Batch decisions (one answer fixes many rows).** The MCP app groups similar issues into a single question:
 - "15 rows are missing phone numbers → leave blank (default) or reject those rows?"
-- "8 rows reference 'Large Elvis' → I matched all 8 to ELVIS-DUCK-20CM. OK?"
-- "3 pairs of rows look like duplicates → merge all 3 pairs, or review individually?"
+- "8 rows reference 'Large Elvis' → matched all 8 to ELVIS-DUCK-20CM. OK?"
+- "3 pairs of rows look like duplicates → merge all, or review individually?"
 
-The `validate()` response groups issues by type and proposes a batch action. One user response resolves the entire group.
+One free-text answer resolves the entire group.
 
-**Tier 3 — Individual decisions (rare).** Only genuinely unique ambiguities get individual attention:
+**Tier 3 — Individual decisions (rare).** Only genuinely unique ambiguities:
 - "Row 17 has 'Canard Géant' — is this GNOME-DUCK-30CM or a product we don't carry?"
 
-In the Demo A scenario, there's exactly **one** tier-2 decision (the duplicate) and zero tier-3 decisions. The rest is auto-fixed.
+For a realistic 200-row import, the expected interaction is ~2 fix rounds in the MCP app, not 30.
 
-For a realistic 200-row import, the expected interaction would be:
-> "I auto-fixed 142 minor issues (country codes, phone formats, empty fields).
-> 3 pairs of rows look like duplicates. 12 rows are missing email addresses.
-> Merge the duplicates? Leave emails blank or reject those rows?"
+### How the "Fix" field works
 
-Two user answers. Done.
-
-### How user decisions become actions (the "two LLMs" problem)
-
-There are **two LLMs** in this flow, and they have different jobs:
+The MCP app presents a batch question and a free-text input field. The user types a natural language instruction (e.g. "merge them, use the longer name"). The MCP app sends this directly to a backend REST endpoint:
 
 ```
-User: "Merge them. Use the longer name and keep both emails."
-          │
-          ▼
-┌─────────────────────────────────────────────────┐
-│  AGENT LLM (in the chat)                        │
-│                                                   │
-│  Parses user intent into structured tool call:    │
-│    data_import_fix_issue(                         │
-│      job_id="IMP-001",                            │
-│      issue_type="possible_duplicate",             │
-│      rows=[1, 4],                                 │
-│      action="merge",                              │
-│      merge_preferences="Use 'Jean Dupont' as      │
-│        name, keep both emails"                    │
-│    )                                               │
-└────────────────────┬────────────────────────────┘
-                     │
-                     ▼
-┌─────────────────────────────────────────────────┐
-│  BACKEND LLM (server-side, in fix_issue)        │
-│                                                   │
-│  Receives: merge_preferences + actual row data    │
-│  Decides:                                         │
-│    - name: "Jean Dupont" (longer than "J. Dupont")│
-│    - email: "jean@..." (primary),                 │
-│      "j.dupont@..." → notes                      │
-│    - payment_terms: 45 (from row 4)               │
-│  Writes merged row to staging table               │
-└─────────────────────────────────────────────────┘
+POST /api/data-import/{job_id}/fix
+Content-Type: application/json
+
+{
+  "instruction": "merge the duplicates, use the longer name, keep both emails"
+}
 ```
 
-**Agent LLM** (the chat model): Interprets the user's natural language and maps it to a tool call. It decides `action="merge"` and passes the user's preferences as a string. This is what LLM agents do well — intent parsing.
+The backend LLM interprets the instruction against the actual row data, applies the fix, re-validates, and returns the updated staging state + next batch question (if any). The MCP app refreshes its display — no page reload, just a DOM update.
 
-**Backend LLM** (called by the service): Receives the `merge_preferences` string plus the two actual data rows, and produces a concrete merged row. This is a **short, focused LLM call** — not a free-form conversation. The prompt is:
+When the user is satisfied, they click **"Import"**. The MCP app calls:
 
 ```
-Merge these two data rows into one. Apply the user's preferences.
-
-Row 1: {"name": "Jean Dupont", "email": "jean@...", "payment_terms": 30, ...}
-Row 4: {"name": "J. Dupont", "email": "j.dupont@...", "payment_terms": 45, ...}
-
-User preferences: "Use the longer name and keep both emails"
-
-Respond with ONLY a JSON object: the merged row.
+POST /api/data-import/{job_id}/execute
 ```
 
-The result is deterministic, auditable, and stored in the staging table. The user sees the merged result in the preview step before anything is committed.
-
-**For simple actions** (`action="keep_both"`, `action="reject"`), there's no backend LLM call — those are pure Python logic. The backend LLM is only invoked when the user gives free-text merge preferences that require interpretation.
+The backend creates the records via the service layer and returns the result. The MCP app shows the execution summary.
 
 ---
 
@@ -146,7 +110,7 @@ Saved as `docs/data/DEMO_A/Kundenstammdatenübernahme_Altdatenbank.csv` — "cus
 
 ## Step-by-Step Flow
 
-### Step 0 — User Message
+### Step 1 — User Message (chat)
 
 The user pastes the file path in chat:
 
@@ -154,9 +118,7 @@ The user pastes the file path in chat:
 
 Nothing else. No hint about entity type, no column descriptions.
 
----
-
-### Step 1 — `data_import_upload`
+### Step 2 — Extract (`data_import_upload`)
 
 **Agent calls:**
 ```
@@ -166,296 +128,76 @@ data_import_upload(
 )
 ```
 
-**Service does:**
+**Service does everything in one call:**
 1. Read file from local path
 2. Detect format: CSV, delimiter `;`, encoding UTF-8
 3. Parse into staging rows (raw string values)
 4. Store in `import_jobs` + `import_rows` tables
-5. Call the LLM with column names + first 3 rows → detect entity type = `customer`
-6. Call the LLM with column names + sample values + customer schema → generate mapping plan
+5. LLM call: detect entity type = `customer`
+6. LLM call: generate column mapping plan
+7. Apply transforms (country codes, phone normalisation, payment terms parsing)
+8. Run schema validation (required fields, types)
+9. Run entity resolution against existing `customers` table
+10. Flag issues, group batch questions
 
-**Returns:**
-```json
-{
-  "job_id": "IMP-001",
-  "status": "mapped",
-  "source_filename": "Kundenstammdatenübernahme_Altdatenbank.csv",
-  "detected_format": "csv (semicolon-separated, UTF-8)",
-  "detected_entity": "customer",
-  "row_count": 4,
-  "columns_detected": ["Kd-Nr","Firma","Ansprechpartner","E-Mail","Straße","PLZ","Ort","Land","Telefon","Zahlungsziel"],
-  "mapping": [
-    {"source": "Kd-Nr",           "target": "external_ref", "transform": "none",              "confidence": 0.72},
-    {"source": "Firma",           "target": "company",      "transform": "none",              "confidence": 0.95},
-    {"source": "Ansprechpartner", "target": "name",         "transform": "none",              "confidence": 0.91},
-    {"source": "E-Mail",          "target": "email",        "transform": "lowercase",         "confidence": 0.98},
-    {"source": "Straße",          "target": "address_line1","transform": "none",              "confidence": 0.94},
-    {"source": "PLZ",             "target": "postal_code",  "transform": "zero-pad to 5",     "confidence": 0.96},
-    {"source": "Ort",             "target": "city",         "transform": "none",              "confidence": 0.97},
-    {"source": "Land",            "target": "country",      "transform": "ISO 3166-1 alpha-2","confidence": 0.88},
-    {"source": "Telefon",         "target": "phone",        "transform": "E.164 normalise",   "confidence": 0.85},
-    {"source": "Zahlungsziel",    "target": "payment_terms","transform": "parse int from text","confidence": 0.79}
-  ],
-  "message": "Uploaded 4 rows from Kundenstammdatenübernahme_Altdatenbank.csv. Detected as **customer** data with 10 columns mapped. Review the mapping and confirm, or ask me to change any column assignment.",
-  "next_step": {
-    "description": "Review the mapping above. Say 'looks good' to proceed, or tell me which columns to change.",
-    "awaits": "user_confirmation",
-    "on_confirm": {
-      "tool": "data_import_validate",
-      "arguments": { "job_id": "IMP-001" }
-    }
-  }
-}
-```
+**Returns:** structured content for the MCP app, containing the full staging state.
 
-**MCP app:** `data-import-mapping` renders inline — a table showing each source column → target field with confidence badges.
-
-**Agent says to user:**
-> I've uploaded 4 rows from `Kundenstammdatenübernahme_Altdatenbank.csv` and detected them as **customer** records.
-> Here's the mapping I've inferred: _(MCP app renders the mapping table)_
-> Does this look right, or should I adjust any columns?
-
----
-
-### Step 2 — User Confirms Mapping
-
-> Looks good.
-
----
-
-### Step 3 — `data_import_validate`
-
-**Agent calls** (because `next_step.on_confirm` told it to):
-```
-data_import_validate(job_id="IMP-001")
-```
-
-**Service does:**
-1. Apply transforms to all rows (country normalisation, phone formatting, payment terms parsing, etc.)
-2. Run schema validation (required fields, types)
-3. Run entity resolution against existing `customers` table (fuzzy match on name + email + company + address)
-4. Flag issues
-
-**Returns:**
-```json
-{
-  "job_id": "IMP-001",
-  "status": "validated",
-  "summary": {
-    "ready": 2,
-    "needs_review": 2,
-    "rejected": 0
-  },
-  "issues": [
-    {
-      "row": 2,
-      "severity": "warning",
-      "field": "name",
-      "message": "Contact name is empty. Company name 'QuackShop London' will be used as fallback.",
-      "auto_fixed": true
-    },
-    {
-      "rows": [1, 4],
-      "severity": "warning",
-      "type": "possible_duplicate",
-      "message": "Rows 1 and 4 may be the same customer: same company ('DuckFan Paris SARL'), same address, similar names ('Jean Dupont' vs 'J. Dupont'), different emails.",
-      "suggestion": "merge",
-      "merge_strategy": "Keep row 1 as primary. Add row 4's email (j.dupont@duckfan-paris.example) as alternate. Use row 4's payment_terms (45) if preferred."
-    },
-    {
-      "row": 1,
-      "severity": "info",
-      "field": "country",
-      "message": "'france' normalised to 'FR'",
-      "auto_fixed": true
-    },
-    {
-      "row": 4,
-      "severity": "info",
-      "field": "payment_terms",
-      "message": "'45 jours' parsed as 45 days",
-      "auto_fixed": true
-    }
-  ],
-  "message": "Validation complete: **2 ready**, **2 need review** (possible duplicate), 0 rejected.\n\nRows 1 and 4 look like the same customer (DuckFan Paris SARL) — same company and address, names are 'Jean Dupont' vs 'J. Dupont'. Should I merge them into one customer, or keep both?",
-  "next_step": {
-    "description": "Resolve the duplicate: say 'merge' or 'keep both'. Then I'll show the final preview.",
-    "awaits": "user_decision",
-    "options": ["merge rows 1 and 4", "keep both"],
-    "on_resolve": {
-      "tool": "data_import_fix_issue",
-      "template_arguments": { "job_id": "IMP-001", "issue_type": "possible_duplicate", "rows": [1, 4], "action": "{user_choice}" }
-    },
-    "after_resolve": {
-      "tool": "data_import_preview",
-      "arguments": { "job_id": "IMP-001" }
-    }
-  }
-}
-```
-
-**MCP app:** `data-import-issues` renders — showing the 4 rows, status badges, and the duplicate highlight.
-
-**Agent says to user:**
-> Validation complete: 2 rows are ready, 2 need review.
-> _(MCP app renders the issues view)_
->
-> Rows 1 and 4 look like the same customer — "DuckFan Paris SARL", same address, names are "Jean Dupont" vs "J. Dupont" but different emails. Should I merge them into one customer or keep both?
-
----
-
-### Step 4 — User Decides
-
-> Merge them. Use the longer name and keep both emails.
-
----
-
-### Step 5 — `data_import_fix_issue` + `data_import_preview`
-
-**Agent calls** (following `next_step.on_resolve`):
-```
-data_import_fix_issue(
-    job_id="IMP-001",
-    issue_type="possible_duplicate",
-    rows=[1, 4],
-    action="merge",
-    merge_preferences="Use 'Jean Dupont' as name, keep both emails"
-)
-```
-
-**Service does:**
-1. Merge rows 1+4 into a single staging row
-2. Use name from row 1 ("Jean Dupont"), email from row 1, add row 4 email to notes
-3. Use payment_terms from row 4 (45) since it's the more specific value
-4. Mark row 4 as `merged_into_row_1`
-5. Re-validate: all rows now `ready`
-
-**Returns:**
-```json
-{
-  "job_id": "IMP-001",
-  "fixed": true,
-  "message": "Rows 1 and 4 merged. Using 'Jean Dupont', email jean@duckfan-paris.example, payment terms 45 days. Second email noted.",
-  "next_step": {
-    "tool": "data_import_preview",
-    "arguments": { "job_id": "IMP-001" }
-  }
-}
-```
-
-**Agent immediately calls** `data_import_preview` (no user interaction needed — `next_step` has no `awaits` field):
-
-```
-data_import_preview(job_id="IMP-001")
-```
-
-**Service does:**
-1. Build final preview of records to create
-2. Cross-check against existing customers one more time
-
-**Returns:**
-```json
-{
-  "job_id": "IMP-001",
-  "status": "ready_to_execute",
-  "preview": {
-    "creates": [
-      {
-        "entity": "customer",
-        "name": "Jean Dupont",
-        "company": "DuckFan Paris SARL",
-        "email": "jean@duckfan-paris.example",
-        "city": "Paris",
-        "country": "FR",
-        "payment_terms": 45,
-        "notes": "Alt. email: j.dupont@duckfan-paris.example"
-      },
-      {
-        "entity": "customer",
-        "name": "QuackShop London",
-        "company": "QuackShop London",
-        "email": "orders@quackshop.co.uk",
-        "city": "London",
-        "country": "GB",
-        "payment_terms": 30
-      },
-      {
-        "entity": "customer",
-        "name": "Hans Müller",
-        "company": "Enten-Welt GmbH",
-        "email": "hans@entenwelt.example",
-        "city": "Berlin",
-        "country": "DE",
-        "payment_terms": 60
-      }
-    ],
-    "updates": [],
-    "skipped": 0
-  },
-  "message": "Ready to import **3 new customers** (rows 1+4 merged). No existing customers will be updated.\n\nSay 'go' to create them.",
-  "next_step": {
-    "description": "Say 'go' to execute the import, or 'cancel' to discard.",
-    "awaits": "user_confirmation",
-    "on_confirm": {
-      "tool": "data_import_execute",
-      "arguments": { "job_id": "IMP-001" }
-    }
-  }
-}
-```
-
-**MCP app:** `data-import-preview` renders — showing the 3 customers that will be created with all their fields.
+**MCP app `data-import.html` renders inline** showing:
+- Mapping table (source → target, confidence badges, transforms)
+- Data grid with all rows, annotated with status badges and issue flags
+- Auto-fix log: "'france' → FR", "'45 jours' → 45 days", etc.
+- Batch question: _"Rows 1 and 4 may be the same customer (DuckFan Paris SARL). Same company, same address, similar names. Merge or keep both?"_
+- **Fix** text input field
+- **Import** button (disabled until no errors remain)
 
 **Agent says:**
-> Here's what I'll create:
-> _(MCP app renders the preview)_
->
-> **3 new customers**: DuckFan Paris (merged), QuackShop London, and Enten-Welt GmbH. Ready to go?
+> I've parsed your file and prepared it for import. Review the data in the panel — you can fix any issues there and import when ready.
 
----
+The agent's job is done. Everything from here happens in the MCP app.
 
-### Step 6 — User Confirms
+### Step 3 — Transform (MCP app ↔ backend loop)
 
-> Go.
+**User types in the Fix field:**
+> Merge the duplicates, use the longer name, keep both emails
 
----
-
-### Step 7 — `data_import_execute`
-
-**Agent calls:**
+**MCP app calls:**
 ```
-data_import_execute(job_id="IMP-001")
+POST /api/data-import/IMP-001/fix
+{ "instruction": "Merge the duplicates, use the longer name, keep both emails" }
 ```
 
-**Service does:**
-1. For each ready row, call `customer_service.create_customer(...)` (the same service the `crm_create_customer` MCP tool uses)
-2. Record the created customer IDs in `import_rows.created_entity_id`
+**Backend does:**
+1. Backend LLM interprets: merge rows 1+4, name="Jean Dupont", primary email from row 1, second email in notes, payment_terms=45
+2. Merge rows in staging table
+3. Re-validate remaining rows
+4. Return updated state
+
+**MCP app refreshes, now showing:**
+- 3 rows (rows 1+4 merged, row 2 and 3 unchanged)
+- All rows `ready` (green badges)
+- No more batch questions
+- **Import** button now enabled
+- Summary: _"3 customers ready to import. No issues remaining."_
+
+If there were more issues, the app would show the next batch question and the cycle repeats.
+
+### Step 4 — Load (MCP app → backend)
+
+**User clicks "Import".**
+
+**MCP app calls:**
+```
+POST /api/data-import/IMP-001/execute
+```
+
+**Backend does:**
+1. For each ready row, call `customer_service.create_customer(...)` (same service layer as `crm_create_customer`)
+2. Record created IDs in `import_rows.created_entity_id`
 3. Log to `activity_log`
 
-**Returns:**
-```json
-{
-  "job_id": "IMP-001",
-  "status": "executed",
-  "created": [
-    { "source_row": 1, "entity": "customer", "customer_id": "CUST-045", "name": "Jean Dupont" },
-    { "source_row": 2, "entity": "customer", "customer_id": "CUST-046", "name": "QuackShop London" },
-    { "source_row": 3, "entity": "customer", "customer_id": "CUST-047", "name": "Hans Müller" }
-  ],
-  "message": "Import complete. Created **3 customers**: CUST-045 (DuckFan Paris), CUST-046 (QuackShop London), CUST-047 (Enten-Welt GmbH).",
-  "next_step": null
-}
-```
-
-**MCP app:** `data-import-result` renders — showing the 3 created customers with their IDs and a link to each.
-
-**Agent says:**
-> Done! Created 3 customers:
-> _(MCP app renders the result summary)_
->
-> - **CUST-045** — Jean Dupont (DuckFan Paris SARL), Paris
-> - **CUST-046** — QuackShop London, London
-> - **CUST-047** — Hans Müller (Enten-Welt GmbH), Berlin
+**MCP app updates to show execution result:**
+- Created: CUST-045 (Jean Dupont, DuckFan Paris), CUST-046 (QuackShop London), CUST-047 (Hans Müller, Enten-Welt)
+- Links to each customer in the ERP UI
 
 ---
 
@@ -465,111 +207,57 @@ data_import_execute(job_id="IMP-001")
 User message
     │
     ▼
-┌─────────────────────┐
-│  data_import_upload  │  ← parses file, detects entity, generates mapping
-└────────┬────────────┘
-         │ returns mapping + next_step (awaits user)
-         ▼
-    User: "looks good"
-         │
-         ▼
-┌──────────────────────────┐
-│  data_import_validate    │  ← transforms, validates, entity resolution
-└────────┬─────────────────┘
-         │ returns issues + next_step (awaits user for duplicate)
-         ▼
-    User: "merge them"
-         │
-         ▼
-┌──────────────────────────┐
-│  data_import_fix_issue   │  ← applies merge
-└────────┬─────────────────┘
-         │ returns next_step (auto: preview)
-         ▼
-┌──────────────────────────┐
-│  data_import_preview     │  ← shows final diff (awaits user)
-└────────┬─────────────────┘
-         │
-         ▼
-    User: "go"
-         │
-         ▼
-┌──────────────────────────┐
-│  data_import_execute     │  ← creates customers via service layer
-└──────────────────────────┘
+┌─────────────────────────────────────────────────────┐
+│  data_import_upload                                  │
+│  (parse, map, transform, validate, resolve — all    │
+│   server-side in one call)                           │
+└────────────────────┬────────────────────────────────┘
+                     │
+                     ▼
+         ┌───────────────────────┐
+         │    MCP App renders    │
+         │  data-import.html     │
+         └───────┬───────────────┘
+                 │
+        ┌────────┴─────────┐
+        ▼                  ▼
+  ┌───────────┐     ┌────────────┐
+  │ Fix field │     │  Import    │
+  │ (free     │     │  button    │
+  │  text)    │     │            │
+  └─────┬─────┘     └──────┬─────┘
+        │                   │
+        ▼                   ▼
+  POST /fix              POST /execute
+  (backend LLM           (service layer
+   interprets,            creates records)
+   re-validates,
+   returns updated
+   state)
+        │
+        ▼
+  MCP App refreshes
+  (loop until clean)
 ```
 
-**Total tool calls: 5** (upload, validate, fix, preview, execute)
-**User interactions: 3** (confirm mapping, resolve duplicate, confirm execution)
+**Agent tool calls: 1** (`data_import_upload`)
+**MCP app ↔ backend round-trips: 1–3** (fix iterations, no agent involved)
+**User clicks: 1** ("Import")
 
 ---
 
-## The `next_step` Contract
+## Agent Prompt
 
-Every tool response includes a `next_step` object with this structure:
-
-```json
-{
-  "next_step": {
-    "tool": "data_import_validate",     // what to call next
-    "arguments": { "job_id": "IMP-001" }, // with these arguments
-    "awaits": "user_confirmation",       // null = call immediately; string = wait for user
-    "description": "...",                // human-readable instruction for the agent
-    "options": ["merge", "keep both"],   // optional: suggested user responses
-    "on_confirm": { ... },              // optional: tool+args when user says yes
-    "on_resolve": { ... },             // optional: tool+args template for user decision
-    "after_resolve": { ... }           // optional: what to call after on_resolve finishes
-  }
-}
-```
-
-Rules:
-- If `next_step` is `null` → workflow is done, respond to user
-- If `next_step.awaits` is null → call `next_step.tool` immediately (no user interaction)
-- If `next_step.awaits` is set → present info to user, wait for their answer, then call the indicated tool
-- The agent should NEVER decide on its own what tool to call next — always follow `next_step`
-
-This is the same pattern as the shipment workflow (rule 8 in `Prompt_sales.md`), extended to multi-step import.
-
----
-
-## Prompt Addition
-
-Add to the agent system prompt:
+The import agent prompt is trivially simple because the agent barely does anything:
 
 ```
-10) Data import workflow orchestration (mandatory):
-   For any data import request, follow this exact pattern:
-   - Call `data_import_upload` with the file source.
-   - After EVERY tool response, check `next_step`:
-     - If `next_step` is null → workflow complete, summarise to user.
-     - If `next_step.awaits` is null → immediately call `next_step.tool` with `next_step.arguments`.
-     - If `next_step.awaits` is set → present the message to user, wait for their response,
-       then call the indicated tool with the appropriate arguments.
-   - NEVER skip a step or decide independently which import tool to call.
-   - ALWAYS relay the `message` field from each tool response.
+You are a data import assistant for Duck Inc's ERP system.
+
+When the user wants to import data from a file, call `data_import_upload`
+with the file source. The interactive import panel will take over from there.
+
+You handle data import only. If the user asks about orders, production,
+or anything else, say it's outside your scope.
 ```
 
----
-
-## Collapsing Steps: What If We Go Further?
-
-The flow above has 5 tool calls. An alternative is to **collapse upload + detect + map + validate into a single "mega" tool call** (`data_import_upload`). This has big advantages:
-
-1. **Fewer tool calls = less drift.** Each LLM round-trip is a chance for the agent to lose the thread. Doing all the deterministic work server-side in one call removes 2–3 round-trips.
-2. **The first user interaction is the interesting one.** Nobody wants to confirm "yes, this is a CSV" and "yes, those are customers" — they want to see the mapping and fix the duplicate.
-3. **Mirrors QC.** `qc_submit_image` does label extraction + image storage + AI inspection in a single call. The user sees the final result. Same should apply here.
-
-The design above already collapses detect + map into `data_import_upload`. We could go further and also fold validate into it, reducing the happy path to:
-
-```
-data_import_upload  →  user confirms or fixes issues  →  data_import_execute
-```
-
-**3 tool calls. 2 user interactions. Minimal drift surface.**
-
-The tradeoff: the first tool call takes longer (multiple LLM calls server-side). But for a demo, a 5-second loading spinner that produces "here's your mapping AND your issues AND your preview" in one shot is more impressive than 5 fast calls with user confirmations in between.
-
-### Recommendation
-
-Start with the 5-step flow (easier to debug, each step is independently testable), then collapse once it works. The `next_step` contract means the agent code doesn't change — only the server decides how many steps to expose.
+That's it. No workflow orchestration rules, no `next_step` contract, no multi-step sequencing. The agent is a launcher.

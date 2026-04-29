@@ -1,6 +1,6 @@
 # Data Import — Technical Design
 
-This document is the implementation blueprint for the data import feature described in [DATA.md](DATA.md). It covers the data model, service architecture, MCP tools, LLM prompts, and the `next_step` orchestration contract.
+This document is the implementation blueprint for the data import feature described in [DATA.md](DATA.md). It covers the data model, service architecture, MCP tools, REST endpoints, LLM prompts, and the interactive MCP app.
 
 See [DEMO_FLOW.md](DEMO_FLOW.md) for the end-to-end user-facing flow of Demo A.
 
@@ -40,14 +40,13 @@ One row per import operation. Tracks the overall pipeline state.
 **Status lifecycle:**
 
 ```
-staging → mapped → validated → ready_to_execute → executed
-                                                 → rolled_back
+staging → validated → ready_to_execute → executed
+                                       → rolled_back
 ```
 
-- `staging` — file parsed, rows extracted, entity type and columns detected
-- `mapped` — column→field mapping plan generated
-- `validated` — transforms applied, validation run, entity resolution done, issues flagged
-- `ready_to_execute` — all issues resolved (or accepted), preview generated
+- `staging` — transient state during `upload()`. File parsed, rows extracted. Not visible to the user.
+- `validated` — `upload()` complete. Mapping generated, transforms applied, entity resolution done, issues flagged. The MCP app renders from this state.
+- `ready_to_execute` — all issues resolved (or accepted by the user via the MCP app)
 - `executed` — records created in operational tables
 - `rolled_back` — execution undone
 
@@ -162,20 +161,24 @@ Starting with `customer` only. Each new entity type is a new entry in this dict 
 
 Singleton: `data_import_service = DataImportService()`
 
-Stateless, all state in the database. Methods correspond 1:1 to MCP tools.
+Stateless, all state in the database.
 
 #### Core Methods
 
 | Method | Input | Does | Returns |
 |--------|-------|------|---------|
-| `upload(source, hint)` | File URL or content | Parse file, detect format, extract rows, detect entity type, generate mapping via LLM | Job summary + mapping plan |
-| `validate(job_id)` | Job ID | Apply transforms, run schema validation, run entity resolution, flag issues | Issue summary |
-| `fix_issue(job_id, issue_type, rows, action, preferences)` | Job + issue details | Apply merge/correction, re-validate affected rows. For merges with free-text `preferences`, calls the backend LLM (Prompt 4) to interpret the instruction against the actual row data. For simple actions (keep_both, reject), pure Python. | Updated status |
-| `preview(job_id)` | Job ID | Build create/update/skip summary from current staging state | Preview object |
+| `upload(source, hint)` | File URL or content | Parse file, detect format, extract rows, detect entity type, generate mapping, apply transforms, validate, resolve entities, group issues — **all in one call** | Full staging state (mapping, rows, issues, batch questions) for the MCP app |
+| `fix(job_id, instruction)` | Job + free-text instruction | Backend LLM interprets instruction against current staging state, applies changes, re-validates, regroups issues | Updated staging state for the MCP app |
 | `execute(job_id)` | Job ID | Call service layer for each ready row, record created IDs | Execution result |
 | `rollback(job_id)` | Job ID | Delete created records by stored IDs | Rollback result |
 
-#### Internal Methods (not exposed via MCP)
+`upload()` does the work of what was previously five separate steps. This is the "Extract" in the ETL pattern — one tool call, all server-side, no agent round-trips.
+
+`fix()` is called by the MCP app directly via a REST endpoint (not an MCP tool). The agent is not involved. It takes a free-text instruction like "merge the duplicates, use the longer name" and uses Prompt 4 to interpret it against the actual row data. After applying the fix, it re-validates and returns the full updated state so the MCP app can re-render.
+
+`execute()` and `rollback()` are also called via REST endpoints from the MCP app (via the confirm pattern), not by the agent.
+
+#### Internal Methods (called within `upload()` and `fix()`)
 
 | Method | Purpose |
 |--------|---------|
@@ -185,8 +188,9 @@ Stateless, all state in the database. Methods correspond 1:1 to MCP tools.
 | `_apply_transforms(job_id)` | Apply mapping + transforms to all rows, write `mapped_data` |
 | `_validate_rows(job_id)` | Schema validation, write issues |
 | `_resolve_entities(job_id)` | Fuzzy matching against existing records, write `resolved_refs` |
-| `_merge_rows(job_id, primary_row, absorbed_rows, preferences)` | Combine rows via backend LLM (Prompt 4) if free-text preferences, else Python |
-| `_group_issues(job_id)` | Group similar issues for batch presentation (e.g. 15 missing phones → one decision) |
+| `_merge_rows(job_id, primary_row, absorbed_rows, instruction)` | Combine rows via backend LLM |
+| `_group_issues(job_id)` | Group similar issues into batch questions (e.g. 15 missing phones → one decision) |
+| `_build_staging_state(job_id)` | Build the full JSON state object that the MCP app renders from |
 
 ### 3.2 File Parsing — `_parse_file`
 
@@ -277,32 +281,38 @@ Respond with ONLY a JSON array, one object per input entry:
 
 For large files that exceed context limits, chunk into batches of ~50 rows per call. Demo-scale data (dozens of rows) fits in a single call.
 
-#### Prompt 4 — Merge Interpretation
+#### Prompt 4 — Fix Instruction Interpretation
 
-Input: two (or more) data rows + user's free-text merge preferences.
-Output: a single merged row.
+Input: current staging state (rows, issues, batch questions) + user's free-text instruction.
+Output: a list of actions to apply to the staging data.
 
-This is the backend LLM call made during `fix_issue()` when the user provides natural language merge instructions. It's **not** called by the agent — the agent passes the user's text as `merge_preferences`, and the service interprets it.
+This is the backend LLM call made during `fix()`. It's called by the MCP app via a REST endpoint — the agent is not involved. The LLM sees the full staging context and interprets the user's natural language instruction against it.
 
 ```
-Merge these data rows into one record. Apply the user's preferences.
+You are a data import assistant. The user is reviewing staged import data
+and has given an instruction to fix issues.
 
-Rows to merge:
-{rows_json}
+Current staging state:
+{staging_state_json}
 
-User preferences: {merge_preferences}
+Current batch question: {batch_question}
 
-Rules:
-- Start from the first row as baseline
-- Apply the user's preferences to pick values from the other rows
-- If the user doesn't specify a preference for a field, keep the non-empty value
-  (or the value from the first row if both are non-empty)
-- Put any alternate values (e.g. second email) in a "notes" field
+User instruction: {instruction}
 
-Respond with ONLY a JSON object: the merged row with the same field names.
+Based on the instruction, determine what changes to make to the staging data.
+Respond with ONLY a JSON object:
+{
+  "actions": [
+    {"type": "merge", "rows": [1, 4], "merged_values": {field: value, ...}},
+    {"type": "set_value", "row": 2, "field": "name", "value": "QuackShop London"},
+    {"type": "reject", "rows": [5]},
+    {"type": "keep", "rows": [3]}
+  ],
+  "reasoning": "brief explanation of interpretation"
+}
 ```
 
-For simple actions (keep_both, reject), there is no LLM call — those are pure Python logic.
+For simple, deterministic fixes (reject all, keep all, set a specific value), the service can bypass the LLM and apply Python logic directly. The LLM is only invoked when the instruction requires interpretation (e.g. "use the longer name", "merge and keep both emails").
 
 ### 3.4 Entity Resolution — `_resolve_entities`
 
@@ -320,19 +330,17 @@ If confidence < 0.6, treat as new record.
 
 ---
 
-## 4. MCP Tools
+## 4. MCP Tool
 
-### 4.1 Tool Definitions
+One tool. The agent calls it and the MCP app takes over from there.
 
-All tools are tagged `data_import` for the dedicated import agent. They are not exposed to the sales or production agents.
-
-#### `data_import_upload`
+### 4.1 `data_import_upload`
 
 ```python
 @mcp.tool(name="data_import_upload", meta={
     "tags": ["data_import"],
     "ui": {
-        "resourceUri": "ui://data-import-mapping/result",
+        "resourceUri": "ui://data-import/result",
         "visibility": ["model", "app"]
     }
 })
@@ -343,132 +351,23 @@ def data_import_upload(
     """
     Upload a file for import into the ERP.
 
-    The file is parsed, the entity type is auto-detected, and a column mapping
-    is generated. Review the mapping in the response, then confirm or adjust.
+    The file is parsed, the entity type is auto-detected, columns are mapped,
+    transforms are applied, validation and entity resolution are run — all in
+    one call. The result appears in the interactive import panel where you can
+    review and fix issues before importing.
 
     Parameters:
         source: File path URL (file:///...) or inline content (text/base64)
         hint: Optional description of the data ("customer list from old CRM")
 
     Returns:
-        Job summary with detected entity type, column mapping, and preview rows.
+        Full staging state rendered in the interactive import panel.
     """
 ```
 
-#### `data_import_validate`
+That's it. No `data_import_validate`, no `data_import_fix_issue`, no `data_import_preview`. Those operations happen inside the MCP app via REST endpoints (see §5).
 
-```python
-@mcp.tool(name="data_import_validate", meta={
-    "tags": ["data_import"],
-    "ui": {
-        "resourceUri": "ui://data-import-issues/result",
-        "visibility": ["model", "app"]
-    }
-})
-def data_import_validate(job_id: str) -> Dict[str, Any]:
-    """
-    Validate all rows in a staging import job.
-
-    Applies transforms, checks required fields, detects duplicates,
-    and resolves references to existing ERP records.
-
-    Parameters:
-        job_id: The import job ID (e.g. 'IMP-001')
-
-    Returns:
-        Validation summary with issue counts and details.
-    """
-```
-
-#### `data_import_fix_issue`
-
-```python
-@mcp.tool(name="data_import_fix_issue", meta={"tags": ["data_import"]})
-def data_import_fix_issue(
-    job_id: str,
-    issue_type: str,
-    rows: List[int],
-    action: str,
-    merge_preferences: Optional[str] = None,
-) -> Dict[str, Any]:
-    """
-    Fix a flagged issue in a staging import job.
-
-    Parameters:
-        job_id: The import job ID
-        issue_type: Type of issue ('possible_duplicate', 'missing_field', etc.)
-        rows: Source row numbers affected
-        action: Resolution action ('merge', 'keep_both', 'set_value', 'reject')
-        merge_preferences: For merges, natural language instructions
-                          ("use the longer name", "keep both emails")
-
-    Returns:
-        Updated row status.
-    """
-```
-
-#### `data_import_preview`
-
-```python
-@mcp.tool(name="data_import_preview", meta={
-    "tags": ["data_import"],
-    "ui": {
-        "resourceUri": "ui://data-import-preview/result",
-        "visibility": ["model", "app"]
-    }
-})
-def data_import_preview(job_id: str) -> Dict[str, Any]:
-    """
-    Show a preview of what the import will create or update.
-
-    Parameters:
-        job_id: The import job ID
-
-    Returns:
-        Preview with records to create, update, and skip.
-    """
-```
-
-#### `data_import_execute`
-
-```python
-@mcp.tool(name="data_import_execute", meta={
-    "tags": ["data_import"],
-    "ui": {
-        "resourceUri": "ui://data-import-result/result",
-        "visibility": ["model", "app"]
-    }
-})
-def data_import_execute(job_id: str) -> Dict[str, Any]:
-    """
-    Execute the import — create records in the ERP.
-
-    Uses the standard service layer (same as crm_create_customer, etc.)
-    so all business rules, validation, and activity logging apply.
-
-    Parameters:
-        job_id: The import job ID
-
-    Returns:
-        Execution result with created entity IDs.
-    """
-```
-
-#### `data_import_rollback`
-
-```python
-@mcp.tool(name="data_import_rollback", meta={"tags": ["data_import"]})
-def data_import_rollback(job_id: str) -> Dict[str, Any]:
-    """
-    Undo an executed import by deleting all created records.
-
-    Parameters:
-        job_id: The import job ID (must be in 'executed' status)
-
-    Returns:
-        Rollback summary.
-    """
-```
+`data_import_execute` and `data_import_rollback` exist in the service layer but are called by the MCP app via `generic_confirm_action`, not by the agent.
 
 ### 4.2 Tool Registration
 
@@ -476,174 +375,184 @@ In `mcp_tools/data_import_tools.py`, following the standard pattern:
 
 ```python
 def register(mcp):
-    # ... all @mcp.tool definitions above
+    @mcp.tool(...)
+    def data_import_upload(source, hint=None):
+        result = data_import_service.upload(source, hint)
+        return result
 ```
 
-Registered via `mcp_tools/__init__.py`:
+Single tool, single registration. Registered via `mcp_tools/__init__.py`.
 
-```python
-from mcp_tools import data_import_tools
-# in register_all_tools():
-data_import_tools.register(mcp)
-```
+### 4.3 Read-Only Tools for Context
 
-### 4.3 Read-Only Tools for Entity Resolution
-
-The import agent also needs read access to existing ERP data for fuzzy matching. Rather than duplicating tools, expose a small subset of existing tools to the import agent:
+The import agent also has read access to existing ERP data (useful if the agent needs to answer questions about the import, though most resolution happens server-side):
 
 - `crm_search_customers` — search existing customers
 - `catalog_search_items` — search existing items
-- `inventory_list_items` — list items by type
 
 These are already tagged `shared` and need no changes.
 
 ---
 
-## 5. The `next_step` Orchestration Contract
+## 5. REST API Endpoints
 
-Every import tool response includes a `next_step` field. This is the mechanism that keeps the agent on track across multiple tool calls (see [DEMO_FLOW.md](DEMO_FLOW.md) for the full rationale).
+The MCP app communicates directly with the backend via REST. These are **not** MCP tools — the agent never calls them. They follow the same pattern as other MCP app → backend interactions (e.g. `generic_confirm_action`).
 
-### 5.1 Contract Shape
+### 5.1 Endpoints
+
+#### `POST /api/data-import/{job_id}/fix`
+
+Called by the MCP app when the user types in the Fix field.
 
 ```python
-next_step: Optional[dict] = {
-    "tool": str,              # MCP tool name to call next
-    "arguments": dict,        # arguments for that tool
-    "awaits": Optional[str],  # null = call immediately; "user_confirmation" / "user_decision" = wait
-    "description": str,       # human-readable instruction for the agent
-    "options": list[str],     # optional: suggested user responses (for decisions)
-}
+@router.post("/api/data-import/{job_id}/fix")
+async def fix_import(job_id: str, body: dict):
+    """
+    Interpret a free-text fix instruction and apply it to the staging data.
+
+    Request body:
+        {"instruction": "merge the duplicates, use the longer name"}
+
+    Returns:
+        Updated staging state (same shape as data_import_upload response).
+    """
+    result = data_import_service.fix(job_id, body["instruction"])
+    return result
 ```
 
-### 5.2 Rules
+#### `POST /api/data-import/{job_id}/execute`
 
-| `next_step` value | Agent behaviour |
-|--------------------|----------------|
-| `null` | Workflow complete. Summarise result to user. |
-| `awaits` is `null` | Call `tool` immediately with `arguments`. Do not talk to user first. |
-| `awaits` is set | Present `message` to user. Wait for response. Then call `tool`. |
+Called by the MCP app when the user clicks "Import".
 
-### 5.3 Pipeline Wiring
+```python
+@router.post("/api/data-import/{job_id}/execute")
+async def execute_import(job_id: str):
+    """
+    Execute the import — create records in the ERP.
 
-Each service method builds its own `next_step` based on the new job status:
+    Returns:
+        Execution summary with created entity IDs.
+    """
+    result = data_import_service.execute(job_id)
+    return result
+```
 
-| After method | Job status | `next_step` |
-|-------------|------------|-------------|
-| `upload()` | `mapped` | `{tool: "data_import_validate", awaits: "user_confirmation"}` — user reviews mapping first |
-| `validate()` — no issues | `ready_to_execute` | `{tool: "data_import_preview", awaits: null}` — auto-advance |
-| `validate()` — has issues | `validated` | `{tool: "data_import_fix_issue", awaits: "user_decision"}` — user resolves |
-| `fix_issue()` — issues remain | `validated` | `{tool: "data_import_fix_issue", awaits: "user_decision"}` — next issue |
-| `fix_issue()` — all resolved | `validated` | `{tool: "data_import_preview", awaits: null}` — auto-advance |
-| `preview()` | `ready_to_execute` | `{tool: "data_import_execute", awaits: "user_confirmation"}` — user confirms |
-| `execute()` | `executed` | `null` — done |
-| `rollback()` | `rolled_back` | `null` — done |
+#### `GET /api/data-import/{job_id}/state`
 
-### 5.4 Collapsible Design
+Called by the MCP app to refresh the current staging state (e.g. after a fix).
 
-The pipeline is wired so steps can be **collapsed server-side** without changing the agent prompt or the `next_step` contract. For example, `upload()` could internally call `_apply_transforms` + `_validate_rows` + `_resolve_entities` and return directly in `validated` status — the `next_step` would then point to `data_import_fix_issue` (if issues) or `data_import_preview` (if clean).
+```python
+@router.get("/api/data-import/{job_id}/state")
+async def get_import_state(job_id: str):
+    """
+    Get the current staging state for an import job.
 
-Start with separate steps (easier to debug), collapse later for a snappier demo.
+    Returns:
+        Full staging state (mapping, rows, issues, batch questions).
+    """
+    result = data_import_service.get_state(job_id)
+    return result
+```
+
+### 5.2 Route Registration
+
+In `api_routes/data_import_routes.py`, following the existing pattern. Registered via `api_routes/__init__.py`.
 
 ---
 
-## 6. MCP Apps
+## 6. MCP App — `data-import.html`
 
-Four small HTML pages in `mcp_apps_ui/`, registered as resources in `server.py`.
+One interactive HTML page in `mcp_apps_ui/`, registered as a resource in `server.py`. This is the entire Transform + Load UI.
 
-### 6.1 Resource URIs
+### 6.1 Resource URI
 
-| MCP App | Resource URI | Renders After |
-|---------|-------------|---------------|
-| `data-import-mapping.html` | `ui://data-import-mapping/result` | `data_import_upload` |
-| `data-import-issues.html` | `ui://data-import-issues/result` | `data_import_validate` |
-| `data-import-preview.html` | `ui://data-import-preview/result` | `data_import_preview` |
-| `data-import-result.html` | `ui://data-import-result/result` | `data_import_execute` |
+`ui://data-import/result` — renders after `data_import_upload` returns.
 
-All are read-only. No interactive controls. Data is passed via the structured content of the tool response.
+### 6.2 Layout
 
-### 6.2 `data-import-mapping.html`
+The app has three sections that update dynamically based on the staging state:
 
-Displays:
-- Source column → target field table
-- Confidence badge per row (green ≥ 0.85, yellow ≥ 0.70, red < 0.70)
-- Transform description
-- Sample values (first 2–3 rows)
+**Header section:**
+- Job summary: filename, entity type, row count
+- Status badge: "Reviewing" / "Ready to import" / "Imported"
 
-### 6.3 `data-import-issues.html`
+**Data section:**
+- Column mapping table: source → target, confidence badges, transform descriptions
+- Data grid: all rows with status badges (`ready` / `needs_review` / `auto_fixed` / `rejected`)
+- Auto-fix log: collapsible list of automatic corrections applied ("'france' → FR", "'45 jours' → 45 days")
 
-Displays:
-- Summary bar: ready / needs review / rejected counts
-- Issue list grouped by severity (error → warning → info)
-- Per-row status badge
-- Duplicate highlight (side-by-side comparison of matched rows)
+**Interaction section:**
+- Batch question area: displays the current grouped question (if any)
+- **Fix** text input field: free-text input for the user's instruction
+- **Fix** submit button: sends the instruction to `POST /api/data-import/{job_id}/fix`
+- **Import** button: enabled only when no errors remain. Calls `POST /api/data-import/{job_id}/execute`
 
-### 6.4 `data-import-preview.html`
+After execution, the data section updates to show the created entity IDs with links.
 
-Displays:
-- Records to create (table with all fields)
-- Records to update (with diff: old value → new value)
-- Skipped/rejected count
+### 6.3 Communication Pattern
 
-### 6.5 `data-import-result.html`
+```
+MCP App                          Backend
+  │                                 │
+  │  (initial render from           │
+  │   structured content data)      │
+  │                                 │
+  │──POST /fix {instruction}──────>│
+  │                                 │  ← backend LLM interprets
+  │<──── updated staging state ────│
+  │                                 │
+  │  (re-render data grid,          │
+  │   show next batch question)     │
+  │                                 │
+  │──POST /execute ──────────────>│
+  │                                 │  ← service creates records
+  │<──── execution result ─────────│
+  │                                 │
+  │  (show created entities)        │
+```
 
-Displays:
-- Created entity list (ID, name, type)
-- Links to entity detail pages (via `ui_url`)
-- Error list (if any rows failed)
+The MCP app is a self-contained HTML/JS iframe. All communication uses `fetch()` to the backend REST endpoints. The agent is not involved after the initial `data_import_upload` call.
+
+### 6.4 Existing Pattern
+
+This follows the same architecture as other interactive MCP apps in the codebase:
+
+- `tariff-picker.html` — user selects tariff codes, app POSTs to backend
+- `generic-confirm.html` — user confirms an action, app calls backend to execute
+- `qc-inspection.html` — displays AI inspection results with interactive elements
+
+The key difference: `data-import.html` has a free-text input field (the Fix field), which is new. But the communication pattern (MCP app → REST endpoint → re-render) is identical.
 
 ---
 
 ## 7. Agent Prompt
 
-The import agent is a **dedicated agent** — separate from the sales and production agents. It has access only to `data_import_*` tools plus read-only lookups.
+The import agent is a **dedicated agent** — separate from the sales and production agents. Its job is trivially simple.
 
 ### 7.1 System Prompt
 
 ```
 You are a data import assistant for Duck Inc's ERP system.
 
-You help users import data from external files (CSV, Excel, JSON, images, PDFs)
-into the ERP. You detect the data format, map columns to ERP fields, validate
-the data, resolve duplicates, and execute the import.
+When the user wants to import data from a file, call `data_import_upload`
+with the file source. The interactive import panel will take over from there —
+the user will review, fix issues, and execute the import directly in the panel.
 
-CRITICAL OPERATING RULES:
+Do not fabricate file paths, data, or mappings. If unsure about the file
+location, ask the user.
 
-1) Tool-driven workflow:
-   - Start every import with `data_import_upload`.
-   - After EVERY tool response, check the `next_step` field:
-     - If `next_step` is null → workflow complete, summarise the result.
-     - If `next_step.awaits` is null → immediately call `next_step.tool`
-       with `next_step.arguments`. Do NOT talk to the user first.
-     - If `next_step.awaits` is set → present the `message` to the user,
-       wait for their response, then call the indicated tool.
-   - NEVER skip a step or decide on your own which tool to call next.
-   - ALWAYS relay the `message` field from each tool response to the user.
-
-2) Do not fabricate data:
-   - Never invent mappings, entity IDs, or field values.
-   - If unsure, ask the user.
-
-3) Stay focused:
-   - You handle data import only. If the user asks about orders, production,
-     or anything else, say it's outside your scope.
-
-4) User decisions:
-   - When presenting issues (duplicates, missing fields), clearly state the
-     options and wait for the user's choice.
-   - For merge decisions, ask which values to keep if not obvious.
+You handle data import only. If the user asks about orders, production,
+or anything else, say it's outside your scope.
 ```
+
+No workflow orchestration rules, no `next_step` contract, no multi-step sequencing. The agent calls one tool and summarises what happened.
 
 ### 7.2 Tool Visibility
 
 | Tool | Available to Import Agent |
 |------|--------------------------|
 | `data_import_upload` | Yes |
-| `data_import_validate` | Yes |
-| `data_import_fix_issue` | Yes |
-| `data_import_preview` | Yes |
-| `data_import_execute` | Yes |
-| `data_import_rollback` | Yes |
-| `crm_search_customers` | Yes (read-only, for entity resolution display) |
+| `crm_search_customers` | Yes (read-only) |
 | `catalog_search_items` | Yes (read-only) |
 | All other tools | No |
 
@@ -655,12 +564,9 @@ New files to create:
 
 ```
 services/data_import.py          — DataImportService
-mcp_tools/data_import_tools.py   — MCP tool definitions
-api_routes/data_import_routes.py — REST endpoints (thin wrappers)
-mcp_apps_ui/data-import-mapping.html
-mcp_apps_ui/data-import-issues.html
-mcp_apps_ui/data-import-preview.html
-mcp_apps_ui/data-import-result.html
+mcp_tools/data_import_tools.py   — single MCP tool (data_import_upload)
+api_routes/data_import_routes.py — REST endpoints (fix, execute, state)
+mcp_apps_ui/data-import.html     — interactive staging/import app
 ```
 
 Files to modify:
@@ -670,7 +576,7 @@ schema.sql                       — add import_jobs + import_rows tables
 services/__init__.py             — register data_import_service
 mcp_tools/__init__.py            — register data_import_tools
 api_routes/__init__.py           — register data_import_routes
-server.py                        — register ui:// resources for MCP apps
+server.py                        — register ui://data-import resource
 config.py                        — add DATA_IMPORT_MODEL constant
 ```
 
@@ -711,11 +617,14 @@ Use the existing `_next_id()` helper pattern from other services.
 
 ## 11. Activity Log Integration
 
-Import execution produces activity log entries via the existing `TOOL_ACTION_MAP` in `_common.py`:
+Import execution and rollback produce activity log entries. Since these are triggered via REST endpoints (not MCP tools), they are logged directly by the service methods:
 
 ```python
-TOOL_ACTION_MAP["data_import_execute"] = ("data_import", "import.executed")
-TOOL_ACTION_MAP["data_import_rollback"] = ("data_import", "import.rolled_back")
+# In data_import_service.execute():
+activity_service.log("data_import", "import.executed", details={...})
+
+# In data_import_service.rollback():
+activity_service.log("data_import", "import.rolled_back", details={...})
 ```
 
 Individual entity creation (e.g. `customer_service.create_customer`) already logs its own activity — no double-logging needed.

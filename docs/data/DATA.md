@@ -23,7 +23,7 @@ Traditional import wizards demand the user hand-map every column, fix every date
 2. **Confidence, not magic.** Every mapped field gets a confidence score. High-confidence rows go through silently; low-confidence rows surface for review. The human stays in control.
 3. **Entity resolution, not blind insert.** "J. Doe, Paris" should match the existing John Doe customer, not create a duplicate. The AI resolves references against live ERP data.
 4. **Explain every decision.** The agent must justify each mapping, merge, and correction — auditable and reversible.
-5. **Fit the MCP agent model.** Import/export happens through MCP tool calls. The UI provides review screens. The agent drives the workflow conversationally.
+5. **Fit the MCP agent model.** Import starts with a single MCP tool call. The interactive MCP app handles review, fixes, and execution — the user works directly in the app, not through back-and-forth chat. The agent is a thin launcher.
 
 ---
 
@@ -50,13 +50,13 @@ The ingest step produces a normalised **staging table**: a list of flat dicts wi
 
 **MCP tool:** `data_import_upload`
 - Input: file content (base64 or text), file name, optional hint ("this is a customer list from our old CRM")
-- Output: staging table ID, row count, detected columns, preview of first 5 rows
+- Output: full staging state rendered in the interactive import panel (mapping, rows, issues, batch questions)
 
 ---
 
 ### F2 — AI Schema Mapping
 
-**What:** The agent maps staging columns to ERP entity fields using the LLM, not a rule engine.
+**What:** Columns are mapped to ERP entity fields using the LLM, not a rule engine. This happens automatically as part of `data_import_upload` — no separate tool call.
 
 The model receives:
 1. The staging table column names + sample values (first 10 rows)
@@ -82,18 +82,13 @@ Telefon            → customer.phone         normalize +49       0.85
 Zahlungsziel       → customer.payment_terms parse "30 Tage"→30  0.79
 ```
 
-The user sees a mapping review, can override any assignment, and confirms.
-
-**MCP tools:**
-- `data_import_detect_entity` — auto-detect which ERP entity the data represents
-- `data_import_map_columns` — generate the mapping plan
-- `data_import_update_mapping` — manually override a column mapping
+The user sees the mapping in the interactive import panel and can request adjustments via the Fix field.
 
 ---
 
 ### F3 — Data Quality Analysis
 
-**What:** Before inserting anything, the agent scans every row and flags problems.
+**What:** Before inserting anything, every row is scanned and problems are flagged. This runs automatically as part of `data_import_upload`.
 
 Categories of issues:
 | Severity | Examples |
@@ -107,18 +102,13 @@ The analysis is powered by a combination of:
 - **LLM judgement** — "Is `Bückingham Palace` a plausible address?" → yes (typo for Buckingham), auto-correct
 - **ERP cross-reference** — check for duplicate customers, validate SKUs exist, verify supplier IDs
 
-Each row gets an overall status: `ready`, `needs_review`, or `rejected`.
-
-**MCP tools:**
-- `data_import_validate` — run full validation, return issue summary
-- `data_import_get_issues` — list all issues for a staging table (filterable by severity)
-- `data_import_fix_issue` — apply a correction to a specific issue
+Each row gets an overall status: `ready`, `needs_review`, or `rejected`. Issues are displayed in the interactive import panel grouped by severity, with auto-fixes shown as info-level annotations.
 
 ---
 
 ### F4 — Entity Resolution (Fuzzy Matching)
 
-**What:** When imported data references existing ERP records, the agent resolves those references intelligently instead of requiring exact ID matches.
+**What:** When imported data references existing ERP records, references are resolved intelligently instead of requiring exact ID matches. This runs automatically as part of `data_import_upload`.
 
 Scenarios:
 - **Customer dedup:** Incoming "J. Doe — Duck Fan Paris" matches existing customer `CUST-042` (John Doe, company "DuckFan Paris SARL") with 87% confidence
@@ -131,17 +121,13 @@ Resolution strategy:
 3. **Semantic match** via embedding similarity from the LLM → confidence 0.5–0.8
 4. **No match** → flag as new record, propose creation
 
-The agent presents matches with explanations: _"Matched to CUST-042 (John Doe) because email `john@duckfan-paris.example` is an exact match, and company name is 84% similar."_
-
-**MCP tools:**
-- `data_import_resolve_entities` — run entity resolution on all rows
-- `data_import_confirm_match` — confirm or reject a proposed match
+The agent presents matches with explanations: _"Matched to CUST-042 (John Doe) because email `john@duckfan-paris.example` is an exact match, and company name is 84% similar."_ Ambiguous matches are surfaced in the import panel as batch questions.
 
 ---
 
 ### F5 — Smart Transform & Enrichment
 
-**What:** The agent doesn't just map columns — it transforms values to fit the ERP schema, and fills gaps using context.
+**What:** Values are transformed to fit the ERP schema, and gaps filled using context. This happens automatically during `data_import_upload` — the results are shown as before/after annotations in the import panel.
 
 Transforms:
 | Input | Output | How |
@@ -156,42 +142,36 @@ Transforms:
 
 The key insight: the LLM handles the **long tail** of format variations that no regex library will ever cover. Rule engines handle the common 80%; the LLM handles the weird 20% that makes import projects drag on for weeks.
 
-**MCP tool:**
-- `data_import_transform` — apply all transforms and enrichments, return before/after preview
-
 ---
 
 ### F6 — Conversational Conflict Resolution
 
-**What:** When the agent encounters ambiguity it cannot resolve alone, it asks the user — but smartly, batching related questions.
+**What:** When the system encounters ambiguity it cannot resolve alone, it asks the user — but smartly, batching related questions. This happens in the interactive import panel, not via agent chat.
 
 Instead of:
 > "Row 3: Is 'Large Elvis' the 20cm or 25cm variant?"
 > "Row 7: Is 'Large Elvis' the 20cm or 25cm variant?"
 > "Row 12: Is 'Large Elvis' the 20cm or 25cm variant?"
 
-It asks:
+The import panel shows:
 > "12 rows reference 'Large Elvis'. I think this is ELVIS-DUCK-20CM (the only Elvis duck in catalog). Should I map all 12 to that SKU?"
 
-The agent groups similar ambiguities and presents batch decisions. One answer fixes dozens of rows.
+The user types a free-text instruction in the Fix field (e.g. "yes, map them all"). The backend LLM interprets the instruction, applies the fix, and the panel refreshes. One answer fixes dozens of rows.
 
 ---
 
 ### F7 — Import Execution with Preview
 
-**What:** Once mapping and validation are done, the agent shows a final preview and executes the import as a batch of MCP tool calls.
+**What:** Once all issues are resolved, the import panel shows a final summary and the user clicks "Import" to execute.
 
-The preview shows:
+The panel shows:
 - Total records to create / update / skip
-- Records needing review (with inline issue details)
-- Side effects: "This will create 3 new customers and 8 new sales orders"
+- All rows with their status badges and annotations
+- Side effects: "This will create 3 new customers"
 
-The import itself uses the existing MCP tools (`crm_create_customer`, `quote_create`, etc.) so all normal business logic, validation, and activity logging apply. No backdoor inserts.
+The user clicks "Import" in the panel. The backend creates records via the standard service layer (`crm_create_customer`, `quote_create`, etc.) so all normal business logic, validation, and activity logging apply. No backdoor inserts. The panel updates to show created entity IDs with links.
 
-**MCP tools:**
-- `data_import_preview` — show what the import will do (dry run)
-- `data_import_execute` — run the import, return results summary
-- `data_import_rollback` — undo a completed import (via recorded IDs)
+Rollback is available via `data_import_rollback` (deletes created records by stored IDs).
 
 ---
 
@@ -246,22 +226,12 @@ Two new staging tables (`import_jobs`, `import_rows`) isolated from operational 
 
 | Tool | Tag | Description |
 |------|-----|-------------|
-| `data_import_upload` | shared | Upload file/image/text, create staging job |
-| `data_import_detect_entity` | shared | Auto-detect target entity type |
-| `data_import_map_columns` | shared | AI-generate column→field mapping |
-| `data_import_update_mapping` | shared | Override a column mapping manually |
-| `data_import_validate` | shared | Run quality checks on all rows |
-| `data_import_get_issues` | shared | List issues (filterable by severity) |
-| `data_import_fix_issue` | shared | Apply correction to a specific issue |
-| `data_import_resolve_entities` | shared | Run fuzzy matching against existing records |
-| `data_import_confirm_match` | shared | Confirm/reject a proposed entity match |
-| `data_import_transform` | shared | Apply value transforms & enrichment |
-| `data_import_preview` | shared | Dry run: show what import will create/update |
-| `data_import_execute` | shared | Execute the import via standard MCP tools |
-| `data_import_rollback` | shared | Undo a completed import |
+| `data_import_upload` | data_import | Upload file, parse, map, validate, resolve — returns interactive staging panel |
 | `data_export_create` | shared | Export ERP data to file |
 | `data_export_from_template` | shared | Export matching a sample file's format |
 | `data_export_list` | shared | List recent exports |
+
+The import flow uses only **one MCP tool** (`data_import_upload`). All subsequent interaction (fix issues, execute import) happens in the interactive MCP app via REST endpoints — the agent is not involved after the initial call. See [DATA_DESIGN.md](DATA_DESIGN.md) §5 for REST endpoint details.
 
 ---
 
@@ -280,13 +250,10 @@ Kd-Nr;Firma;Ansprechpartner;E-Mail;Straße;PLZ;Ort;Land;Telefon;Zahlungsziel
 ```
 
 The agent:
-1. Detects: CSV, semicolon-separated, German headers, customer entity
-2. Maps all 10 columns with 85%+ confidence
-3. Flags row 1 + row 4 as potential duplicates (same company, similar name, same address)
-4. Normalises "france" → "FR", "30 Tage" → 30, "45 jours" → 45
-5. Notes row 2 is missing contact name (warning) and row 4 missing phone (info)
-6. Asks: "Rows 1 and 4 look like the same customer (DuckFan Paris). Keep both, or merge?"
-7. Presenter says merge → agent creates 3 customers
+1. Calls `data_import_upload` → parses file, detects entity type, maps columns, validates, resolves entities — all server-side in one call
+2. The interactive import panel renders inline showing: mapping table, all 4 rows with annotations, auto-fixes ("france" → "FR", "30 Tage" → 30, "45 jours" → 45), and a batch question about the duplicate
+3. Presenter types "merge them, use the longer name" in the Fix field → panel refreshes with 3 clean rows
+4. Presenter clicks "Import" → 3 customers created
 
 ### Demo B — "The Sticky Note Order"
 
@@ -336,52 +303,38 @@ The agent:
 
 ---
 
-## MCP Apps (UI)
+## MCP App — Interactive Import Panel
 
-All UI is read-only. The agent drives every mutation via MCP tools. Where visual feedback helps, small self-contained MCP apps render inside the chat — same pattern as `qc-inspection.html`, `item-inspect.html`, and `tariff-picker.html`.
+One interactive MCP app (`data-import.html`) handles the entire review, fix, and execute flow. It renders inline in the chat after `data_import_upload` returns — same pattern as `tariff-picker.html` and `qc-inspection.html`, but with a free-text input field for issuing fix instructions.
 
-### `data-import-mapping` — Mapping Review
+### What it shows
 
-Displayed after `data_import_map_columns` returns. Shows:
-- Side-by-side: staging columns ↔ target fields
-- Confidence badges (green / yellow / red) per mapping
-- Sample values from first rows for visual verification
+- **Mapping table:** source column → target field, confidence badges, transform descriptions
+- **Data grid:** all rows with status badges (ready / needs review / auto-fixed / rejected)
+- **Auto-fix log:** collapsible list of corrections applied automatically ("'france' → FR")
+- **Batch question area:** the current grouped question (if any issues remain)
+- **Fix field:** free-text input where the user types fix instructions (e.g. "merge them, use the longer name")
+- **Import button:** enabled when all errors are resolved; clicks execute the import via REST endpoint
 
-The user reviews in the chat, then tells the agent which mappings to override (if any). The agent calls `data_import_update_mapping` — no interactive UI mutation needed.
+### How it works
 
-### `data-import-issues` — Validation Report
+The MCP app communicates directly with the backend via REST endpoints — no agent involvement. When the user types in the Fix field, the app sends the instruction to `POST /api/data-import/{job_id}/fix`. The backend LLM interprets the instruction, applies fixes, re-validates, and returns the updated staging state. The app re-renders. When the user clicks "Import", the app calls `POST /api/data-import/{job_id}/execute`.
 
-Displayed after `data_import_validate`. Shows:
-- Summary bar: N ready, N needs review, N rejected
-- Expandable issue list grouped by severity
-- Per-row status badges
-
-The user discusses fixes conversationally; the agent calls `data_import_fix_issue`.
-
-### `data-import-preview` — Import Diff
-
-Displayed before `data_import_execute`. Shows:
-- New records to create (grouped by entity type)
-- Existing records to update (with field-level diff highlighting)
-- Skipped / rejected rows
-- Side effects ("will also create 3 quotes")
-
-The user says "go" and the agent executes.
-
-### `data-import-result` — Execution Summary
-
-Displayed after `data_import_execute`. Shows:
-- Created / updated / skipped counts
-- Links to created entities (customer IDs, quote IDs, etc.)
-- Any errors encountered during execution
+After execution, the panel shows created entity IDs with links to each record in the ERP.
 
 ---
 
 ## Implementation Notes
 
-All interaction is via chat. The agent calls MCP tools; MCP apps render read-only visualisations inline. No new UI tabs.
+The import follows an **Extract → Transform → Load** pattern:
 
-For the full technical design — service architecture, LLM prompts, `next_step` orchestration, file structure, and dependencies — see [DATA_DESIGN.md](DATA_DESIGN.md).
+- **Extract:** Agent calls `data_import_upload` (one MCP tool call). The backend parses the file, maps columns, validates, resolves entities — all server-side.
+- **Transform:** The interactive MCP app renders. The user reviews data, fixes issues via free-text instructions (MCP app ↔ backend REST, no agent involved).
+- **Load:** User clicks "Import" in the panel. Backend creates records via the service layer.
+
+The agent is a thin launcher — it calls one tool, summarises the result, and the MCP app takes over. No multi-step agent orchestration, no workflow drift.
+
+For the full technical design — service architecture, LLM prompts, REST endpoints, MCP app design, and dependencies — see [DATA_DESIGN.md](DATA_DESIGN.md).
 
 ---
 
