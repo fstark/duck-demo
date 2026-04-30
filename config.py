@@ -56,6 +56,7 @@ QC_INFERENCE_MODEL = os.getenv("QC_INFERENCE_MODEL", "gpt-5.4")
 
 # Data Import constants
 DATA_IMPORT_MODEL = os.getenv("DATA_IMPORT_MODEL", "gpt-4o")
+IMAGE_IMPORT_MODEL = os.getenv("IMAGE_IMPORT_MODEL", "gpt-4o")  # vision model for image-based import
 QC_LABEL_MODEL = os.getenv("QC_LABEL_MODEL", "gpt-5.4")  # model used for MO-label extraction from images
 # Set QC_INFERENCE_MOCK=true to skip the real API call and return a canned result
 QC_INFERENCE_MOCK = os.getenv("QC_INFERENCE_MOCK", "false").lower() == "true"

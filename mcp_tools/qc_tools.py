@@ -36,7 +36,8 @@ def register(mcp):
 
         Parameters:
             image: Image as a base64 string, data URI ('data:image/png;base64,...'),
-                   or file path URL ('file:///path/to/image.png')
+                   file path URL ('file:///path/to/image.png'), or plain file path
+                   ('C:/path/to/image.png')
             uploaded_by: Optional operator identifier
 
         Returns:

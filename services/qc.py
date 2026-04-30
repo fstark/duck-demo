@@ -9,6 +9,7 @@ import io
 import json
 import logging
 import math
+import os
 from typing import Any
 
 from PIL import Image
@@ -646,7 +647,14 @@ class QcService:
             _, b64data = image_input.split(",", 1)
             img_bytes = base64.b64decode(b64data)
         elif image_input.startswith("file://"):
-            img_bytes = open(image_input[len("file://"):], "rb").read()
+            from urllib.parse import urlparse, unquote
+            file_path = unquote(urlparse(image_input).path)
+            # On Windows, strip leading slash before drive letter (e.g. /C:/...)
+            if len(file_path) >= 3 and file_path[0] == '/' and file_path[2] == ':':
+                file_path = file_path[1:]
+            img_bytes = open(file_path, "rb").read()
+        elif os.path.isfile(image_input):
+            img_bytes = open(image_input, "rb").read()
         else:
             img_bytes = base64.b64decode(image_input)
 

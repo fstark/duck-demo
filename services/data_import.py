@@ -51,6 +51,17 @@ ENTITY_SCHEMAS = {
         "fuzzy_keys": ["name", "company", "city"],
         "service_create": "customer_service.create_customer",
     },
+    "sales_order": {
+        "table": None,
+        "fields": {
+            "sku":          {"required": True,  "type": "text"},
+            "qty":          {"required": True,  "type": "integer"},
+            "product_name": {"required": False, "type": "text"},
+        },
+        "dedup_keys": [],
+        "fuzzy_keys": [],
+        "service_create": "quote_service.create_quote",
+    },
 }
 
 # Country name → ISO 3166-1 alpha-2 lookup
@@ -397,7 +408,7 @@ class DataImportService:
             job = conn.execute("SELECT entity_type FROM import_jobs WHERE id = ?", (job_id,)).fetchone()
             entity_type = job[0]
             schema = ENTITY_SCHEMAS.get(entity_type)
-            if not schema:
+            if not schema or not schema.get("table"):
                 return
 
             # Load existing records
@@ -801,6 +812,90 @@ class DataImportService:
             "target_fields": target_fields,
             "rows": rows,
         }
+
+    # ------------------------------------------------------------------
+    # Core: create from structured data (image import)
+    # ------------------------------------------------------------------
+
+    def create_from_image(
+        self,
+        *,
+        lines: list[dict],
+        customer_id: str | None = None,
+        customer_name: str | None = None,
+        delivery_date: str | None = None,
+        notes: str | None = None,
+    ) -> dict:
+        """Create an import job from pre-extracted structured data (e.g. from image).
+
+        Skips file parsing and column mapping. Creates rows directly in 'ready'
+        status with mapped_data already populated. Returns full staging state
+        for the data-import-rows UI.
+
+        Args:
+            lines: List of dicts with keys: sku, qty, product_name
+            customer_id: Resolved customer ID (if known)
+            customer_name: Customer name from document
+            delivery_date: Requested delivery date
+            notes: Additional notes from document
+        """
+        with db_conn() as conn:
+            job_id = generate_id(conn, "IMP", "import_jobs")
+            now = _sim_now(conn)
+
+            # Store order-level metadata in global_instructions as JSON
+            metadata = {}
+            if customer_id:
+                metadata["customer_id"] = customer_id
+            if customer_name:
+                metadata["customer_name"] = customer_name
+            if delivery_date:
+                metadata["delivery_date"] = delivery_date
+            if notes:
+                metadata["notes"] = notes
+
+            columns = ["sku", "qty", "product_name"]
+            mapping = [
+                {"source": "sku", "target": "sku"},
+                {"source": "qty", "target": "qty"},
+                {"source": "product_name", "target": "product_name"},
+            ]
+
+            conn.execute(
+                "INSERT INTO import_jobs (id, source_filename, source_format, hint, status, "
+                "row_count, columns_detected, entity_type, mapping_plan, global_instructions, created_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    job_id,
+                    "image_import",
+                    "image (structured extraction)",
+                    "Sales order extracted from image",
+                    "validated",
+                    len(lines),
+                    json.dumps(columns),
+                    "sales_order",
+                    json.dumps(mapping),
+                    json.dumps(metadata),
+                    now,
+                ),
+            )
+
+            for i, line in enumerate(lines, 1):
+                row_id = f"{job_id}-R{i:02d}"
+                raw_data = {
+                    "sku": line.get("sku", ""),
+                    "qty": str(line.get("qty", "")),
+                    "product_name": line.get("product_name", line.get("name", "")),
+                }
+                conn.execute(
+                    "INSERT INTO import_rows (id, job_id, source_row, raw_data, mapped_data, status) "
+                    "VALUES (?, ?, ?, ?, ?, ?)",
+                    (row_id, job_id, i, json.dumps(raw_data), json.dumps(raw_data), "ready"),
+                )
+
+            conn.commit()
+
+        return self._build_staging_state(job_id)
 
     # ------------------------------------------------------------------
     # Core: upload (Phase 1 — returns mapping state)
@@ -1230,6 +1325,7 @@ class DataImportService:
     def execute(self, *, job_id: str, exclude_columns: list[str] | None = None) -> dict:
         """Execute import — create records via service layer."""
         from services.customer import create_customer
+        from services.quote import quote_service
         from services.activity import log_activity
         excluded = set(exclude_columns) if exclude_columns else set()
 
@@ -1246,31 +1342,83 @@ class DataImportService:
             ).fetchall())
 
         created = []
-        for row in rows:
-            mapped = json.loads(row["mapped_data"]) if row["mapped_data"] else {}
 
-            if entity_type == "customer":
-                # Filter to valid create_customer kwargs
-                valid_keys = {
-                    "name", "gender", "company", "email", "phone", "address_line1",
-                    "address_line2", "city", "postal_code", "country",
-                    "tax_id", "payment_terms", "currency", "notes",
-                }
-                kwargs = {k: v for k, v in mapped.items() if k in valid_keys and k not in excluded and v is not None and v != ""}
-                if "name" not in kwargs:
-                    kwargs["name"] = mapped.get("company", "Unknown")
+        if entity_type == "sales_order":
+            # Build quote lines from rows
+            lines = []
+            for row in rows:
+                mapped = json.loads(row["mapped_data"]) if row["mapped_data"] else {}
+                sku = mapped.get("sku")
+                qty = mapped.get("qty")
+                if sku and qty:
+                    try:
+                        qty = int(qty)
+                    except (ValueError, TypeError):
+                        qty = 1
+                    lines.append({"sku": sku, "qty": qty})
 
-                result = create_customer(**kwargs)
-                entity_id = result["customer_id"]
+            # Get order metadata from global_instructions
+            metadata = {}
+            if job.get("global_instructions"):
+                try:
+                    metadata = json.loads(job["global_instructions"])
+                except (json.JSONDecodeError, TypeError):
+                    pass
 
-                with db_conn() as conn:
+            customer_id = metadata.get("customer_id")
+            if not customer_id:
+                raise ValueError("Cannot create sales order: no customer_id in job metadata")
+
+            # Create quote
+            quote_args = {
+                "customer_id": customer_id,
+                "lines": lines,
+                "requested_delivery_date": metadata.get("delivery_date"),
+                "ship_to": None,
+            }
+            if metadata.get("notes"):
+                quote_args["note"] = metadata["notes"]
+
+            result = quote_service.create_quote(**quote_args)
+            entity_id = result.get("quote_id") or result.get("id")
+
+            # Mark rows as imported
+            with db_conn() as conn:
+                for row in rows:
                     conn.execute(
                         "UPDATE import_rows SET status = 'imported', created_entity_type = ?, created_entity_id = ? WHERE id = ?",
-                        ("customer", entity_id, row["id"]),
+                        ("quote", entity_id, row["id"]),
                     )
-                    conn.commit()
+                conn.commit()
 
-                created.append({"row": row["source_row"], "entity_type": "customer", "entity_id": entity_id})
+            created.append({"row": "all", "entity_type": "quote", "entity_id": entity_id})
+
+        else:
+            for row in rows:
+                mapped = json.loads(row["mapped_data"]) if row["mapped_data"] else {}
+
+                if entity_type == "customer":
+                    # Filter to valid create_customer kwargs
+                    valid_keys = {
+                        "name", "gender", "company", "email", "phone", "address_line1",
+                        "address_line2", "city", "postal_code", "country",
+                        "tax_id", "payment_terms", "currency", "notes",
+                    }
+                    kwargs = {k: v for k, v in mapped.items() if k in valid_keys and k not in excluded and v is not None and v != ""}
+                    if "name" not in kwargs:
+                        kwargs["name"] = mapped.get("company", "Unknown")
+
+                    result = create_customer(**kwargs)
+                    entity_id = result["customer_id"]
+
+                    with db_conn() as conn:
+                        conn.execute(
+                            "UPDATE import_rows SET status = 'imported', created_entity_type = ?, created_entity_id = ? WHERE id = ?",
+                            ("customer", entity_id, row["id"]),
+                        )
+                        conn.commit()
+
+                    created.append({"row": row["source_row"], "entity_type": "customer", "entity_id": entity_id})
 
         # Update job
         with db_conn() as conn:

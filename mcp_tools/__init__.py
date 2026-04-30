@@ -28,6 +28,7 @@ from mcp_tools import (
     tariff_tools,
     qc_tools,
     data_import_tools,
+    image_import_tools,
 )
 
 _MODULES = [
@@ -52,6 +53,7 @@ _MODULES = [
     tariff_tools,
     qc_tools,
     data_import_tools,
+    image_import_tools,
 ]
 
 

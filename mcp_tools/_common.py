@@ -38,6 +38,7 @@ TOOL_ACTION_MAP: Dict[str, tuple] = {
     "sales_link_shipment":       ("logistics",  "shipment.linked"),
     "qc_apply_disposition":      ("quality",    "qc.disposition_applied"),
     "data_import_upload":        ("data_import","import.uploaded"),
+    "image_import_upload":       ("data_import","image_import.uploaded"),
 }
 
 # Keys in a tool result dict that identify an entity ID
