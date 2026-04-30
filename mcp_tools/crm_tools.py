@@ -34,6 +34,7 @@ def register(mcp):
     @log_tool("crm_create_customer")
     def create_customer(
         name: str,
+        gender: Optional[str] = None,
         company: Optional[str] = None,
         email: Optional[str] = None,
         phone: Optional[str] = None,
@@ -53,6 +54,7 @@ def register(mcp):
 
         Parameters:
             name: Customer name (required)
+            gender: Gender code (e.g., 'M', 'F', or None if unknown)
             company: Company name
             email: Email address
             phone: Phone number
@@ -72,6 +74,7 @@ def register(mcp):
         """
         arguments = {
             "name": name,
+            "gender": gender,
             "company": company,
             "email": email,
             "phone": phone,
@@ -87,19 +90,20 @@ def register(mcp):
         }
 
         field_configs = [
-            {"name": "name", "label": "Customer Name", "type": "text", "value": name, "required": True, "group": "Basic Info", "display_order": 1},
-            {"name": "company", "label": "Company", "type": "text", "value": company, "group": "Basic Info", "display_order": 2},
-            {"name": "email", "label": "Email", "type": "email", "value": email, "group": "Contact", "display_order": 3},
-            {"name": "phone", "label": "Phone", "type": "text", "value": phone, "group": "Contact", "display_order": 4},
-            {"name": "address_line1", "label": "Address Line 1", "type": "text", "value": address_line1, "group": "Address", "display_order": 5},
-            {"name": "address_line2", "label": "Address Line 2", "type": "text", "value": address_line2, "group": "Address", "display_order": 6},
-            {"name": "city", "label": "City", "type": "text", "value": city, "group": "Address", "display_order": 7},
-            {"name": "postal_code", "label": "Postal Code", "type": "text", "value": postal_code, "group": "Address", "display_order": 8},
-            {"name": "country", "label": "Country", "type": "text", "value": country, "help_text": "ISO 3166-1 alpha-2 code (e.g., FR, DE, US)", "group": "Address", "display_order": 9},
-            {"name": "tax_id", "label": "Tax ID / VAT", "type": "text", "value": tax_id, "group": "Billing", "display_order": 10},
-            {"name": "payment_terms", "label": "Payment Terms (days)", "type": "number", "value": payment_terms or 30, "group": "Billing", "display_order": 11},
-            {"name": "currency", "label": "Currency", "type": "text", "value": currency or "EUR", "group": "Billing", "display_order": 12},
-            {"name": "notes", "label": "Internal Notes", "type": "textarea", "value": notes, "group": "Other", "display_order": 13},
+            {"name": "gender", "label": "Gender", "type": "text", "value": gender, "help_text": "M, F, or leave empty", "group": "Basic Info", "display_order": 1},
+            {"name": "name", "label": "Customer Name", "type": "text", "value": name, "required": True, "group": "Basic Info", "display_order": 2},
+            {"name": "company", "label": "Company", "type": "text", "value": company, "group": "Basic Info", "display_order": 3},
+            {"name": "email", "label": "Email", "type": "email", "value": email, "group": "Contact", "display_order": 4},
+            {"name": "phone", "label": "Phone", "type": "text", "value": phone, "group": "Contact", "display_order": 5},
+            {"name": "address_line1", "label": "Address Line 1", "type": "text", "value": address_line1, "group": "Address", "display_order": 6},
+            {"name": "address_line2", "label": "Address Line 2", "type": "text", "value": address_line2, "group": "Address", "display_order": 7},
+            {"name": "city", "label": "City", "type": "text", "value": city, "group": "Address", "display_order": 8},
+            {"name": "postal_code", "label": "Postal Code", "type": "text", "value": postal_code, "group": "Address", "display_order": 9},
+            {"name": "country", "label": "Country", "type": "text", "value": country, "help_text": "ISO 3166-1 alpha-2 code (e.g., FR, DE, US)", "group": "Address", "display_order": 10},
+            {"name": "tax_id", "label": "Tax ID / VAT", "type": "text", "value": tax_id, "group": "Billing", "display_order": 11},
+            {"name": "payment_terms", "label": "Payment Terms (days)", "type": "number", "value": payment_terms or 30, "group": "Billing", "display_order": 12},
+            {"name": "currency", "label": "Currency", "type": "text", "value": currency or "EUR", "group": "Billing", "display_order": 13},
+            {"name": "notes", "label": "Internal Notes", "type": "textarea", "value": notes, "group": "Other", "display_order": 14},
         ]
 
         return create_confirmation_response(
@@ -122,6 +126,7 @@ def register(mcp):
     @log_tool("crm_update_customer")
     def update_customer(
         customer_id: str,
+        gender: Optional[str] = None,
         name: Optional[str] = None,
         company: Optional[str] = None,
         email: Optional[str] = None,
@@ -141,6 +146,7 @@ def register(mcp):
 
         Parameters:
             customer_id: The customer ID to update (e.g., 'CUST-0044')
+            gender: Gender code (e.g., 'M', 'F', or None)
             name: New customer name
             company: New company name
             email: New email address
@@ -160,6 +166,7 @@ def register(mcp):
         """
         arguments = {
             "customer_id": customer_id,
+            "gender": gender,
             "name": name,
             "company": company,
             "email": email,
@@ -177,19 +184,20 @@ def register(mcp):
 
         field_configs = [
             {"name": "customer_id", "label": "Customer ID", "type": "text", "value": customer_id, "required": True, "group": "Basic Info", "display_order": 1},
-            {"name": "name", "label": "Name", "type": "text", "value": name, "group": "Basic Info", "display_order": 2},
-            {"name": "company", "label": "Company", "type": "text", "value": company, "group": "Basic Info", "display_order": 3},
-            {"name": "email", "label": "Email", "type": "email", "value": email, "group": "Contact", "display_order": 4},
-            {"name": "phone", "label": "Phone", "type": "text", "value": phone, "group": "Contact", "display_order": 5},
-            {"name": "address_line1", "label": "Address Line 1", "type": "text", "value": address_line1, "group": "Address", "display_order": 6},
-            {"name": "address_line2", "label": "Address Line 2", "type": "text", "value": address_line2, "group": "Address", "display_order": 7},
-            {"name": "city", "label": "City", "type": "text", "value": city, "group": "Address", "display_order": 8},
-            {"name": "postal_code", "label": "Postal Code", "type": "text", "value": postal_code, "group": "Address", "display_order": 9},
-            {"name": "country", "label": "Country", "type": "text", "value": country, "group": "Address", "display_order": 10},
-            {"name": "tax_id", "label": "Tax ID / VAT", "type": "text", "value": tax_id, "group": "Billing", "display_order": 11},
-            {"name": "payment_terms", "label": "Payment Terms (days)", "type": "number", "value": payment_terms, "group": "Billing", "display_order": 12},
-            {"name": "currency", "label": "Currency", "type": "text", "value": currency, "group": "Billing", "display_order": 13},
-            {"name": "notes", "label": "Notes", "type": "textarea", "value": notes, "group": "Other", "display_order": 14},
+            {"name": "gender", "label": "Gender", "type": "text", "value": gender, "help_text": "M, F, or leave empty", "group": "Basic Info", "display_order": 2},
+            {"name": "name", "label": "Name", "type": "text", "value": name, "group": "Basic Info", "display_order": 3},
+            {"name": "company", "label": "Company", "type": "text", "value": company, "group": "Basic Info", "display_order": 4},
+            {"name": "email", "label": "Email", "type": "email", "value": email, "group": "Contact", "display_order": 5},
+            {"name": "phone", "label": "Phone", "type": "text", "value": phone, "group": "Contact", "display_order": 6},
+            {"name": "address_line1", "label": "Address Line 1", "type": "text", "value": address_line1, "group": "Address", "display_order": 7},
+            {"name": "address_line2", "label": "Address Line 2", "type": "text", "value": address_line2, "group": "Address", "display_order": 8},
+            {"name": "city", "label": "City", "type": "text", "value": city, "group": "Address", "display_order": 9},
+            {"name": "postal_code", "label": "Postal Code", "type": "text", "value": postal_code, "group": "Address", "display_order": 10},
+            {"name": "country", "label": "Country", "type": "text", "value": country, "group": "Address", "display_order": 11},
+            {"name": "tax_id", "label": "Tax ID / VAT", "type": "text", "value": tax_id, "group": "Billing", "display_order": 12},
+            {"name": "payment_terms", "label": "Payment Terms (days)", "type": "number", "value": payment_terms, "group": "Billing", "display_order": 13},
+            {"name": "currency", "label": "Currency", "type": "text", "value": currency, "group": "Billing", "display_order": 14},
+            {"name": "notes", "label": "Notes", "type": "textarea", "value": notes, "group": "Other", "display_order": 15},
         ]
 
         return create_confirmation_response(

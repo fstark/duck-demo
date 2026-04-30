@@ -11,6 +11,8 @@ import io
 import json
 import logging
 import os
+import re
+import threading
 import urllib.parse
 
 import chardet
@@ -30,6 +32,7 @@ ENTITY_SCHEMAS = {
     "customer": {
         "table": "customers",
         "fields": {
+            "gender":        {"required": False, "type": "text"},
             "name":          {"required": True,  "type": "text"},
             "company":       {"required": False, "type": "text"},
             "email":         {"required": False, "type": "email"},
@@ -571,7 +574,7 @@ class DataImportService:
                 question = f"{n} row{'s' if n > 1 else ''} (rows {row_list}) already exist{'s' if n == 1 else ''} in the database. {msg}"
                 suggestion = "skip"
             elif issue_type == "possible_duplicate":
-                question = f"Rows {row_list} may be duplicates. Merge or keep both?"
+                question = f"Rows {row_list} may be duplicates ({msg}). Merge or keep both?"
                 suggestion = "merge"
             elif severity == "error" and "required field" in msg.lower():
                 # Extract the field name from message like "Required field 'name' is missing"
@@ -601,7 +604,147 @@ class DataImportService:
         return batch_questions
 
     # ------------------------------------------------------------------
-    # Build staging state
+    # Sample selection
+    # ------------------------------------------------------------------
+
+    def _select_sample_indices(self, rows: list[dict], columns: list[str]) -> list[int]:
+        """Pick up to 5 sample row indices (always the first 5)."""
+        return list(range(min(5, len(rows))))
+
+    # ------------------------------------------------------------------
+    # Transform sample rows only (for preview)
+    # ------------------------------------------------------------------
+
+    def _transform_sample_rows(self, *, rows: list[dict], mapping: list[dict], entity_type: str, global_instructions: str = "") -> list[dict]:
+        """Apply mapping + transforms to a list of raw row dicts (in memory, no DB writes).
+        Returns list of {raw_data, mapped_data} dicts."""
+        results = []
+        llm_batch = []
+
+        for idx, raw in enumerate(rows):
+            mapped = {}
+            for m in mapping:
+                if m.get("target") is None:
+                    continue
+                source_val = raw.get(m["source"], "")
+                transform = m.get("transform", "none")
+                py_result = self._python_transform(transform, source_val)
+                if py_result is not None:
+                    mapped[m["target"]] = py_result
+                else:
+                    llm_batch.append({
+                        "idx": idx,
+                        "source_column": m["source"],
+                        "target_field": m["target"],
+                        "transform": transform,
+                        "raw_value": source_val,
+                    })
+                    mapped[m["target"]] = source_val  # placeholder
+            results.append({"raw_data": raw, "mapped_data": mapped})
+
+        # LLM batch for sample transforms
+        if llm_batch:
+            try:
+                prompt = (
+                    "You are a data transformation expert. Transform the following raw values "
+                    "for import into an ERP system.\n\n"
+                )
+                if global_instructions:
+                    prompt += f"Global instructions from user: {global_instructions}\n\n"
+                prompt += (
+                    f"Transforms to apply:\n{json.dumps(llm_batch, indent=2)}\n\n"
+                    "Respond with ONLY a JSON array, one object per input entry:\n"
+                    '[{"idx": 0, "source_column": "...", "value": ..., "notes": "..."}]'
+                )
+                resp = chat_completion(
+                    model=config.DATA_IMPORT_MODEL,
+                    messages=[{"role": "user", "content": prompt}],
+                )
+                text = resp.choices[0].message.content.strip()
+                if text.startswith("```"):
+                    text = text.split("\n", 1)[1] if "\n" in text else text[3:]
+                    if text.endswith("```"):
+                        text = text[:-3]
+                    text = text.strip()
+                llm_results = json.loads(text)
+                for r in llm_results:
+                    idx = r["idx"]
+                    target_field = next(
+                        (b["target_field"] for b in llm_batch
+                         if b["idx"] == idx and b["source_column"] == r["source_column"]),
+                        None,
+                    )
+                    if target_field and idx < len(results):
+                        results[idx]["mapped_data"][target_field] = r["value"]
+            except Exception:
+                logger.warning("LLM sample transform failed, using raw values", exc_info=True)
+
+        return results
+
+    # ------------------------------------------------------------------
+    # Build mapping state (Phase 1)
+    # ------------------------------------------------------------------
+
+    def _build_mapping_state(self, job_id: str) -> dict:
+        """Assemble the Phase 1 JSON state (mapping review)."""
+        with db_conn() as conn:
+            job = conn.execute("SELECT * FROM import_jobs WHERE id = ?", (job_id,)).fetchone()
+            if not job:
+                raise ValueError(f"Import job not found: {job_id}")
+            job = dict(job)
+
+            # Get sample rows
+            sample_indices = json.loads(job["sample_indices"]) if job.get("sample_indices") else []
+            rows = dict_rows(conn.execute(
+                "SELECT source_row, raw_data FROM import_rows WHERE job_id = ? ORDER BY source_row",
+                (job_id,),
+            ).fetchall())
+
+        mapping = json.loads(job["mapping_plan"]) if job.get("mapping_plan") else []
+        columns = json.loads(job["columns_detected"]) if job.get("columns_detected") else []
+        entity_type = job.get("entity_type", "customer")
+
+        # Get sample raw data based on indices (indices are 0-based into the row list)
+        sample_raw = []
+        for i in sample_indices:
+            if i < len(rows):
+                sample_raw.append(json.loads(rows[i]["raw_data"]) if isinstance(rows[i]["raw_data"], str) else rows[i]["raw_data"])
+
+        # Transform sample rows
+        sample_rows = self._transform_sample_rows(rows=sample_raw, mapping=mapping, entity_type=entity_type)
+
+        # Build target_fields from entity schema
+        schema = ENTITY_SCHEMAS.get(entity_type, {})
+        target_fields = [
+            {"name": name, **defn}
+            for name, defn in schema.get("fields", {}).items()
+        ]
+
+        # Extract entity_confidence from issues_summary (where upload stores it)
+        entity_confidence = 0.0
+        if job.get("issues_summary"):
+            try:
+                summary_data = json.loads(job["issues_summary"])
+                entity_confidence = summary_data.get("entity_confidence", 0.0)
+            except (json.JSONDecodeError, TypeError):
+                pass
+
+        return {
+            "job_id": job_id,
+            "entity_type": entity_type,
+            "entity_confidence": entity_confidence,
+            "source_filename": job.get("source_filename"),
+            "row_count": job.get("row_count", 0),
+            "columns_detected": columns,
+            "mapping": mapping,
+            "sample_rows": sample_rows,
+            "target_fields": target_fields,
+            "global_instructions": job.get("global_instructions") or "",
+            "status": job["status"],
+        }
+
+    # ------------------------------------------------------------------
+    # Build staging state (Phase 2)
     # ------------------------------------------------------------------
 
     def _build_staging_state(self, job_id: str) -> dict:
@@ -635,26 +778,39 @@ class DataImportService:
 
         batch_questions = self._group_issues(job_id=job_id) if job["status"] == "validated" else []
 
+        # Build target_fields from entity schema
+        entity_type = job.get("entity_type") or ""
+        schema = ENTITY_SCHEMAS.get(entity_type, {})
+        target_fields = [
+            {"name": name, **defn}
+            for name, defn in schema.get("fields", {}).items()
+        ]
+
         return {
             "job_id": job_id,
-            "entity_type": job.get("entity_type"),
+            "entity_type": entity_type or None,
             "source_filename": job.get("source_filename"),
             "source_format": job.get("source_format"),
             "status": job["status"],
             "row_count": job.get("row_count", 0),
             "columns_detected": columns,
             "mapping": mapping,
+            "global_instructions": job.get("global_instructions") or "",
             "issues_summary": issues_summary,
             "batch_questions": batch_questions,
+            "target_fields": target_fields,
             "rows": rows,
         }
 
     # ------------------------------------------------------------------
-    # Core: upload
+    # Core: upload (Phase 1 — returns mapping state)
     # ------------------------------------------------------------------
 
     def upload(self, *, source: str, hint: str | None = None) -> dict:
-        """Parse file, detect entity, map columns, transform, validate, resolve."""
+        """Parse file, detect entity, map columns, select samples, transform sample rows.
+
+        Returns mapping state for Phase 1 review (not full staging state).
+        """
         try:
             content, filename = self._read_source(source)
         except (FileNotFoundError, ValueError) as exc:
@@ -674,7 +830,7 @@ class DataImportService:
             conn.execute(
                 "INSERT INTO import_jobs (id, source_filename, source_format, source_content, hint, status, row_count, columns_detected, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (job_id, filename, format_info, content.decode("utf-8", errors="replace"),
-                 hint, "staging", len(rows), json.dumps(columns), now),
+                 hint, "mapping_review", len(rows), json.dumps(columns), now),
             )
 
             for i, row in enumerate(rows, 1):
@@ -686,10 +842,10 @@ class DataImportService:
 
             conn.commit()
 
-        # Skip LLM / validation for empty files
+        # Skip LLM for empty files
         if not rows:
             with db_conn() as conn:
-                conn.execute("UPDATE import_jobs SET status = 'validated' WHERE id = ?", (job_id,))
+                conn.execute("UPDATE import_jobs SET status = 'validated', sample_indices = '[]' WHERE id = ?", (job_id,))
                 conn.commit()
             return self._build_staging_state(job_id)
 
@@ -697,6 +853,7 @@ class DataImportService:
         sample_rows = rows[:3]
         detection = self._detect_entity(columns, sample_rows)
         entity_type = detection.get("entity_type", "customer")
+        entity_confidence = detection.get("confidence", 0.0)
 
         with db_conn() as conn:
             conn.execute("UPDATE import_jobs SET entity_type = ? WHERE id = ?", (entity_type, job_id))
@@ -705,34 +862,161 @@ class DataImportService:
         # LLM: generate column mapping
         mapping = self._generate_mapping(columns, sample_rows, entity_type)
 
+        # Select sample indices
+        sample_indices = self._select_sample_indices(rows, columns)
+
         with db_conn() as conn:
-            conn.execute("UPDATE import_jobs SET mapping_plan = ? WHERE id = ?", (json.dumps(mapping), job_id))
-            conn.commit()
-
-        # Apply transforms
-        self._apply_transforms(job_id=job_id, mapping=mapping)
-
-        # Validate rows
-        self._validate_rows(job_id=job_id)
-
-        # Resolve entities
-        self._resolve_entities(job_id=job_id)
-
-        # Update job status and issues summary
-        with db_conn() as conn:
-            row_stats = dict_rows(conn.execute(
-                "SELECT status, COUNT(*) as cnt FROM import_rows WHERE job_id = ? GROUP BY status",
-                (job_id,),
-            ).fetchall())
-            summary = {r["status"]: r["cnt"] for r in row_stats}
-
             conn.execute(
-                "UPDATE import_jobs SET status = 'validated', issues_summary = ? WHERE id = ?",
-                (json.dumps(summary), job_id),
+                "UPDATE import_jobs SET mapping_plan = ?, sample_indices = ? WHERE id = ?",
+                (json.dumps(mapping), json.dumps(sample_indices), job_id),
             )
             conn.commit()
 
-        return self._build_staging_state(job_id)
+        # Store entity_confidence for mapping state
+        with db_conn() as conn:
+            # Store confidence in the entity_type detection for the mapping state
+            # (We piggyback on the job record — _build_mapping_state reads it)
+            conn.execute(
+                "UPDATE import_jobs SET issues_summary = ? WHERE id = ?",
+                (json.dumps({"entity_confidence": entity_confidence}), job_id),
+            )
+            conn.commit()
+
+        return self._build_mapping_state(job_id)
+
+    # ------------------------------------------------------------------
+    # Core: preview_sample
+    # ------------------------------------------------------------------
+
+    def preview_sample(self, *, job_id: str, mapping: list[dict], global_instructions: str = "") -> dict:
+        """Re-transform sample rows with an updated mapping. Returns sample preview."""
+        with db_conn() as conn:
+            job = conn.execute("SELECT * FROM import_jobs WHERE id = ?", (job_id,)).fetchone()
+            if not job:
+                raise ValueError(f"Import job not found: {job_id}")
+            job = dict(job)
+
+            sample_indices = json.loads(job["sample_indices"]) if job.get("sample_indices") else []
+            entity_type = job.get("entity_type", "customer")
+
+            rows = dict_rows(conn.execute(
+                "SELECT source_row, raw_data FROM import_rows WHERE job_id = ? ORDER BY source_row",
+                (job_id,),
+            ).fetchall())
+
+        # Get sample raw data
+        sample_raw = []
+        for i in sample_indices:
+            if i < len(rows):
+                sample_raw.append(json.loads(rows[i]["raw_data"]) if isinstance(rows[i]["raw_data"], str) else rows[i]["raw_data"])
+
+        # Transform sample rows with the updated mapping
+        sample_rows = self._transform_sample_rows(rows=sample_raw, mapping=mapping, entity_type=entity_type, global_instructions=global_instructions)
+
+        return {
+            "job_id": job_id,
+            "sample_rows": sample_rows,
+        }
+
+    # ------------------------------------------------------------------
+    # Core: confirm_mapping (end of Phase 1 — persist only)
+    # ------------------------------------------------------------------
+
+    def confirm_mapping(self, *, job_id: str, mapping: list[dict], global_instructions: str = "") -> dict:
+        """Persist final mapping + instructions. No heavy processing here.
+
+        Sets status to 'mapped'. The Phase 2 app will call start_processing()
+        on mount to kick off the full transform/validate/resolve pipeline.
+        """
+        with db_conn() as conn:
+            job = conn.execute("SELECT * FROM import_jobs WHERE id = ?", (job_id,)).fetchone()
+            if not job:
+                raise ValueError(f"Import job not found: {job_id}")
+            row_count = dict(job).get("row_count", 0)
+
+            conn.execute(
+                "UPDATE import_jobs SET mapping_plan = ?, global_instructions = ?, status = 'mapped' WHERE id = ?",
+                (json.dumps(mapping), global_instructions, job_id),
+            )
+            conn.commit()
+
+        return {
+            "job_id": job_id,
+            "status": "mapped",
+            "row_count": row_count,
+        }
+
+    # ------------------------------------------------------------------
+    # Core: start_processing (beginning of Phase 2 — full pipeline)
+    # ------------------------------------------------------------------
+
+    def start_processing(self, *, job_id: str) -> dict:
+        """Kick off the heavy pipeline (transforms, validation, resolution).
+
+        Called by the Phase 2 app on mount. Transitions status from 'mapped'
+        to 'processing' and runs the pipeline in a background thread.
+        The Phase 2 app polls get_state() until status becomes 'validated'.
+        """
+        with db_conn() as conn:
+            job = conn.execute("SELECT * FROM import_jobs WHERE id = ?", (job_id,)).fetchone()
+            if not job:
+                raise ValueError(f"Import job not found: {job_id}")
+            job = dict(job)
+
+            if job["status"] != "mapped":
+                # Already processing or validated — return full state
+                return self._build_staging_state(job_id)
+
+            row_count = job.get("row_count", 0)
+            mapping = json.loads(job["mapping_plan"]) if job.get("mapping_plan") else []
+
+            conn.execute(
+                "UPDATE import_jobs SET status = 'processing' WHERE id = ?",
+                (job_id,),
+            )
+            conn.commit()
+
+        # Run the heavy pipeline in a background thread
+        thread = threading.Thread(
+            target=self._run_processing_pipeline,
+            args=(job_id, mapping),
+            daemon=True,
+        )
+        thread.start()
+
+        return {
+            "job_id": job_id,
+            "status": "processing",
+            "row_count": row_count,
+        }
+
+    def _run_processing_pipeline(self, job_id: str, mapping: list[dict]) -> None:
+        """Background processing: transforms → validate → resolve → mark validated."""
+        try:
+            self._apply_transforms(job_id=job_id, mapping=mapping)
+            self._validate_rows(job_id=job_id)
+            self._resolve_entities(job_id=job_id)
+
+            with db_conn() as conn:
+                row_stats = dict_rows(conn.execute(
+                    "SELECT status, COUNT(*) as cnt FROM import_rows WHERE job_id = ? GROUP BY status",
+                    (job_id,),
+                ).fetchall())
+                summary = {r["status"]: r["cnt"] for r in row_stats}
+
+                conn.execute(
+                    "UPDATE import_jobs SET status = 'validated', issues_summary = ? WHERE id = ?",
+                    (json.dumps(summary), job_id),
+                )
+                conn.commit()
+        except Exception:
+            logger.error("processing pipeline failed for %s", job_id, exc_info=True)
+            with db_conn() as conn:
+                conn.execute(
+                    "UPDATE import_jobs SET status = 'validated', issues_summary = ? WHERE id = ?",
+                    (json.dumps({"error": "processing failed"}), job_id),
+                )
+                conn.commit()
 
     # ------------------------------------------------------------------
     # Core: get_state
@@ -741,6 +1025,38 @@ class DataImportService:
     def get_state(self, job_id: str) -> dict:
         """Read job + rows from DB, build staging state dict."""
         return self._build_staging_state(job_id)
+
+    def get_active_job_id(self) -> str | None:
+        """Return the ID of the most recent import job in 'mapped' or 'processing' state."""
+        with db_conn() as conn:
+            row = conn.execute(
+                "SELECT id FROM import_jobs WHERE status IN ('mapped', 'processing', 'validated') "
+                "ORDER BY id DESC LIMIT 1",
+            ).fetchone()
+        return row[0] if row else None
+
+    # ------------------------------------------------------------------
+    # Core: set_cell (direct cell edit — no LLM)
+    # ------------------------------------------------------------------
+
+    def set_cell(self, *, job_id: str, source_row: int, field: str, value) -> dict:
+        """Directly set a single cell value in a row's mapped_data."""
+        with db_conn() as conn:
+            row = conn.execute(
+                "SELECT id, mapped_data FROM import_rows WHERE job_id = ? AND source_row = ?",
+                (job_id, source_row),
+            ).fetchone()
+            if not row:
+                raise ValueError(f"Row {source_row} not found in job {job_id}")
+            row = dict(row)
+            mapped = json.loads(row["mapped_data"]) if row["mapped_data"] else {}
+            mapped[field] = value
+            conn.execute(
+                "UPDATE import_rows SET mapped_data = ? WHERE id = ?",
+                (json.dumps(mapped), row["id"]),
+            )
+            conn.commit()
+        return {"ok": True, "source_row": source_row, "field": field, "value": value}
 
     # ------------------------------------------------------------------
     # Core: fix
@@ -772,12 +1088,15 @@ class DataImportService:
         state = self._build_staging_state(job_id)
         batch_questions = state.get("batch_questions", [])
         current_question = batch_questions[0] if batch_questions else None
+        global_instructions = state.get("global_instructions", "")
 
         prompt = (
             "You are a data import assistant. The user is reviewing staged import data "
             "and has given an instruction to fix issues.\n\n"
-            f"Current staging state:\n{json.dumps(state, indent=2, default=str)}\n\n"
         )
+        if global_instructions:
+            prompt += f"Global instructions from user: {global_instructions}\n\n"
+        prompt += f"Current staging state:\n{json.dumps(state, indent=2, default=str)}\n\n"
         if current_question:
             prompt += f"Current batch question: {json.dumps(current_question)}\n\n"
         prompt += (
@@ -922,7 +1241,7 @@ class DataImportService:
 
             entity_type = job["entity_type"]
             rows = dict_rows(conn.execute(
-                "SELECT * FROM import_rows WHERE job_id = ? AND status = 'ready' ORDER BY source_row",
+                "SELECT * FROM import_rows WHERE job_id = ? AND status IN ('ready', 'needs_review', 'auto_fixed') ORDER BY source_row",
                 (job_id,),
             ).fetchall())
 
@@ -933,7 +1252,7 @@ class DataImportService:
             if entity_type == "customer":
                 # Filter to valid create_customer kwargs
                 valid_keys = {
-                    "name", "company", "email", "phone", "address_line1",
+                    "name", "gender", "company", "email", "phone", "address_line1",
                     "address_line2", "city", "postal_code", "country",
                     "tax_id", "payment_terms", "currency", "notes",
                 }

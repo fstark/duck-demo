@@ -51,6 +51,7 @@ def find_customers(
 
 def create_customer(
     name: str,
+    gender: Optional[str] = None,
     company: Optional[str] = None,
     email: Optional[str] = None,
     phone: Optional[str] = None,
@@ -72,9 +73,9 @@ def create_customer(
         sim_time = simulation_service.get_current_time()
         conn.execute(
             """INSERT INTO customers 
-               (id, name, company, email, phone, address_line1, address_line2, city, postal_code, country, tax_id, payment_terms, currency, notes, created_at) 
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            (customer_id, name, company, email, phone, address_line1, address_line2, city, postal_code, country, tax_id, payment_terms, currency, notes, sim_time),
+               (id, gender, name, company, email, phone, address_line1, address_line2, city, postal_code, country, tax_id, payment_terms, currency, notes, created_at) 
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (customer_id, gender, name, company, email, phone, address_line1, address_line2, city, postal_code, country, tax_id, payment_terms, currency, notes, sim_time),
         )
         conn.commit()
         row = conn.execute("SELECT * FROM customers WHERE id = ?", (customer_id,)).fetchone()
@@ -88,6 +89,7 @@ def create_customer(
 
 def update_customer(
     customer_id: str,
+    gender: Optional[str] = None,
     name: Optional[str] = None,
     company: Optional[str] = None,
     email: Optional[str] = None,
@@ -111,7 +113,7 @@ def update_customer(
         updates = []
         params: List[Any] = []
         field_map = {
-            "name": name, "company": company, "email": email, "phone": phone,
+            "gender": gender, "name": name, "company": company, "email": email, "phone": phone,
             "address_line1": address_line1, "address_line2": address_line2,
             "city": city, "postal_code": postal_code, "country": country,
             "tax_id": tax_id, "payment_terms": payment_terms, "currency": currency, "notes": notes,

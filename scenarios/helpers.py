@@ -98,6 +98,14 @@ _FRENCH_FIRST_NAMES = [
     "Valentin", "Zoé", "Inès", "Mathilde", "Arthur", "Chloé",
 ]
 
+_FIRST_NAME_GENDER = {
+    "Alexandre": "M", "Amélie": "F", "Antoine": "M", "Camille": "F", "Charlotte": "F", "Clara": "F",
+    "Clément": "M", "Emma": "F", "Gabriel": "M", "Hugo": "M", "Jade": "F", "Jules": "M",
+    "Léa": "F", "Louis": "M", "Lucas": "M", "Manon": "F", "Marie": "F", "Nathan": "M",
+    "Nicolas": "M", "Pauline": "F", "Pierre": "M", "Raphaël": "M", "Sophie": "F", "Thomas": "M",
+    "Valentin": "M", "Zoé": "F", "Inès": "F", "Mathilde": "F", "Arthur": "M", "Chloé": "F",
+}
+
 _FRENCH_LAST_NAMES = [
     "Bernard", "Bonnet", "Dubois", "Durand", "Fontaine", "Fournier",
     "Garnier", "Girard", "Lambert", "Laurent", "Lefebvre", "Lemaire",
@@ -170,9 +178,11 @@ def create_customer_batch(
         email = f"{first.lower()}.{last.lower()}@{(company or f'{last}-shop').lower().replace(' ', '').replace('&', '').replace("'", '')}.example"
         phone = f"+33 {random.randint(1,9)} {random.randint(10,99)} {random.randint(10,99)} {random.randint(10,99)} {random.randint(10,99)}" if country == "FR" else f"+49 {random.randint(100,999)} {random.randint(1000000,9999999)}"
         terms = random.choice(payment_terms_choices)
+        gender = _FIRST_NAME_GENDER.get(first)
 
         result = customer_service.create_customer(
             name=f"{first} {last}",
+            gender=gender,
             company=company,
             email=email,
             phone=phone,

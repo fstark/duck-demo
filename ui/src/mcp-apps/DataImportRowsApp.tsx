@@ -1,6 +1,12 @@
-import { useRef, useState, useCallback } from 'react';
+import { useRef, useState, useCallback, useEffect } from 'react';
 import { useApp } from '@modelcontextprotocol/ext-apps/react';
-import { AppShell, AppCard, SectionTitle, PrimaryButton, SecondaryButton, ActionRow, uiColors } from './shared/ui';
+import { AppCard, SectionTitle, PrimaryButton, SecondaryButton, ActionRow, uiColors } from './shared/ui';
+
+const fullPage: React.CSSProperties = {
+    width: '100vw', minHeight: '100vh', padding: 24,
+    fontFamily: 'system-ui, -apple-system, sans-serif',
+    color: uiColors.text, backgroundColor: '#ffffff', boxSizing: 'border-box',
+};
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -35,6 +41,12 @@ interface BatchQuestion {
     suggestion?: string;
 }
 
+interface TargetField {
+    name: string;
+    required: boolean;
+    type: string;
+}
+
 interface StagingState {
     job_id: string;
     entity_type: string | null;
@@ -44,32 +56,11 @@ interface StagingState {
     row_count: number;
     columns_detected: string[];
     mapping: MappingEntry[] | null;
+    global_instructions: string;
     issues_summary: Record<string, number>;
     batch_questions: BatchQuestion[];
+    target_fields: TargetField[];
     rows: ImportRow[];
-}
-
-// ── Confidence badge ──────────────────────────────────────────────────────────
-
-function ConfidenceBadge({ value }: { value: number }) {
-    const pct = Math.round(value * 100);
-    let bg: string, border: string, color: string;
-    if (value >= 0.85) {
-        bg = '#f0fdf4'; border = '#86efac'; color = '#15803d';
-    } else if (value >= 0.70) {
-        bg = '#fffbeb'; border = '#fcd34d'; color = '#b45309';
-    } else {
-        bg = '#fef2f2'; border = '#fca5a5'; color = '#dc2626';
-    }
-    return (
-        <span style={{
-            display: 'inline-block', padding: '2px 8px', borderRadius: 4,
-            border: `1px solid ${border}`, backgroundColor: bg, color,
-            fontSize: 11, fontWeight: 600,
-        }}>
-            {pct}%
-        </span>
-    );
 }
 
 // ── Row status badge ──────────────────────────────────────────────────────────
@@ -128,64 +119,68 @@ function JobStatusBadge({ status }: { status: string }) {
     );
 }
 
-// ── Column mapping table ──────────────────────────────────────────────────────
 
-function MappingTable({ mapping, excludedTargets, onToggle }: {
-    mapping: MappingEntry[];
-    excludedTargets: Set<string>;
-    onToggle: (target: string) => void;
-}) {
-    return (
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-            <thead>
-                <tr style={{ borderBottom: `2px solid ${uiColors.cardBorder}` }}>
-                    <th style={{ ...thStyle, width: 28, textAlign: 'center' }}></th>
-                    <th style={thStyle}>Source</th>
-                    <th style={thStyle}>Target</th>
-                    <th style={thStyle}>Transform</th>
-                    <th style={{ ...thStyle, textAlign: 'center' }}>Confidence</th>
-                </tr>
-            </thead>
-            <tbody>
-                {mapping.map((m, i) => {
-                    const excluded = excludedTargets.has(m.target);
-                    return (
-                        <tr key={i} style={{
-                            borderBottom: `1px solid ${uiColors.cardBorder}`,
-                            opacity: excluded ? 0.4 : 1,
-                        }}>
-                            <td style={{ ...tdStyle, textAlign: 'center' }}>
-                                <input
-                                    type="checkbox"
-                                    checked={!excluded}
-                                    onChange={() => onToggle(m.target)}
-                                    style={{ cursor: 'pointer' }}
-                                />
-                            </td>
-                            <td style={tdStyle}><code style={codeStyle}>{m.source}</code></td>
-                            <td style={tdStyle}><code style={codeStyle}>{m.target}</code></td>
-                            <td style={tdStyle}>{m.transform === 'none' ? '—' : m.transform}</td>
-                            <td style={{ ...tdStyle, textAlign: 'center' }}><ConfidenceBadge value={m.confidence} /></td>
-                        </tr>
-                    );
-                })}
-            </tbody>
-        </table>
-    );
-}
 
 // ── Data grid ─────────────────────────────────────────────────────────────────
 
 const PAGE_SIZE = 10;
 
-function DataGrid({ rows, mapping, status, excludedTargets }: { rows: ImportRow[]; mapping: MappingEntry[] | null; status: string; excludedTargets: Set<string> }) {
+function DataGrid({ rows, targetFields, status, excludedTargets, onCellEdit }: {
+    rows: ImportRow[];
+    targetFields: TargetField[];
+    status: string;
+    excludedTargets: Set<string>;
+    onCellEdit?: (sourceRow: number, field: string, value: string) => void;
+}) {
     const [page, setPage] = useState(0);
-    const targetCols = mapping ? mapping.map(m => m.target).filter(t => !excludedTargets.has(t)) : [];
-    const showEntityId = status === 'executed';
+    const [sortCol, setSortCol] = useState<string | null>(null);
+    const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
+    const [editCell, setEditCell] = useState<{ rowId: string; col: string } | null>(null);
+    const [editValue, setEditValue] = useState('');
 
-    const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
+    const targetCols = targetFields.map(f => f.name).filter(t => !excludedTargets.has(t));
+    const showEntityId = status === 'executed';
+    const editable = status !== 'executed' && status !== 'rolled_back';
+
+    const handleSort = (col: string) => {
+        if (sortCol === col) {
+            setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+        } else {
+            setSortCol(col);
+            setSortDir('asc');
+        }
+    };
+
+    const sortedRows = [...rows];
+    if (sortCol) {
+        sortedRows.sort((a, b) => {
+            let av: any, bv: any;
+            if (sortCol === '#') { av = a.source_row; bv = b.source_row; }
+            else if (sortCol === 'Status') { av = a.status; bv = b.status; }
+            else if (sortCol === 'Entity ID') { av = a.created_entity_id ?? ''; bv = b.created_entity_id ?? ''; }
+            else { av = a.mapped_data[sortCol] ?? ''; bv = b.mapped_data[sortCol] ?? ''; }
+            // Numeric-aware comparison
+            const na = Number(av), nb = Number(bv);
+            let cmp: number;
+            if (!isNaN(na) && !isNaN(nb) && av !== '' && bv !== '') {
+                cmp = na - nb;
+            } else {
+                const sa = String(av).toLowerCase(), sb = String(bv).toLowerCase();
+                cmp = sa < sb ? -1 : sa > sb ? 1 : 0;
+            }
+            return sortDir === 'asc' ? cmp : -cmp;
+        });
+    }
+
+    const totalPages = Math.max(1, Math.ceil(sortedRows.length / PAGE_SIZE));
     const currentPage = Math.min(page, totalPages - 1);
-    const pageRows = rows.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE);
+    const pageRows = sortedRows.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE);
+
+    const sortableThStyle = (col: string): React.CSSProperties => ({
+        ...thStyle, fontSize: 11, cursor: 'pointer', userSelect: 'none',
+        color: sortCol === col ? '#2563eb' : undefined,
+    });
+    const sortArrow = (col: string) => sortCol === col ? (sortDir === 'asc' ? ' ▲' : ' ▼') : '';
 
     return (
         <div>
@@ -199,12 +194,12 @@ function DataGrid({ rows, mapping, status, excludedTargets }: { rows: ImportRow[
                     </colgroup>
                     <thead>
                         <tr style={{ borderBottom: `2px solid ${uiColors.cardBorder}` }}>
-                            <th style={{ ...thStyle, fontSize: 11 }}>#</th>
-                            <th style={{ ...thStyle, fontSize: 11 }}>Status</th>
+                            <th style={sortableThStyle('#')} onClick={() => handleSort('#')}>#{sortArrow('#')}</th>
+                            <th style={sortableThStyle('Status')} onClick={() => handleSort('Status')}>Status{sortArrow('Status')}</th>
                             {targetCols.map(col => (
-                                <th key={col} style={{ ...thStyle, fontSize: 11 }}>{col}</th>
+                                <th key={col} style={sortableThStyle(col)} onClick={() => handleSort(col)}>{col}{sortArrow(col)}</th>
                             ))}
-                            {showEntityId && <th style={{ ...thStyle, fontSize: 11 }}>Entity ID</th>}
+                            {showEntityId && <th style={sortableThStyle('Entity ID')} onClick={() => handleSort('Entity ID')}>Entity ID{sortArrow('Entity ID')}</th>}
                         </tr>
                     </thead>
                     <tbody>
@@ -221,11 +216,53 @@ function DataGrid({ rows, mapping, status, excludedTargets }: { rows: ImportRow[
                                     {targetCols.map(col => {
                                         const val = row.mapped_data[col];
                                         const hasIssue = !dimmed && row.issues.some(iss => iss.field === col);
+                                        const isEditing = editCell?.rowId === row.id && editCell?.col === col;
+
+                                        if (isEditing) {
+                                            return (
+                                                <td key={col} style={{ ...tdStyle, padding: 2 }}>
+                                                    <input
+                                                        autoFocus
+                                                        value={editValue}
+                                                        onChange={e => setEditValue(e.target.value)}
+                                                        onBlur={() => {
+                                                            if (editValue !== String(val ?? '')) {
+                                                                onCellEdit?.(row.source_row, col, editValue);
+                                                            }
+                                                            setEditCell(null);
+                                                        }}
+                                                        onKeyDown={e => {
+                                                            if (e.key === 'Enter') {
+                                                                (e.target as HTMLInputElement).blur();
+                                                            } else if (e.key === 'Escape') {
+                                                                setEditCell(null);
+                                                            }
+                                                        }}
+                                                        style={{
+                                                            width: '100%', fontSize: 12, padding: '2px 4px',
+                                                            border: '1px solid #93c5fd', borderRadius: 3,
+                                                            outline: 'none', boxSizing: 'border-box',
+                                                        }}
+                                                    />
+                                                </td>
+                                            );
+                                        }
+
                                         return (
-                                            <td key={col} style={{
-                                                ...tdStyle,
-                                                backgroundColor: hasIssue ? '#fef2f2' : undefined,
-                                            }}>
+                                            <td
+                                                key={col}
+                                                style={{
+                                                    ...tdStyle,
+                                                    backgroundColor: hasIssue ? '#fef2f2' : undefined,
+                                                    cursor: editable && !dimmed ? 'text' : undefined,
+                                                }}
+                                                onDoubleClick={() => {
+                                                    if (editable && !dimmed) {
+                                                        setEditCell({ rowId: row.id, col });
+                                                        setEditValue(val != null ? String(val) : '');
+                                                    }
+                                                }}
+                                            >
                                                 {val != null ? String(val) : <span style={{ color: uiColors.muted }}>—</span>}
                                                 {hasIssue && <span title="Has issue" style={{ marginLeft: 4, color: '#dc2626' }}>⚠</span>}
                                             </td>
@@ -325,7 +362,6 @@ function SuggestionCarousel({ questions, onAction, loading }: {
     loading: boolean;
 }) {
     const [index, setIndex] = useState(0);
-    // Clamp index if questions shrink
     const current = Math.min(index, questions.length - 1);
     const q = questions[current];
     if (!q) return null;
@@ -336,7 +372,6 @@ function SuggestionCarousel({ questions, onAction, loading }: {
     return (
         <AppCard>
             <div style={{ position: 'relative' }}>
-                {/* Loading overlay */}
                 {loading && (
                     <div style={{
                         position: 'absolute', inset: 0, backgroundColor: 'rgba(255,255,255,0.7)',
@@ -348,7 +383,6 @@ function SuggestionCarousel({ questions, onAction, loading }: {
                         </span>
                     </div>
                 )}
-                {/* Navigation header */}
                 <div style={{
                     display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                     marginBottom: 10,
@@ -379,7 +413,6 @@ function SuggestionCarousel({ questions, onAction, loading }: {
                     </div>
                 </div>
 
-                {/* Current question */}
                 <div style={{
                     padding: '10px 14px', borderRadius: 6,
                     backgroundColor: '#fffbeb', border: '1px solid #fcd34d', fontSize: 13,
@@ -390,7 +423,6 @@ function SuggestionCarousel({ questions, onAction, loading }: {
                     </div>
                 </div>
 
-                {/* Action buttons */}
                 {actions.length > 0 && (
                     <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
                         {actions.map((a) => (
@@ -459,14 +491,9 @@ const tdStyle: React.CSSProperties = {
     overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
 };
 
-const codeStyle: React.CSSProperties = {
-    fontSize: 12, backgroundColor: '#f3f4f6', padding: '1px 4px',
-    borderRadius: 3, fontFamily: 'monospace',
-};
-
 // ── Main component ────────────────────────────────────────────────────────────
 
-export default function DataImportViewer() {
+export default function DataImportRowsApp() {
     const [state, setState] = useState<StagingState | null>(null);
     const [fixInput, setFixInput] = useState('');
     const [loading, setLoading] = useState(false);
@@ -484,7 +511,7 @@ export default function DataImportViewer() {
     }, []);
 
     const { isConnected, error: connError } = useApp({
-        appInfo: { name: 'DataImportViewer', version: '1.0.0' },
+        appInfo: { name: 'DataImportRowsApp', version: '1.0.0' },
         capabilities: {},
         onAppCreated: (app) => {
             appRef.current = app;
@@ -496,6 +523,24 @@ export default function DataImportViewer() {
     });
 
     void isConnected;
+
+    // Poll for state when processing (background pipeline running)
+    useEffect(() => {
+        if (!state || state.status !== 'processing' || !appRef.current) return;
+        const interval = setInterval(async () => {
+            try {
+                const result = await appRef.current.callServerTool({
+                    name: 'data_import_get_state',
+                    arguments: { job_id: state.job_id },
+                });
+                const updated = extractState(result);
+                if (updated && updated.status !== 'processing') {
+                    setState(updated);
+                }
+            } catch { /* ignore polling errors */ }
+        }, 2000);
+        return () => clearInterval(interval);
+    }, [state?.status, state?.job_id]);
 
     const handleQuickAction = useCallback(async (instruction: string) => {
         if (!appRef.current || !state) return;
@@ -517,26 +562,19 @@ export default function DataImportViewer() {
 
     if (connError) {
         return (
-            <AppShell maxWidth={960}>
+            <div style={fullPage}>
                 <p style={{ color: '#dc2626' }}>{connError.message}</p>
-            </AppShell>
+            </div>
         );
     }
 
-    if (!state) {
-        return (
-            <AppShell maxWidth={960}>
-                <p style={{ color: uiColors.muted, margin: 0 }}>Processing import…</p>
-            </AppShell>
-        );
-    }
-
-    const canImport = state.status === 'validated' || state.status === 'ready_to_execute';
-    const hasErrors = state.rows.some(r =>
+    const isProcessing = !state || state.status === 'mapped' || state.status === 'processing';
+    const canImport = state && (state.status === 'validated' || state.status === 'ready_to_execute');
+    const hasErrors = state?.rows?.some(r =>
         r.status === 'needs_review' && r.issues.some(iss => iss.issue_type === 'error')
-    );
-    const isExecuted = state.status === 'executed';
-    const isRolledBack = state.status === 'rolled_back';
+    ) ?? false;
+    const isExecuted = state?.status === 'executed';
+    const isRolledBack = state?.status === 'rolled_back';
 
     async function handleFix() {
         const instruction = fixInput.trim();
@@ -579,44 +617,91 @@ export default function DataImportViewer() {
         }
     }
 
+    async function handleCellEdit(sourceRow: number, field: string, value: string) {
+        if (!appRef.current || !state) return;
+        try {
+            await appRef.current.callServerTool({
+                name: 'data_import_set_cell',
+                arguments: { job_id: state.job_id, source_row: sourceRow, field, value },
+            });
+            // Update local state immediately
+            setState(prev => {
+                if (!prev) return prev;
+                const rows = prev.rows.map(r =>
+                    r.source_row === sourceRow
+                        ? { ...r, mapped_data: { ...r.mapped_data, [field]: value } }
+                        : r
+                );
+                return { ...prev, rows };
+            });
+        } catch (err: any) {
+            setError(err?.message ?? 'Cell edit failed');
+        }
+    }
+
     return (
-        <AppShell maxWidth={960}>
+        <div style={fullPage}>
 
-            {/* Header */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14, flexWrap: 'wrap' }}>
-                <JobStatusBadge status={state.status} />
-                <span style={{ fontSize: 13, color: uiColors.muted }}>
-                    {state.source_filename && (
-                        <span><strong style={{ color: uiColors.text }}>{state.source_filename}</strong></span>
-                    )}
-                    {state.entity_type && (
-                        <span> · {state.entity_type}</span>
-                    )}
-                    <span> · {state.row_count} row{state.row_count !== 1 ? 's' : ''}</span>
-                    <span> · {state.job_id}</span>
-                </span>
-            </div>
-
-            {/* Issues summary */}
-            <IssuesSummary summary={state.issues_summary} />
-
-            {/* Column mapping */}
-            {state.mapping && state.mapping.length > 0 && (
-                <AppCard>
-                    <SectionTitle>Column Mapping</SectionTitle>
-                    <MappingTable mapping={state.mapping} excludedTargets={excludedTargets} onToggle={toggleColumn} />
-                </AppCard>
+            {/* Global instructions banner */}
+            {state?.global_instructions && (
+                <div style={{
+                    padding: '8px 12px', marginBottom: 12, borderRadius: 6,
+                    backgroundColor: '#eff6ff', border: '1px solid #93c5fd',
+                    color: '#1d4ed8', fontSize: 12,
+                }}>
+                    <strong>Instructions:</strong> {state.global_instructions}
+                </div>
             )}
 
-            {/* Data grid */}
+            {/* Issues summary */}
+            {state && !isProcessing && <IssuesSummary summary={state.issues_summary} />}
+
+
+
+            {/* Data grid or loading */}
             <AppCard>
-                <SectionTitle>Data ({state.rows.length} rows)</SectionTitle>
-                <DataGrid rows={state.rows} mapping={state.mapping} status={state.status} excludedTargets={excludedTargets} />
-                <AutoFixLog rows={state.rows} />
+                {isProcessing ? (
+                    <div style={{ textAlign: 'center', padding: '32px 0' }}>
+                        <div style={{ fontSize: 14, fontWeight: 600, color: uiColors.text, marginBottom: 8 }}>
+                            Applying transforms and validating {state?.row_count ?? ''} rows…
+                        </div>
+                        <div style={{ fontSize: 13, color: uiColors.muted }}>
+                            This may take a moment. The view will update automatically when ready.
+                        </div>
+                    </div>
+                ) : (
+                    <>
+                        <SectionTitle>Data ({state!.rows.length} rows)</SectionTitle>
+                        <DataGrid rows={state!.rows} targetFields={state!.target_fields ?? []} status={state!.status} excludedTargets={excludedTargets} onCellEdit={handleCellEdit} />
+                        <AutoFixLog rows={state!.rows} />
+                    </>
+                )}
             </AppCard>
 
+            {/* Fix input — always visible so the frame has full width */}
+            <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+                <input
+                    type="text"
+                    value={fixInput}
+                    onChange={(e) => setFixInput(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter' && !isProcessing) handleFix(); }}
+                    placeholder="Type a fix instruction (e.g. 'merge the duplicates, use the longer name')"
+                    disabled={loading || isProcessing}
+                    style={{
+                        flex: 1, padding: '8px 12px', fontSize: 13,
+                        border: `1px solid ${uiColors.inputBorder}`,
+                        borderRadius: 6, backgroundColor: uiColors.inputBg,
+                        color: uiColors.text, outline: 'none',
+                        opacity: isProcessing ? 0.5 : 1,
+                    }}
+                />
+                <SecondaryButton onClick={handleFix} disabled={isProcessing}>
+                    {loading ? 'Applying…' : 'Fix'}
+                </SecondaryButton>
+            </div>
+
             {/* Suggestions carousel */}
-            {!isExecuted && !isRolledBack && (
+            {!isProcessing && !isExecuted && !isRolledBack && state && (
                 state.batch_questions.length > 0
                     ? <SuggestionCarousel
                         questions={state.batch_questions}
@@ -645,42 +730,21 @@ export default function DataImportViewer() {
                 </div>
             )}
 
-            {/* Fix + Import controls */}
+            {/* Import button */}
             {canImport && !isExecuted && (
-                <>
-                    <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-                        <input
-                            type="text"
-                            value={fixInput}
-                            onChange={(e) => setFixInput(e.target.value)}
-                            onKeyDown={(e) => { if (e.key === 'Enter') handleFix(); }}
-                            placeholder="Type a fix instruction (e.g. 'merge the duplicates, use the longer name')"
-                            disabled={loading}
-                            style={{
-                                flex: 1, padding: '8px 12px', fontSize: 13,
-                                border: `1px solid ${uiColors.inputBorder}`,
-                                borderRadius: 6, backgroundColor: uiColors.inputBg,
-                                color: uiColors.text, outline: 'none',
-                            }}
-                        />
-                        <SecondaryButton onClick={handleFix}>
-                            {loading ? 'Applying…' : 'Fix'}
-                        </SecondaryButton>
-                    </div>
-                    <ActionRow>
-                        <PrimaryButton
-                            onClick={handleExecute}
-                            disabled={loading || hasErrors}
-                            backgroundColor="#16a34a"
-                        >
-                            {loading ? 'Importing…' : `Import ${state.rows.filter(r => r.status === 'ready' || r.status === 'auto_fixed' || r.status === 'needs_review').length} records`}
-                        </PrimaryButton>
-                    </ActionRow>
-                </>
+                <ActionRow>
+                    <PrimaryButton
+                        onClick={handleExecute}
+                        disabled={loading || hasErrors}
+                        backgroundColor="#16a34a"
+                    >
+                        {loading ? 'Importing…' : `Import ${state!.rows.filter(r => r.status === 'ready' || r.status === 'auto_fixed' || r.status === 'needs_review').length} records`}
+                    </PrimaryButton>
+                </ActionRow>
             )}
 
             {/* Post-execution summary */}
-            {isExecuted && (
+            {isExecuted && state && (
                 <AppCard marginBottom={0}>
                     <SectionTitle>Import Complete</SectionTitle>
                     <p style={{ margin: 0, fontSize: 13, color: uiColors.text }}>
@@ -698,7 +762,7 @@ export default function DataImportViewer() {
                 </AppCard>
             )}
 
-        </AppShell>
+        </div>
     );
 }
 
@@ -706,12 +770,8 @@ export default function DataImportViewer() {
 
 function extractState(params: any): StagingState | null {
     if (!params) return null;
-
-    // structuredContent path
     const sc = params.structuredContent;
     if (sc && typeof sc === 'object' && sc.job_id) return sc as StagingState;
-
-    // content array path (text items with JSON)
     const content = params.content;
     if (Array.isArray(content)) {
         for (const item of content) {
@@ -723,9 +783,6 @@ function extractState(params: any): StagingState | null {
             }
         }
     }
-
-    // Direct object
     if (params.job_id) return params as StagingState;
-
     return null;
 }

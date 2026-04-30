@@ -112,13 +112,15 @@ function shellStyle(maxWidth: number): CSSProperties {
     return {
         padding: 24,
         fontFamily: 'system-ui, -apple-system, sans-serif',
-        maxWidth,
+        width: '100%',
+        maxWidth: maxWidth || undefined,
         margin: '16px auto',
         color: uiColors.text,
         backgroundColor: '#ffffff',
         border: '1px solid #dbe3ee',
         borderRadius: 12,
         boxShadow: '0 10px 28px rgba(15, 23, 42, 0.14)',
+        boxSizing: 'border-box',
     };
 }
 

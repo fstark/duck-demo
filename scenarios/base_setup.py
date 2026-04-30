@@ -249,37 +249,37 @@ INITIAL_STOCK = [
 
 # -- Customer definitions for base pool --------------------------------------
 BASE_CUSTOMERS = [
-    # (name, company, email, phone, addr, city, postal, country, tax_id, terms, notes)
-    ("Sarah Martin",          None,                     "sarah@martin-retail.example",      "+33 6 12 34 56 78",  "15 Rue de la Paix",          "Paris",       "75002", "FR", None,              30,  None),
-    ("Jean-Pierre Dubois",    "Canard & Fils",          "jp@canard-fils.example",           "+33 4 78 00 11 22",  "42 Avenue Jean Jaurès",      "Lyon",        "69007", "FR", "FR12345678901",   45,  "Key account"),
-    ("Marie Laurent",         "Jouets Laurent",         "marie@jouetslaurent.example",      "+33 1 42 33 44 55",  "8 Boulevard Haussmann",      "Paris",       "75009", "FR", "FR98765432109",   30,  None),
-    ("Daisy Paddlesworth",    "Splash & Co",            "daisy@splashco.example",           "+33 4 93 12 34 56",  "22 Promenade des Anglais",   "Nice",        "06000", "FR", "FR55566677788",   30,  None),
-    ("Quentin Maréchal",      None,                     "quentin@mare.example",              None,                "17 Rue du Vieux Port",       "Marseille",   "13001", "FR", None,              30,  "Prefers email"),
-    ("Bella Featherstone",    "The Duck Emporium",      "bella@duckemporium.example",       "+33 5 61 22 33 44",  "5 Place du Capitole",        "Toulouse",    "31000", "FR", "FR11122233344",   60,  "Large orders"),
-    ("Puddles O'Mallory",     None,                     "puddles@omallory.example",         "+33 5 56 78 90 12",   None,                        "Bordeaux",     None,   "FR", None,              30,  None),
-    ("Drake Fluffington",     "Fluff & Feathers",       "drake@fluffnfeathers.example",     "+33 3 88 11 22 33",  "28 Rue des Hallebardes",     "Strasbourg",  "67000", "FR", "FR77788899900",   30,  None),
-    ("Mallory Beakworth",     None,                     "mallory@beakmail.example",         "+33 2 40 55 66 77",   None,                        "Nantes",       None,   "FR", None,              15,  "COD preferred"),
-    ("Hugo Canard",           "Waddle Inc",             "hugo@waddleinc.example",           "+33 3 20 44 55 66",  "12 Rue Faidherbe",           "Lille",       "59000", "FR", "FR44455566677",   30,  None),
-    ("Sophie Leclerc",        None,                     "sophie@leclerc-toys.example",       None,                "7 Place de la Comédie",      "Montpellier", "34000", "FR", None,              30,  None),
-    ("Antoine Rivière",       "Aquatic Adventures",     "antoine@aquatic.example",          "+33 2 99 33 44 55",  "3 Quai Émile Zola",          "Rennes",      "35000", "FR", "FR22233344455",   30,  None),
-    ("Camille Fontaine",      None,                     "camille@fontaine-jouets.example",  "+33 4 76 22 33 44",  "19 Avenue Alsace-Lorraine",  "Grenoble",    "38000", "FR", None,              30,  None),
-    ("Louis Moreau",          "Bath Time Boutique",     "louis@bathtime.example",           "+33 3 80 11 22 33",  "45 Rue de la Liberté",       "Dijon",       "21000", "FR", "FR66677788899",   30,  None),
-    ("Raphaël Petit",         "Quack Squadron",         "raphael@quacksquadron.example",    "+33 2 41 55 66 77",  "6 Boulevard du Roi René",    "Angers",      "49000", "FR", "FR33344455566",   30,  "Military discount"),
-    ("Charlotte Bonnard",     None,                     "charlotte@bonnard.example",        "+33 2 35 22 33 44",   None,                        "Le Havre",     None,   "FR", None,              30,  None),
-    ("Nicolas Garnier",       "Webfoot Wonders",        "nicolas@webfoot.example",          "+33 3 26 44 55 66",  "14 Place Drouet d'Erlon",    "Reims",       "51100", "FR", "FR88899900011",   30,  None),
-    ("Emma Dupont",           "La Maison du Canard",    "emma@maisondcanard.example",       "+33 4 72 33 44 55",  "25 Rue de la République",    "Lyon",        "69002", "FR", "FR11223344556",   30,  None),
-    ("Pierre Rousseau",       None,                     "pierre@rousseau.example",          "+33 1 55 66 77 88",  "33 Avenue des Champs-Élysées","Paris",      "75008", "FR", None,              45,  "Premium client"),
-    ("Mathilde Simon",        "Canards en Fête",        "mathilde@canardsfete.example",     "+33 5 57 88 99 00",  "9 Cours de l'Intendance",    "Bordeaux",    "33000", "FR", "FR99887766554",   30,  None),
-    ("Thomas Bernard",        "Le Comptoir du Jouet",   "thomas@comptoir-jouet.example",    "+33 4 91 22 33 44",  "18 La Canebière",            "Marseille",   "13001", "FR", "FR66778899001",   60,  "Quarterly invoicing"),
-    ("Léa Mercier",           None,                     "lea@mercier.example",              "+33 2 98 77 66 55",  "5 Rue de Siam",              "Brest",       "29200", "FR", None,              30,  None),
-    ("Gabriel Martin",        "Jouets du Marais",       "gabriel@jouetsmarais.example",     "+33 1 44 55 66 77",  "12 Rue des Francs-Bourgeois","Paris",       "75003", "FR", "FR55443322110",   30,  None),
-    ("Inès Lefebvre",         "Cadeaux Inès",           "ines@cadeaux-ines.example",        "+33 3 87 66 55 44",  "7 Place Kléber",             "Strasbourg",  "67000", "FR", "FR33221100998",   30,  None),
-    ("Clément Durand",        None,                     "clement@durand-toys.example",      "+33 4 42 55 66 77",  "22 Cours Mirabeau",          "Aix-en-Provence","13100","FR", None,             30,  None),
-    ("Zoé Lambert",           "Comptoir des Canards",   "zoe@comptoircanards.example",      "+33 2 40 88 99 00",  "15 Passage Pommeraye",       "Nantes",      "44000", "FR", "FR11009988776",   30,  None),
-    ("Arthur Morel",          None,                     "arthur@morel.example",             "+33 4 67 88 99 11",  "3 Place de la Comédie",      "Montpellier", "34000", "FR", None,              15,  None),
-    ("Jade Bonnet",           "Boutique Bonnet",        "jade@boutique-bonnet.example",     "+33 5 62 33 44 55",  "8 Rue Saint-Rome",           "Toulouse",    "31000", "FR", "FR44556677883",   30,  None),
-    ("Jules Lemaire",         "Canard Express",         "jules@canardexpress.example",      "+33 1 34 55 66 77",  "44 Rue du Commerce",         "Paris",       "75015", "FR", "FR88776655443",   60,  "Express shipping required"),
-    ("Clara Girard",          None,                     "clara@girard.example",             "+33 4 73 44 55 66",  "10 Place de Jaude",          "Clermont-Ferrand","63000","FR", None,            30,  None),
+    # (gender, name, company, email, phone, addr, city, postal, country, tax_id, terms, notes)
+    ("F", "Sarah Martin",          None,                     "sarah@martin-retail.example",      "+33 6 12 34 56 78",  "15 Rue de la Paix",          "Paris",       "75002", "FR", None,              30,  None),
+    ("M", "Jean-Pierre Dubois",    "Canard & Fils",          "jp@canard-fils.example",           "+33 4 78 00 11 22",  "42 Avenue Jean Jaurès",      "Lyon",        "69007", "FR", "FR12345678901",   45,  "Key account"),
+    ("F", "Marie Laurent",         "Jouets Laurent",         "marie@jouetslaurent.example",      "+33 1 42 33 44 55",  "8 Boulevard Haussmann",      "Paris",       "75009", "FR", "FR98765432109",   30,  None),
+    ("F", "Daisy Paddlesworth",    "Splash & Co",            "daisy@splashco.example",           "+33 4 93 12 34 56",  "22 Promenade des Anglais",   "Nice",        "06000", "FR", "FR55566677788",   30,  None),
+    ("M", "Quentin Maréchal",      None,                     "quentin@mare.example",              None,                "17 Rue du Vieux Port",       "Marseille",   "13001", "FR", None,              30,  "Prefers email"),
+    ("F", "Bella Featherstone",    "The Duck Emporium",      "bella@duckemporium.example",       "+33 5 61 22 33 44",  "5 Place du Capitole",        "Toulouse",    "31000", "FR", "FR11122233344",   60,  "Large orders"),
+    ("M", "Puddles O'Mallory",     None,                     "puddles@omallory.example",         "+33 5 56 78 90 12",   None,                        "Bordeaux",     None,   "FR", None,              30,  None),
+    ("M", "Drake Fluffington",     "Fluff & Feathers",       "drake@fluffnfeathers.example",     "+33 3 88 11 22 33",  "28 Rue des Hallebardes",     "Strasbourg",  "67000", "FR", "FR77788899900",   30,  None),
+    ("F", "Mallory Beakworth",     None,                     "mallory@beakmail.example",         "+33 2 40 55 66 77",   None,                        "Nantes",       None,   "FR", None,              15,  "COD preferred"),
+    ("M", "Hugo Canard",           "Waddle Inc",             "hugo@waddleinc.example",           "+33 3 20 44 55 66",  "12 Rue Faidherbe",           "Lille",       "59000", "FR", "FR44455566677",   30,  None),
+    ("F", "Sophie Leclerc",        None,                     "sophie@leclerc-toys.example",       None,                "7 Place de la Comédie",      "Montpellier", "34000", "FR", None,              30,  None),
+    ("M", "Antoine Rivière",       "Aquatic Adventures",     "antoine@aquatic.example",          "+33 2 99 33 44 55",  "3 Quai Émile Zola",          "Rennes",      "35000", "FR", "FR22233344455",   30,  None),
+    ("F", "Camille Fontaine",      None,                     "camille@fontaine-jouets.example",  "+33 4 76 22 33 44",  "19 Avenue Alsace-Lorraine",  "Grenoble",    "38000", "FR", None,              30,  None),
+    ("M", "Louis Moreau",          "Bath Time Boutique",     "louis@bathtime.example",           "+33 3 80 11 22 33",  "45 Rue de la Liberté",       "Dijon",       "21000", "FR", "FR66677788899",   30,  None),
+    ("M", "Raphaël Petit",         "Quack Squadron",         "raphael@quacksquadron.example",    "+33 2 41 55 66 77",  "6 Boulevard du Roi René",    "Angers",      "49000", "FR", "FR33344455566",   30,  "Military discount"),
+    ("F", "Charlotte Bonnard",     None,                     "charlotte@bonnard.example",        "+33 2 35 22 33 44",   None,                        "Le Havre",     None,   "FR", None,              30,  None),
+    ("M", "Nicolas Garnier",       "Webfoot Wonders",        "nicolas@webfoot.example",          "+33 3 26 44 55 66",  "14 Place Drouet d'Erlon",    "Reims",       "51100", "FR", "FR88899900011",   30,  None),
+    ("F", "Emma Dupont",           "La Maison du Canard",    "emma@maisondcanard.example",       "+33 4 72 33 44 55",  "25 Rue de la République",    "Lyon",        "69002", "FR", "FR11223344556",   30,  None),
+    ("M", "Pierre Rousseau",       None,                     "pierre@rousseau.example",          "+33 1 55 66 77 88",  "33 Avenue des Champs-Élysées","Paris",      "75008", "FR", None,              45,  "Premium client"),
+    ("F", "Mathilde Simon",        "Canards en Fête",        "mathilde@canardsfete.example",     "+33 5 57 88 99 00",  "9 Cours de l'Intendance",    "Bordeaux",    "33000", "FR", "FR99887766554",   30,  None),
+    ("M", "Thomas Bernard",        "Le Comptoir du Jouet",   "thomas@comptoir-jouet.example",    "+33 4 91 22 33 44",  "18 La Canebière",            "Marseille",   "13001", "FR", "FR66778899001",   60,  "Quarterly invoicing"),
+    ("F", "Léa Mercier",           None,                     "lea@mercier.example",              "+33 2 98 77 66 55",  "5 Rue de Siam",              "Brest",       "29200", "FR", None,              30,  None),
+    ("M", "Gabriel Martin",        "Jouets du Marais",       "gabriel@jouetsmarais.example",     "+33 1 44 55 66 77",  "12 Rue des Francs-Bourgeois","Paris",       "75003", "FR", "FR55443322110",   30,  None),
+    ("F", "Inès Lefebvre",         "Cadeaux Inès",           "ines@cadeaux-ines.example",        "+33 3 87 66 55 44",  "7 Place Kléber",             "Strasbourg",  "67000", "FR", "FR33221100998",   30,  None),
+    ("M", "Clément Durand",        None,                     "clement@durand-toys.example",      "+33 4 42 55 66 77",  "22 Cours Mirabeau",          "Aix-en-Provence","13100","FR", None,             30,  None),
+    ("F", "Zoé Lambert",           "Comptoir des Canards",   "zoe@comptoircanards.example",      "+33 2 40 88 99 00",  "15 Passage Pommeraye",       "Nantes",      "44000", "FR", "FR11009988776",   30,  None),
+    ("M", "Arthur Morel",          None,                     "arthur@morel.example",             "+33 4 67 88 99 11",  "3 Place de la Comédie",      "Montpellier", "34000", "FR", None,              15,  None),
+    ("F", "Jade Bonnet",           "Boutique Bonnet",        "jade@boutique-bonnet.example",     "+33 5 62 33 44 55",  "8 Rue Saint-Rome",           "Toulouse",    "31000", "FR", "FR44556677883",   30,  None),
+    ("M", "Jules Lemaire",         "Canard Express",         "jules@canardexpress.example",      "+33 1 34 55 66 77",  "44 Rue du Commerce",         "Paris",       "75015", "FR", "FR88776655443",   60,  "Express shipping required"),
+    ("F", "Clara Girard",          None,                     "clara@girard.example",             "+33 4 73 44 55 66",  "10 Place de Jaude",          "Clermont-Ferrand","63000","FR", None,            30,  None),
 ]
 
 
@@ -392,9 +392,9 @@ def populate() -> dict:
 
     # ---- Customers (via service layer for proper ID generation) ----
     customer_ids: List[str] = []
-    for (name, company, email, phone, addr, city, postal, country, tax_id, terms, notes) in BASE_CUSTOMERS:
+    for (gender, name, company, email, phone, addr, city, postal, country, tax_id, terms, notes) in BASE_CUSTOMERS:
         result = customer_service.create_customer(
-            name=name, company=company, email=email, phone=phone,
+            name=name, gender=gender, company=company, email=email, phone=phone,
             address_line1=addr, city=city, postal_code=postal, country=country,
             tax_id=tax_id, payment_terms=terms, notes=notes,
         )

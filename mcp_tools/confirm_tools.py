@@ -41,6 +41,7 @@ def register(mcp):
         if original_tool == "crm_create_customer":
             return customer_service.create_customer(
                 name=arguments["name"],
+                gender=arguments.get("gender"),
                 company=arguments.get("company"),
                 email=arguments.get("email"),
                 phone=arguments.get("phone"),
@@ -57,10 +58,20 @@ def register(mcp):
         elif original_tool == "crm_update_customer":
             return customer_service.update_customer(
                 customer_id=arguments["customer_id"],
+                gender=arguments.get("gender"),
                 name=arguments.get("name"),
+                company=arguments.get("company"),
                 email=arguments.get("email"),
-                address=arguments.get("address"),
-                tags=arguments.get("tags")
+                phone=arguments.get("phone"),
+                address_line1=arguments.get("address_line1"),
+                address_line2=arguments.get("address_line2"),
+                city=arguments.get("city"),
+                postal_code=arguments.get("postal_code"),
+                country=arguments.get("country"),
+                tax_id=arguments.get("tax_id"),
+                payment_terms=arguments.get("payment_terms"),
+                currency=arguments.get("currency"),
+                notes=arguments.get("notes")
             )
 
         # Sales & Logistics Tools

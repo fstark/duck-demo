@@ -8,6 +8,7 @@ CREATE TABLE IF NOT EXISTS simulation_state (
 
 CREATE TABLE IF NOT EXISTS customers (
     id TEXT PRIMARY KEY,
+    gender TEXT,
     name TEXT NOT NULL,
     company TEXT,
     email TEXT,
@@ -443,6 +444,8 @@ CREATE TABLE IF NOT EXISTS import_jobs (
     source_format TEXT,
     source_content TEXT,
     hint TEXT,
+    global_instructions TEXT,
+    sample_indices TEXT,
     status TEXT NOT NULL DEFAULT 'staging',
     row_count INTEGER,
     columns_detected TEXT,

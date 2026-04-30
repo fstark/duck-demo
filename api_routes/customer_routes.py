@@ -13,7 +13,7 @@ def register(mcp):
     @cors_handler(["GET"])
     async def api_customers(request):
         qp = request.query_params
-        limit = int(qp.get("limit", 20))
+        limit = int(qp.get("limit", 100))
         result = customer_service.find_customers(
             name=qp.get("name"),
             email=qp.get("email"),

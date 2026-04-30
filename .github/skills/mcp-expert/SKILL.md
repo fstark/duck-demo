@@ -116,3 +116,34 @@ The existing `generic_confirm_action` tool follows this pattern — it dispatche
 
 Spec: https://modelcontextprotocol.io/specification/2025-06-18/features/mcp-apps
 
+### MCP App → Chat: triggering the agent to call another tool
+
+When an MCP app needs the **chat agent** to call a different tool (e.g. transitioning from Phase 1 UI to Phase 2 UI), use `app.sendMessage()`. This injects a user-visible message into the chat, prompting the agent to act.
+
+```typescript
+// After Phase 1 completes, ask the agent to open Phase 2:
+await app.sendMessage(
+  `Mapping confirmed for import ${jobId} (${rowCount} rows). ` +
+  `Please call data_import_start_processing with job_id="${jobId}" to begin processing.`
+);
+```
+
+This is the standard pattern for app-to-app transitions: one app finishes, sends a message telling the agent what to do next, and the agent calls the next tool (which opens the next app via its `resourceUri`).
+
+### Full-width MCP apps (no AppShell)
+
+The shared `AppShell` component adds maxWidth, padding, margin, border, and borderRadius — it's designed for dialog-style UIs. For data-heavy apps that need all available width (tables, grids), **bypass AppShell** and use a raw full-viewport wrapper:
+
+```tsx
+const fullPage: React.CSSProperties = {
+    width: '100vw', minHeight: '100vh', padding: 24,
+    fontFamily: 'system-ui, -apple-system, sans-serif',
+    color: '#1e293b', backgroundColor: '#ffffff', boxSizing: 'border-box',
+};
+
+// In the component:
+return <div style={fullPage}>...</div>;
+```
+
+This is how `ItemInspectViewer` (3D render app) achieves full width. The iframe sizes to this, giving the app all available space. Use `AppShell` for small confirm/picker dialogs; use the raw div for full-page data apps.
+
