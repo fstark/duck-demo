@@ -262,6 +262,10 @@ export default function DataImportMappingApp() {
                     setMapping(data.mapping);
                     setSampleRows(data.sample_rows);
                     setGlobalInstructions(data.global_instructions || '');
+                } else {
+                    // Check if the result is an error
+                    const errMsg = extractErrorMessage(params);
+                    if (errMsg) setError(errMsg);
                 }
             };
         },
@@ -357,7 +361,11 @@ export default function DataImportMappingApp() {
     if (!state) {
         return (
             <div style={fullPage}>
-                <p style={{ color: uiColors.muted, margin: 0 }}>Processing import…</p>
+                {error ? (
+                    <p style={{ color: '#dc2626', margin: 0 }}>{error}</p>
+                ) : (
+                    <p style={{ color: uiColors.muted, margin: 0 }}>Processing import…</p>
+                )}
             </div>
         );
     }
@@ -491,6 +499,25 @@ function extractMappingState(params: any): MappingState | null {
         }
     }
     if (params.job_id && params.mapping) return params as MappingState;
+    return null;
+}
+
+function extractErrorMessage(params: any): string | null {
+    if (!params) return null;
+    const sc = params.structuredContent;
+    if (sc && typeof sc === 'object' && sc.error) return sc.error;
+    const content = params.content;
+    if (Array.isArray(content)) {
+        for (const item of content) {
+            if (item?.type === 'text' && typeof item.text === 'string') {
+                try {
+                    const parsed = JSON.parse(item.text);
+                    if (parsed?.error) return parsed.error;
+                } catch { /* ignore */ }
+            }
+        }
+    }
+    if (params.error) return params.error;
     return null;
 }
 

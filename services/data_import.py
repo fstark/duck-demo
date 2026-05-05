@@ -96,12 +96,19 @@ class DataImportService:
     # ------------------------------------------------------------------
 
     def _read_source(self, source: str) -> tuple[bytes, str]:
-        """Read file content from source URL. Returns (content_bytes, filename)."""
+        """Read file content from source URL or file path. Returns (content_bytes, filename)."""
         if source.startswith("file://"):
             path = urllib.parse.unquote(urllib.parse.urlparse(source).path)
+            # On Windows, urlparse gives /C:/... — strip leading slash before drive letter
+            if len(path) >= 3 and path[0] == '/' and path[2] == ':':
+                path = path[1:]
             with open(path, "rb") as f:
                 return f.read(), os.path.basename(path)
-        raise ValueError(f"Unsupported source scheme: {source}")
+        # Accept raw file paths (Windows or POSIX)
+        if os.path.isabs(source) or os.path.exists(source):
+            with open(source, "rb") as f:
+                return f.read(), os.path.basename(source)
+        raise ValueError(f"Unsupported source: {source}. Provide a file:// URL or absolute path.")
 
     # ------------------------------------------------------------------
     # File parsing

@@ -213,7 +213,6 @@ __marimo__/
 node_modules/
 
 .DS_Store
-
-
-
 secrets.sh
+secret.sh
+secret.ps1
